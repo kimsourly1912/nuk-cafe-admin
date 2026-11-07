@@ -14,9 +14,9 @@ const RETIRED = menuCategoryOf('cat-7', 'Retired', { status: 'archived' })
 const DORMANT = menuCategoryOf('cat-8', 'Dormant', { status: 'archived' })
 const GREEN_UNDER_RETIRED = menuCategoryOf('cat-6', 'Green', { parentId: 'cat-7' })
 
-async function editRow(page: Page, name: string, handlers: Record<string, MockHandler>) {
+async function editRow(page: Page, name: string, handlers: Record<string, MockHandler>, query = '') {
   const api = await mockApi(page, handlers)
-  await page.goto(url('/c/nuk/admin/categories'), { waitUntil: 'hydration' })
+  await page.goto(url(`/c/nuk/admin/categories${query}`), { waitUntil: 'hydration' })
   await page.getByRole('button', { name: `Actions for ${name}` }).click()
   await page.getByRole('menuitem', { name: 'Edit' }).click()
   const form = page.getByRole('dialog', { name: 'Edit category' })
@@ -69,7 +69,7 @@ describe('CategorySelect', () => {
     const page = await createPage()
     const { parent } = await editRow(page, 'Green', {
       'GET /admin/menu/categories': () => [MENU_TEA, RETIRED, DORMANT, GREEN_UNDER_RETIRED],
-    })
+    }, '?category=cat-7')
     await expect.poll(() => parent.textContent()).toContain('Retired (archived)')
 
     await parent.click()

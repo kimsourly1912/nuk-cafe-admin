@@ -399,7 +399,8 @@ export function toastAction(page: Page, title: string | RegExp, label: string) {
 }
 
 /**
- * A category in the Categories tree (`/c/nuk/admin/categories`), by name. The tree loads
+ * A category on the Categories page (`/c/nuk/admin/categories`), by name: a main category's card, or
+ * a row of the one on show (the first until another is clicked, D270). The page loads
  * `GET /admin/menu/categories`; the default handlers answer it with MENU_TEA and MENU_COFFEE.
  */
 export function categoryItem(page: Page, name: string) {

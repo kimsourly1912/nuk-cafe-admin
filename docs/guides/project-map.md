@@ -58,6 +58,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `useReorderTransition` | `composables/` | A reorder list's rows slide to their new place when moved by their chevrons or keys (`<TransitionGroup :move-class>` + Sortable's `onStart`/`onEnd`, D165) |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 | `StatCard` | `components/` | One number on a page, in a soft card (never a number styled by hand) |
+| `PillNav` | `components/` | Choices as a row of pill buttons that scrolls sideways, with a sliding highlight (the customer menu's categories, the Categories page below `lg`) |
 | `RecordSelect` | `components/` | A dropdown of records: `USelectMenu` with search and virtual scroll, `pinned` "All"/"None"; a combobox, like `USelect` (D152) |
 | `adminSetupSteps()`, `AdminSetupStep` | `utils/admin-setup.ts`, `types/admin-setup.ts` | The home page's "Set up your cafe": each feature exports its step from its index.ts, listed here in order (D155) |
 | `adminSearchSources()`, `AdminSearch`, `AdminSearchSource` | `utils/admin-search.ts`, `components/`, `types/admin-search.ts` | Ctrl/⌘+K search in the admin: each feature exports a source from its index.ts, listed here like the sidebar (D152) |

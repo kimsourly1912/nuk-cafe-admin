@@ -34,8 +34,7 @@ describe('keyboard shortcuts', () => {
 
   it('n does nothing behind an open dialog (an edit form stays an edit form)', async () => {
     const { page } = await openCategories()
-    await page.getByRole('button', { name: 'Actions for Tea' }).click()
-    await page.getByRole('menuitem', { name: 'Edit' }).click()
+    await page.getByRole('button', { name: 'Edit details' }).click()
     const edit = page.getByRole('dialog', { name: 'Edit category' })
     await edit.waitFor()
     // Focus a button in the form (not the input, where "n" is just typed).

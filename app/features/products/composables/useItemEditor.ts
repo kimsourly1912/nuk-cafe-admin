@@ -16,6 +16,8 @@ export interface ItemEditorOptions {
   draft?: ItemForm
   /** Duplicate (D154): a new item, filled from this item once it's loaded (no photo, "… (copy)"). */
   copyOf?: string
+  /** A new item starts in this category (Add menu item on the Categories page, D270). */
+  categoryId?: string
   /** The form arrived: the owner's unsaved-changes guard takes it as saved. */
   onLoaded: () => void
   /** Reload took someone else's newer version: what's saved now, for the unsaved-changes guard. */
@@ -47,7 +49,7 @@ export interface ItemEditorOptions {
  * closes; the toast says it was saved but not published, and why.
  */
 export function useItemEditor(options: ItemEditorOptions) {
-  const { itemId, item, draft, copyOf, onLoaded, onReloaded, reopen } = options
+  const { itemId, item, draft, copyOf, categoryId, onLoaded, onReloaded, reopen } = options
 
   const isEdit = itemId !== undefined || item !== undefined
   const copying = !isEdit && copyOf !== undefined && !draft
@@ -63,6 +65,8 @@ export function useItemEditor(options: ItemEditorOptions) {
   const { data: addOnLibrary } = useModifierGroupOptions()
   /** What counts as saved: the item as read (not the draft), so a reopened draft counts as unsaved. */
   const initial = toItemForm(item, addOnLibrary.value)
+  // Chosen before the form opened, so it isn't unsaved input.
+  if (!isEdit && !copying && categoryId) initial.categoryId = categoryId
   const state = reactive<ItemForm>(cloneFormValue(draft ?? initial))
   /** `loaded` as a form: what this person's changes are measured from when someone else saved first. */
   let loadedForm = initial
