@@ -8,7 +8,7 @@ import { deleteCategoryStatement } from '#server/features/menu/categories.reposi
 import { createAvailabilityRule } from '#server/features/menu/availability.service'
 import { createPromotion } from '#server/features/menu/promotions.service'
 import { archiveCategory, createCategory, deleteCategory, getCategory, listCategories, reorderCategories, restoreCategory, updateCategory } from '#server/features/menu/categories.service'
-import { archiveItem, createItem, deleteItem, updateItem } from '#server/features/menu/items.service'
+import { archiveItem, createItem, deleteItem, restoreItem, updateItem } from '#server/features/menu/items.service'
 import { createTestDb, ensureTenant, insertSoldLine, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
@@ -97,6 +97,18 @@ describe('creating', () => {
       expect(await db.select().from(menuItems).where(eq(menuItems.categoryId, bakery.id))).toEqual([])
       const [row] = await db.select().from(auditEvents).where(eq(auditEvents.targetId, pastry.id))
       expect(row).toMatchObject({ action: 'menu.category.create', metadata: expect.objectContaining({ movedItems: 2 }) })
+    })
+
+    it('takes the archived items of a parent holding only those, so they can still be restored', async () => {
+      const bakery = await create('Bakery')
+      const old = await itemIn(bakery.id, 'Scone')
+      const archived = await archiveItem(db, actor, old.id, { version: old.version })
+
+      const pastry = await sub(db, bakery.id)
+
+      const [row] = await db.select().from(menuItems).where(eq(menuItems.id, old.id))
+      expect(row).toMatchObject({ categoryId: pastry.id, version: archived.version + 1 })
+      await expect(restoreItem(db, actor, old.id, { version: row!.version })).resolves.toMatchObject({ categoryId: pastry.id })
     })
 
     it('refuses an edit opened before the move, so the item can\'t go back', async () => {

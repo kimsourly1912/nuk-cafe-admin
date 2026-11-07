@@ -99,8 +99,10 @@ export async function getCategory(db: Db, tenantId: string, id: string): Promise
 }
 
 /**
- * A new category at the end of its parent's (or the top level's) list. With `moveItems`, it takes
- * all of its parent's menu items in the same batch (D270), so a category never holds both (D44).
+ * A new category at the end of its parent's (or the top level's) list. A sub-category takes all of
+ * its parent's menu items in the same batch (D270), so a category never holds both (D44): the drafts
+ * and active ones only when `moveItems` names how many, the archived ones always, since left in a
+ * category with sub-categories they could never be restored.
  */
 export async function createCategory(db: Db, actor: Actor, input: CreateCategoryInput): Promise<MenuCategory> {
   const { tenantId } = actor
@@ -115,7 +117,7 @@ export async function createCategory(db: Db, actor: Actor, input: CreateCategory
     ...availabilityRepo.requireActiveRules(db, tenantId, addedRules),
     repo.insertCategoryStatement(db, { id, tenantId, parentId: input.parentId, name: input.name, description: input.description, sortOrder: await repo.nextSortOrder(db, tenantId, input.parentId), now }),
     ...availabilityRepo.replaceCategoryRulesStatements(db, tenantId, id, input.availabilityRuleIds),
-    ...(moveItems ? [itemsRepo.moveCategoryItemsStatement(db, tenantId, input.parentId!, id, now)] : []),
+    ...(input.parentId ? [itemsRepo.moveCategoryItemsStatement(db, tenantId, input.parentId, id, now)] : []),
     audit(db, actor, 'create', id, { parentId: input.parentId, availabilityRules: input.availabilityRuleIds, ...(moveItems ? { movedItems: moveItems } : {}) }),
   ]
   // The parent was archived, became a sub-category or its items changed, or a chosen rule was
