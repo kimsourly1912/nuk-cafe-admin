@@ -20,7 +20,7 @@ Snapshot reviewed against main `ff2ca27` and GitHub's PR list, 2026-11-06. Read 
 
 Each is its own step and branch.
 
-- **Shop designer (D273):** step 1 (the prototype) approved by the owner on staging and step 2a (the server) merged (2026-11-10). Step 2b, the editor on saved layouts (Dining tables → Design shop and View in 3D), built on `claude/awesome-ritchie-elqas4` (2026-11-10), in review. Next: step 2c, the viewer ([plan](plans/shop-designer.md#step-2b-the-editor-built-2026-11-10)).
+- **Shop designer (D273):** step 1 (the prototype) approved by the owner on staging and step 2a (the server) merged (2026-11-10). Step 2b, the editor on saved layouts (Dining tables → Design shop and View in 3D), merged (2026-11-10). Step 2c, the viewer (the 3D table card's View QR and Show on plan, one selection for both views, Try again when 3D is unavailable), built on `claude/awesome-ritchie-elqas4` (2026-11-10), in review. Next: step 3a, looks ([plan](plans/shop-designer.md#step-2c-the-viewer-built-2026-11-10)).
 - **Account security step 5: Switch person on the counter** ([plan](plans/account-security.md)). Steps 1–4 merged (D242, D243, D246–D248); step 5 has no code yet.
 - **First-load rule (D238):** check other pages against the UI checklist item, one page per branch ([progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30)).
 - **KHQR recovery follow-ups (D266):** an owner "check again" action, a Telegram alert for new review cases, explicit Bakong 429 handling. The next free migration number is `0058`.

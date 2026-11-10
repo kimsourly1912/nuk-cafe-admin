@@ -7,6 +7,7 @@ import type { DiningTable } from '#shared/contracts/branches'
 import type { BranchLayout, Point } from '#shared/contracts/shop-layout'
 import { setupE2e } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
+import { allowBrowserProblems } from './support/browser-problems'
 
 await setupE2e()
 
@@ -291,16 +292,87 @@ describe('the shop designer on saved layouts', () => {
     expect(layout.floors[0]!.edges.every(edge => edge.kind === 'wall')).toBe(true)
   })
 
-  it('finds a placed table on its floor in 3D and goes back to it on the plan', { timeout: 60_000 }, async () => {
+  it('finds a placed table on its floor in 3D, shows its QR code, and goes back to it on the plan', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page, lab.branchId, '3d')
     await drawn(page)
     const lists = page.getByRole('complementary', { name: 'Navigate the building' })
     await lists.getByTestId('list-table-L1').click()
-    await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('Ground floor')
+    const card = page.getByTestId('table-card')
+    await expect.poll(() => card.textContent()).toContain('Ground floor')
     await shot(page, '3d-L1')
-    await page.getByTestId('table-card').getByRole('button', { name: 'Show on plan' }).click()
+
+    // The table's own QR code: the one the Table list shows.
+    const l1 = (await branchTables(page)).find(table => table.label === 'L1')!
+    await card.getByRole('button', { name: 'View QR' }).click()
+    const dialog = page.getByRole('dialog', { name: 'QR code: L1' })
+    expect(await dialog.getByLabel('QR link').inputValue()).toBe(l1.qrUrl)
+    await page.keyboard.press('Escape')
+    await expect.poll(() => dialog.count()).toBe(0)
+
+    await card.getByRole('button', { name: 'Show on plan' }).click()
     await expect.poll(() => page.getByTestId('selected-table').textContent()).toContain('L1')
+
+    // The same table stays picked on the way back, and a change not saved yet is drawn and named.
+    expect(await page.getByTestId('building-unsaved').count()).toBe(0)
+    await page.getByRole('button', { name: 'Move up 25 cm' }).click()
+    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await drawn(page)
+    await page.getByTestId('building-unsaved').waitFor()
+    await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('L1')
+    expect(await saveButton(page).isEnabled()).toBe(true)
+  })
+
+  it('without 3D graphics: a calm message, the lists and the table card still work, Try again draws it', { timeout: 60_000 }, async () => {
+    // three.js reports the missing context itself before the view shows its message.
+    allowBrowserProblems(/THREE\.WebGLRenderer: Error creating WebGL context/, /THREE\.WebGLRenderer: A WebGL context could not be created/)
+    const page = await signedIn()
+    await page.addInitScript(() => {
+      const original = HTMLCanvasElement.prototype.getContext
+      Object.assign(window, { webglOff: true })
+      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...rest: unknown[]) {
+        if ((window as { webglOff?: boolean }).webglOff && kind.startsWith('webgl')) return null
+        return Reflect.apply(original, this, [kind, ...rest])
+      } as typeof original
+    })
+    await openDesign(page, lab.branchId, '3d')
+    const view = page.getByRole('main', { name: '3D view' })
+    await view.getByText('3D view is not available here').waitFor()
+    await shot(page, '3d-unavailable')
+
+    const lists = page.getByRole('complementary', { name: 'Navigate the building' })
+    await lists.getByTestId('list-table-L1').click()
+    const card = page.getByTestId('table-card')
+    await expect.poll(() => card.textContent()).toContain('Ground floor')
+    await card.getByRole('button', { name: 'View QR' }).click()
+    await page.getByRole('dialog', { name: 'QR code: L1' }).waitFor()
+    await page.keyboard.press('Escape')
+
+    await view.getByRole('button', { name: 'Try again' }).click()
+    await view.getByText('3D view is not available here').waitFor()
+    await page.evaluate(() => Object.assign(window, { webglOff: false }))
+    await view.getByRole('button', { name: 'Try again' }).click()
+    await drawn(page)
+    expect(await view.getByText('3D view is not available here').count()).toBe(0)
+    await expect.poll(() => card.textContent()).toContain('L1')
+  })
+
+  it('3D on a phone: the lists in a drawer, the table card above the controls, no sideways scrolling', { timeout: 60_000 }, async () => {
+    const page = await signedIn(390, 844)
+    await openDesign(page, lab.branchId, '3d')
+    await drawn(page)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.getByRole('button', { name: 'Floors and tables' }).click()
+    await page.getByRole('dialog').getByTestId('list-table-L1').click()
+    const card = page.getByTestId('table-card')
+    await expect.poll(() => card.textContent()).toContain('Ground floor')
+    await expect.poll(() => page.getByRole('dialog').count()).toBe(0)
+    const box = (await card.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(390)
+    await shot(page, 'phone-3d')
+    await card.getByRole('button', { name: 'Show on plan' }).click()
+    await plan(page).getByTestId('plan-table-L1').waitFor()
   })
 
   it('works on a phone: the library in a slide-over, no sideways scrolling', async () => {

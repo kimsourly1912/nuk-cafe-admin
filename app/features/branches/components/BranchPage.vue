@@ -58,12 +58,18 @@ const summary = computed(() => {
   return `${placed} of ${count} ${count === 1 ? 'table' : 'tables'} on the map · ${floors} ${floors === 1 ? 'floor' : 'floors'}`
 })
 
-/** The table picked in 3D; Show on plan selects it in Design shop. */
-const selectedTable = ref<string | null>(null)
+/** One selected table for Design shop and View in 3D: picked in one, it is picked in the other. */
+const selectedTable = computed<string | null>({
+  get: () => (editor.selection.value?.kind === 'table' ? editor.selection.value.id : null),
+  set: (id) => {
+    if (id) editor.selection.value = { kind: 'table', id }
+    else if (editor.selection.value?.kind === 'table') editor.selection.value = null
+  },
+})
 function showOnPlan(tableId: string) {
   const placement = layout.value.placements.find(candidate => candidate.tableId === tableId)
-  if (placement) editor.floorId.value = placement.floorId
-  editor.selection.value = { kind: 'table', id: tableId }
+  if (placement) editor.showFloor(placement.floorId)
+  selectedTable.value = tableId
   view.value = 'design'
 }
 
@@ -223,7 +229,26 @@ const title = computed(() => settings.value?.name ?? 'Branch')
         />
         <template v-else-if="tab === 'tables' && view === '3d'">
           <div
-            v-if="!layout.floors.length"
+            v-if="editor.query.error.value && !editor.query.data.value"
+            class="p-4"
+          >
+            <ApiErrorAlert
+              :error="editor.query.error.value"
+              title="Could not load the shop layout"
+              @retry="editor.query.refresh()"
+            />
+          </div>
+          <div
+            v-else-if="!editor.query.data.value"
+            class="p-4"
+          >
+            <ListSkeleton
+              label="Loading the shop layout…"
+              variant="card"
+            />
+          </div>
+          <div
+            v-else-if="!layout.floors.length"
             class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center"
           >
             <UIcon
@@ -248,6 +273,8 @@ const title = computed(() => settings.value?.name ?? 'Branch')
             :layout="layout"
             :tables="editor.tables.value"
             :looks="BUILT_IN_LOOKS"
+            :dining-tables="tables ?? []"
+            :unsaved="editor.isDirty.value"
             @show-on-plan="showOnPlan"
             @design-shop="view = 'design'"
           />

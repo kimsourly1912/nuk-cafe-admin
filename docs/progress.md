@@ -3,6 +3,27 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 2c: the viewer (D273, 2026-11-10)
+
+- Step 2b merged (PR #280). **Built:**
+  - the 3D table card on real tables: area, seats and floor, **View QR** (the table's own code) and **Show on plan**;
+  - one selected table for Design shop and View in 3D;
+  - a picked table brought into view: the cutaway opens when the exterior hides it;
+  - "Unsaved changes shown" in 3D; **Try again** when 3D is unavailable or its graphics context was lost; the lists and the table card work without 3D;
+  - the 3D view's loading and error states (it showed "No shop layout yet" while the layout loaded).
+
+  [Plan → Step 2c](plans/shop-designer.md#step-2c-the-viewer-built-2026-11-10).
+- **Decided:** 3D keeps showing the editor's layout and names unsaved changes; no ambient occlusion; the quality line stays through the pilot.
+- **Found while building:** a ground-floor table picked from the lists in the exterior showed only its label through the building (the screenshot made it obvious). Picking a table now opens the cutaway when a roof or a floor covers it.
+- **Evidence:**
+  - `pnpm lint`, `pnpm typecheck` clean; `pnpm audit --audit-level high`: none high.
+  - `pnpm test:unit`: 2656 passed, 1 skipped (178 files).
+  - `test/e2e/shop-designer.test.ts`: 9 passed on the built server (3 new or extended for the viewer).
+  - With `branches`, `manager-tools`, `accessibility`, `request-budget` and `assistant`: 6 files, 86 passed.
+  - Full `pnpm test:e2e` not run: the change is inside the branches feature (two components, the help page), no shared code.
+- **Not verified:** real devices (the e2e browser draws in software at about 1 s a frame); a graphics context lost by a real phone.
+- How to verify: `allowBrowserProblems` covers three.js's own console error when the test switches WebGL off (`HTMLCanvasElement.prototype.getContext` answers `null` for `webgl*` while `window.webglOff` is set). On staging: Dining tables → View in 3D on a phone, tablet and desktop; find each table from the lists and by tapping; open its QR code; Show on plan.
+
 ### Shop designer step 2b: the editor on saved layouts (D273, 2026-11-10)
 
 - Step 2a merged (PR #279). **Built:**

@@ -66,12 +66,15 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - Click an **edge** of the outline to choose what it is: **Wall**, **Railing** or **Open**, and to set its length. **Door** and **Window** add one on that edge; set its width and how far it is from the corner. On a railing a door is a **gate**, and windows need a wall.
 - **Draw wall** adds walls inside the floor (a stair kiosk, a kitchen): click where it starts and where it ends; walls carry on from the last end until Escape. Click a wall to delete it.
 
+**View in 3D:** the same layout as a small building. Drag to turn it, scroll or pinch to zoom. **Exterior** shows it from outside; **Cutaway** takes the roof and the near walls away and pulls the floors apart. Pick a floor in **Floors**, then **Enter floor** to stand inside it. To find a table, pick it in **Tables** (on a phone: **Floors and tables**) or tap it in the building: its card shows its area, seats and floor, **View QR** (its code, to scan or download) and **Show on plan** (opens Design shop with that table selected). A table that is not on the plan is not in 3D. **Unsaved changes shown** means the building includes changes you haven't saved yet.
+
 **Save:** every change can be undone (**Undo**, Ctrl/⌘ Z) until you press **Save layout** (top right; **Unsaved changes** shows next to it). The whole layout saves at once. Leaving the page with unsaved changes asks first.
 
 ## Common problems
 
 - **"This layout was changed somewhere else"**: someone saved the layout on another device after you opened it. Your plan is kept. **Load latest** shows theirs instead (Undo brings yours back on top of it, then save); **Overwrite with mine** saves yours over theirs after asking. QR codes are not affected either way.
 - **"… is no longer an active table here"**: a table on your plan was archived or deleted since you opened it. Press **Remove from map**, then save.
+- **"3D view is not available here"**: this browser or device can't draw 3D right now (an old device, or a phone that put the page to sleep). Press **Try again**. The floor and table lists, **View QR** and **Design shop** work without it; the layout itself is fine.
 - **"… is outside the … floor"**: after the outline changed, a table or piece of furniture sits outside it. Saving still works; move it back in or remove it.
 - **"Draw the … floor's outline first"**: a floor has no outline yet (Blank). Use **Draw outline**, then save.
 - **"Closed every day"**: no day is switched on, so nobody can order. Switch on the days it opens.

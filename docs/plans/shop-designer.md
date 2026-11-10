@@ -1,6 +1,6 @@
 # Shop designer plan
 
-Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) reviewed by the owner on staging** (2026-11-10: "everything is so perfect"; their Android phone draws the 3D view in 23–30 ms a frame). **Step 2a (server) merged** (2026-11-10, [below](#step-2a-the-server-built-2026-11-10)). **Step 2b (the editor on saved layouts) built, in review** (2026-11-10, [below](#step-2b-the-editor-built-2026-11-10)). Next: step 2c (the viewer).
+Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) reviewed by the owner on staging** (2026-11-10: "everything is so perfect"; their Android phone draws the 3D view in 23–30 ms a frame). **Step 2a (server) merged** (2026-11-10, [below](#step-2a-the-server-built-2026-11-10)). **Step 2b (the editor on saved layouts) merged** (2026-11-10, [below](#step-2b-the-editor-built-2026-11-10)). **Step 2c (the viewer) built, in review** (2026-11-10, [below](#step-2c-the-viewer-built-2026-11-10)). Next: step 3a (looks).
 
 Design references:
 
@@ -78,7 +78,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
   - **Generated from code** for anything that resizes: floor slabs (extruded outline), walls split around openings (no hole cutting), railings, stairs, counters, table tops and legs (legs keep their thickness at every size), booths. Bevelled edges and PBR materials with tiling textures (wood floor, tiles, plaster) per finish.
   - **glTF models (`.glb`)** for fixed-size props: chairs and stools, plants, lamps and sconces, the counter's till. Low-poly with WebP textures, **no Draco, KTX2 or meshopt** (their WASM decoders would need a CSP change). Served from this origin. Sources: made for us or CC0 with the license recorded.
   - **Lighting:** image-based light from three.js's built-in room environment, one shadow-casting sun, warm emissive lamps, filmic tone mapping. Shadows are drawn once and redrawn only when the scene changes; the scene renders on demand.
-  - **Quality levels:** high (desktop: soft shadows, ambient occlusion), medium (tablet), low (phone: no AO, smaller shadow map, lower pixel ratio). Chosen from a measured frame time, not the user agent.
+  - **Quality levels:** high (desktop: soft shadows), medium (tablet), low (phone: smaller shadow map, lower pixel ratio, no lamps). Chosen from a measured frame time, not the user agent. Ambient occlusion was planned for high and left out in step 2c ([why](#step-2c-the-viewer-built-2026-11-10)).
 - **Labels** (floor names with leader lines, the selected table's chip) are HTML overlays, so they are readable and accessible. The scene's background follows light/dark mode.
 - **Cutaway:** hide the roof and walls whose outward normal faces the camera; floors pulled apart. **Inside a floor:** viewpoints worked out from the layout (front door, top of stairs, the longest window, a bar ledge); a floor without a front door has no Entrance.
 - **WebGL unavailable or context lost:** the calm message of frame 6D; the floor and table lists always work.
@@ -100,7 +100,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 | 1. Prototype | Client-only, demo data in the real shared layout schema: one drag-to-place flow (snap, rotate, undo), a three-floor shophouse, a small model set (generated tables/walls + a few glTF props), exterior orbit, cutaway, click-to-enter. Measure bundle size and frame time on a real phone and tablet | Drag a demo table upstairs, open 3D and find it on the right floor; same with touch. Compare the look with the visual target |
 | 2a. Server (**built**) | Migration, `seats`, repository, service, layout GET/PUT, version conflict, two-cafe isolation test, size limits | Server tests incl. guard removal; real-server check |
 | 2b. Editor (**built**) | Floors, outline, edges and openings, Draw wall, placing real tables, save and reopen, the 409 flow, floor menu, outside-outline flags | Recreate an L-shaped café with a patio and a three-floor shophouse; move a staging table and scan its original QR |
-| 2c. Viewer | Saved layouts in 3D, table card with View QR and Show on plan, quality levels | Find each table from the lists and in 3D on phone, tablet, desktop |
+| 2c. Viewer (**built**) | Saved layouts in 3D, table card with View QR and Show on plan, quality levels | Find each table from the lists and in 3D on phone, tablet, desktop |
 | 3a. Looks | Starter catalog and custom looks | Edit a look used by three tables; delete refused while used |
 | 3b. Photos | Look photos via `media_assets` attach/release | Photo shows in the picker and table details |
 | 3c. Pilot | Pilot with a real café; prioritize more furniture from what the owner reaches for | The owner recreates part of their café and explores it without help |
@@ -230,3 +230,27 @@ A branch's **Dining tables** tab has three views: **Table list**, **Design shop*
     - a 390 px phone: the library in a slide-over, no sideways scrolling.
   - `test/e2e/support/mock-api.ts` answers the layout route with an empty layout by default.
 - **Review on staging:** recreate an L-shaped café with a patio (Wide café, then Draw outline, then an edge made Open or Railing) and a three-floor shophouse (Narrow shophouse, Add floor twice, one roof off). Move a staging table and scan its original QR: it still opens that table.
+
+## Step 2c: the viewer (built 2026-11-10)
+
+**View in 3D** now works as part of the branch's real tables: the table card opens the table's own QR code, a table picked in one view is picked in the other, and the view says when it shows changes that aren't saved.
+
+- **Where:** `app/features/branches/components/BuildingView3D.vue` (the table card, `reveal`, `start` and Try again, the unsaved label) and `BranchPage.vue` (one selected table for both views, the 3D view's loading and error states).
+- **What changed:**
+  - **The table card** (a table picked in 3D or from the lists): its name, area, seats and floor, **View QR** (the table's own code, the same dialog as the Table list: link, SVG and PNG downloads) and **Show on plan** (opens Design shop on that table's floor with it selected).
+  - **One selected table for Design shop and View in 3D.** It is the editor's selection, so a table selected on the plan is selected and brought into view in 3D, and back.
+  - **Picking a table brings it into view.** In the exterior, a table under a roof or another floor showed only its label through the building; picking it from the lists (or arriving with it selected) now opens the cutaway first. A table on an open top floor stays in the exterior. Inside a floor, a table of another floor enters that floor (as before).
+  - **"Unsaved changes shown"** in the 3D view while the layout has unsaved changes (the navbar's "Unsaved changes" is hidden on a phone).
+  - **3D unavailable** (no WebGL, or the graphics context lost, which a phone does to a tab left in the background): the message has **Try again**, which starts the view on a fresh canvas. The floor and table lists and the table card (View QR, Show on plan) work without 3D.
+  - **Loading and error states:** opening View in 3D directly showed "No shop layout yet" until the layout arrived; it now shows the loading state, and the load error with Retry.
+- **Decided:**
+  - **View in 3D keeps showing the editor's layout, unsaved changes included**, and names it (the label above). Only owners open it today, from the same page as the editor; a second, saved-only copy of the layout would be one more state to keep in step for no reader. A view opened from elsewhere later (the counter, for staff) has no draft, so it shows the saved layout.
+  - **No ambient occlusion.** The plan listed it for the high level. It needs a post-processing pipeline (a composer with a depth pass, and its own anti-aliasing because the canvas's is lost), which costs bundle size and frame time on every frame, for a look the owner already approved without it. The quality levels stay: pixel ratio, shadow size and softness, lamps.
+  - **The quality line stays visible** ("Quality high · 12 ms a frame") through the pilot: it is how the owner reports what a real phone or tablet does. Remove or hide it after step 3c.
+  - **No "Show on plan" from the Table list's cards.** The list doesn't load the layout (2b), and it would need it to know which tables are placed. The floor and table lists in View in 3D and Unplaced tables in Design shop are the ways to find a table.
+- **Tests** (`test/e2e/shop-designer.test.ts`, 9 in the file, the built server):
+  - L1 picked from the lists opens the cutaway and its card; **View QR** shows the same link as the tables API; **Show on plan** selects it on the plan; after a move, View in 3D shows "Unsaved changes shown" with L1 still picked;
+  - WebGL switched off: the message, the lists, the table card and its QR code still work; **Try again** keeps the message while WebGL is off and draws the building once it is back;
+  - a 390 px phone: the lists in a drawer, the table card inside the screen, Show on plan, no sideways scrolling.
+- **Not verified:** real devices. The e2e browser draws with a software renderer (about 1 s a frame, quality low), so it proves the flow, not the speed or the look on a GPU. A lost graphics context is exercised only through Try again after a failed start, not by a real phone dropping it.
+- **Review on staging:** on a phone, a tablet and a desktop, open a branch → Dining tables → View in 3D. Find each table from **Floors and tables** and by tapping it; open its QR code and scan it; press Show on plan. Note the quality line on each device. On the phone, leave the tab in the background for a few minutes and come back: the building is still there, or the message offers Try again.

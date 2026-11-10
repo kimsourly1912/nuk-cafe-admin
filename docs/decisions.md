@@ -3077,3 +3077,9 @@ Verification: migrated SQLite forced interleavings, populated local workerd/D1 r
   - **The layout loads when a designer view first opens**, not with the table list.
 
   [Plan → Step 2b](plans/shop-designer.md#step-2b-the-editor-built-2026-11-10).
+- **Step 2c (2026-11-10):** the viewer on real tables: the 3D table card's **View QR** and **Show on plan**, one selected table for Design shop and View in 3D, a picked table brought into view (the cutaway when the exterior hides it), and **Try again** when 3D is unavailable or its graphics context was lost. Decided:
+  - **View in 3D shows the editor's layout, unsaved changes included, and says so** ("Unsaved changes shown"). Owners open it from the editor's page, so a saved-only copy would be a second state with no reader. A later view without a draft (the counter) shows the saved layout.
+  - **No ambient occlusion**: it needs a post-processing pipeline on every frame for a look the owner approved without it. Quality levels stay pixel ratio, shadows and lamps, chosen from the measured frame time.
+  - **The floor and table lists and the table card work without 3D.**
+
+  [Plan → Step 2c](plans/shop-designer.md#step-2c-the-viewer-built-2026-11-10).
