@@ -24,14 +24,18 @@ const isWorkspace = computed(() => isAdminPath(route.path) || isCounterPath(rout
 const rechecking = useState('session-identity:rechecking', () => false)
 // A workspace page whose session just ended (expired, signed out in another tab) is on its way to
 // sign-in (`plugins/api.ts`): the skeleton until then, not the page's empty states without its data.
+// The router's route, not `useRoute()`: here that one follows the page on screen and only moves
+// once <NuxtPage> renders the next page, which the skeleton keeps from ever happening.
 const auth = useAuth()
 const counter = useCounterSession()
 const platform = usePlatformSession()
+const currentRoute = useRouter().currentRoute
 const sessionEnded = computed(() => {
-  if (route.meta.public) return false
-  if (isAdminPath(route.path)) return !auth.user.value
-  if (isCounterPath(route.path)) return !counter.user.value
-  if (isPlatformPath(route.path)) return !platform.user.value
+  const { path, meta } = currentRoute.value
+  if (meta.public) return false
+  if (isAdminPath(path)) return !auth.user.value
+  if (isCounterPath(path)) return !counter.user.value
+  if (isPlatformPath(path)) return !platform.user.value
   return false
 })
 
