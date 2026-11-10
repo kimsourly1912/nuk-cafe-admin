@@ -84,6 +84,22 @@ describe('createApiFetch', () => {
     expect(onSessionLost).not.toHaveBeenCalled()
   })
 
+  it('keeps an identity-independent read across a session change, without sending the flag', async () => {
+    let generation = 1
+    let release!: (value: unknown) => void
+    const { fetch, calls } = fakeFetch(() => new Promise((resolve) => {
+      release = resolve
+    }))
+    const apiFetch = createApiFetch({ baseFetch: fetch, onSessionLost: vi.fn(), sessionGeneration: () => generation })
+
+    // A sign-in page opened by a sign-out reads the providers before the old identity is cleared.
+    const pending = apiFetch('/account/providers', { anyIdentity: true })
+    generation = 2
+    release({ google: true })
+    expect(await pending).toEqual({ google: true })
+    expect(calls[0]!.options).not.toHaveProperty('anyIdentity')
+  })
+
   it('maps a network failure to a retryable error', async () => {
     const { fetch } = fakeFetch(async () => {
       throw Object.assign(new FetchError('[GET] "/x": <no response> Failed to fetch'), { cause: new TypeError('Failed to fetch') })

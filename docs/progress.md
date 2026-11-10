@@ -3,6 +3,20 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Better Auth endpoint allowlist (D272, 2026-11-10)
+
+- Auth audit finding: over HTTP, a cafe owner could call `/api/auth/organization/update-member-role` and make branch staff an owner (200; better-auth 1.7.7 skips permissions for the creator role), bypassing the platform's owner routes, audit and version guard. Branch staff could `/organization/leave` and list members. Now an `onRequest` plugin answers 404 to every `/api/auth` endpoint not on the allowlist of what pages use.
+- Audit also checked, no change needed: every `/api/**` route reaches an access helper (assistant/sample-data via `requirePermission`, `/api/me/*` via their services); `authorizeTenant`/`authorizeBranch`/`authorizePlatform` refuse banned, temporary-password, guest and support-less super admin sessions; redirect targets are prefix-anchored (no open redirect); CSP `frame-ancestors 'none'`; workspaces are `ssr: false` and check the session before rendering; 2FA verify 3/10 s plus attempt limits.
+- Evidence: `auth-endpoints.test.ts` failed before the plugin and passes after; `pnpm test:unit` 2577 passed; typecheck and lint clean.
+
+### Sign-out without the empty-state flash (fix, 2026-11-10)
+
+- Admin, counter and console sign-out cleared the session and every identity-bound query before moving to sign-in, so the page being left re-rendered empty for a moment. `useWorkspaceSession().leaveSignedOut` now moves first and clears after `page:finish` (≤ 2 s; the identity is cleared even if the navigation fails). The sign-in middleware skips its "already signed in" bounce while `signingOut`.
+- Follow-up: the sign-in page now mounts before the clear, so its Google provider read was discarded as stale ("Could not check Google sign-in · The request was cancelled"). `apiFetch` takes `anyIdentity: true` for reads that are the same for everyone; `useAccountProviders` uses it (unit `api-fetch.test.ts`).
+- A workspace page whose session is lost (expired, another tab) shows the shell skeleton until the redirect lands (`app.vue` `sessionEnded`).
+- `<WorkspaceRefused>` Use another account now calls `identity.change('logout')`: before, other tabs and the cached account still showed it signed in.
+- Evidence: `pnpm typecheck`, eslint on changed files, `pnpm test:unit` (2572 passed). E2E blocked locally: global setup got EPERM removing `.data/e2e/db` (held by another process); `session.test.ts` logout test gained an empty-render check, still to run.
+
 ### Categories rolled back to the tree (D271, 2026-11-10)
 
 - Owner asked to return Categories to its look of about three days earlier (screenshot of the tree layout). Reverted PR #274 (merge `09598a1`, D270) on `claude/trusting-johnson-ykpd0i`; app, server and tests are back to main `b2e6eba`, except the two unrelated e2e fixes kept (see [D271](decisions.md#d271-categories-goes-back-to-the-tree-d270-is-rolled-back-2026-11-10)).

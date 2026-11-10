@@ -15,7 +15,7 @@ const lockOf = (id: string) => `menu-item:${id}`
  */
 const AFFECTED = ['products', 'categories', 'option-sets', 'modifier-groups', 'availability-rules']
 
-export type ItemListFilters = Partial<Pick<ItemListQuery, 'search' | 'categoryId' | 'modifierGroupId' | 'photo' | 'page' | 'pageSize'>> & { status?: ItemStatus }
+export type ItemListFilters = Partial<Pick<ItemListQuery, 'search' | 'categoryId' | 'photo' | 'page' | 'pageSize'>> & { status?: ItemStatus }
 
 /** The API's default leaves archived items out; the "All" tab means all of them. */
 const withStatus = (query: ItemListFilters) => ({ ...query, status: query.status ?? 'all' })
@@ -33,12 +33,12 @@ export function useItemList(query: MaybeRefOrGetter<ItemListFilters>) {
  * The list's counts in one read: "All 24 · Draft 3 · Published 20 · Archived 1" for the status
  * tabs (with the photo filter), and how many items it shows without a photo (D160) for the "No
  * photo" hint (with the status tab; archived items aren't counted on the All tab). Only search,
- * category and add-on group change the read; a tab or the photo filter doesn't.
+ * and category change the read; a tab or the photo filter doesn't.
  */
 export function useItemCounts(filters: () => ItemListFilters) {
   const counted = (): ItemCountsQuery => {
-    const { search, categoryId, modifierGroupId } = filters()
-    return { search, categoryId, modifierGroupId }
+    const { search, categoryId } = filters()
+    return { search, categoryId }
   }
   const { data } = useApiQuery(
     'products:counts',

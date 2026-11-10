@@ -2,7 +2,7 @@ import type { AccountProviders } from '#shared/contracts/account'
 
 /** Availability is public, but must be fresh on every entry, including client navigation. */
 export function useAccountProviders() {
-  const query = useApiQuery('account:providers', () => apiFetch<AccountProviders>('/account/providers'), {
+  const query = useApiQuery('account:providers', () => apiFetch<AccountProviders>('/account/providers', { anyIdentity: true }), {
     server: false,
     immediate: false,
     default: () => null,

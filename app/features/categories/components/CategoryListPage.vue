@@ -319,82 +319,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           :disabled="filtersLocked"
         />
 
-        <!-- Selection bar -->
-        <BulkActionsBar
-          v-if="mode === 'select'"
-          :count="selection.count"
-          :all-selected="selection.allSelected"
-          @toggle-all="selection.toggleAll(!selection.allSelected)"
-        >
-          <UButton
-            v-if="view === 'archived'"
-            label="Restore selected"
-            icon="i-lucide-archive-restore"
-            :disabled="!selection.count"
-            @click="runBulk()"
-          />
-          <UButton
-            v-else
-            label="Archive selected"
-            icon="i-lucide-archive"
-            color="neutral"
-            variant="subtle"
-            :disabled="!selection.count"
-            @click="runBulk()"
-          />
-        </BulkActionsBar>
-
-        <!-- Reorder bar -->
-        <BottomActionBar
-          v-if="mode === 'reorder'"
-          label="Reorder"
-        >
-          <p
-            v-if="tree.saveError.value"
-            class="min-w-0 flex-1 text-sm text-error"
-          >
-            {{ saveConflict ? 'Someone else changed these categories. Reload to get their changes; your new order is kept, then save again.' : tree.saveError.value.message }}
-          </p>
-          <p
-            v-else-if="tree.isDirty.value || tree.saving.value"
-            class="min-w-0 flex-1 text-sm font-medium text-highlighted"
-          >
-            The new order isn't saved yet.
-          </p>
-          <p
-            v-else
-            class="min-w-0 flex-1 text-sm text-muted"
-          >
-            Drag a row or use its arrows. Categories move among their siblings only; change a parent in Edit.
-          </p>
-          <div class="flex flex-wrap items-center justify-end gap-2">
-            <UButton
-              v-if="saveConflict"
-              label="Reload"
-              icon="i-lucide-refresh-cw"
-              color="neutral"
-              variant="outline"
-              :disabled="tree.saving.value"
-              @click="tree.reload()"
-            />
-            <template v-if="tree.isDirty.value || tree.saving.value">
-              <UButton
-                label="Discard"
-                color="neutral"
-                variant="outline"
-                :disabled="tree.saving.value"
-                @click="tree.reset()"
-              />
-              <UButton
-                label="Save order"
-                icon="i-lucide-save"
-                :loading="tree.saving.value"
-                @click="saveOrder()"
-              />
-            </template>
-          </div>
-        </BottomActionBar>
-
         <ApiErrorAlert
           v-if="tree.error.value"
           :error="tree.error.value"
@@ -497,6 +421,84 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             </div>
           </div>
         </div>
+
+        <!-- Select and Reorder bars go last in the body: from lg they stick to the bottom of the panel while the list scrolls -->
+        <BulkActionsBar
+          v-if="mode === 'select'"
+          expanded="pinned"
+          :count="selection.count"
+          :all-selected="selection.allSelected"
+          @toggle-all="selection.toggleAll(!selection.allSelected)"
+        >
+          <UButton
+            v-if="view === 'archived'"
+            label="Restore selected"
+            icon="i-lucide-archive-restore"
+            :disabled="!selection.count"
+            @click="runBulk()"
+          />
+          <UButton
+            v-else
+            label="Archive selected"
+            icon="i-lucide-archive"
+            color="neutral"
+            variant="subtle"
+            :disabled="!selection.count"
+            @click="runBulk()"
+          />
+        </BulkActionsBar>
+
+        <!-- Reorder bar -->
+        <BottomActionBar
+          v-if="mode === 'reorder'"
+          label="Reorder"
+          expanded="pinned"
+        >
+          <p
+            v-if="tree.saveError.value"
+            class="min-w-0 flex-1 text-sm text-error"
+          >
+            {{ saveConflict ? 'Someone else changed these categories. Reload to get their changes; your new order is kept, then save again.' : tree.saveError.value.message }}
+          </p>
+          <p
+            v-else-if="tree.isDirty.value || tree.saving.value"
+            class="min-w-0 flex-1 text-sm font-medium text-highlighted"
+          >
+            The new order isn't saved yet.
+          </p>
+          <p
+            v-else
+            class="min-w-0 flex-1 text-sm text-muted"
+          >
+            Drag a row or use its arrows. Categories move among their siblings only; change a parent in Edit.
+          </p>
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <UButton
+              v-if="saveConflict"
+              label="Reload"
+              icon="i-lucide-refresh-cw"
+              color="neutral"
+              variant="outline"
+              :disabled="tree.saving.value"
+              @click="tree.reload()"
+            />
+            <template v-if="tree.isDirty.value || tree.saving.value">
+              <UButton
+                label="Discard"
+                color="neutral"
+                variant="outline"
+                :disabled="tree.saving.value"
+                @click="tree.reset()"
+              />
+              <UButton
+                label="Save order"
+                icon="i-lucide-save"
+                :loading="tree.saving.value"
+                @click="saveOrder()"
+              />
+            </template>
+          </div>
+        </BottomActionBar>
       </div>
     </template>
   </UDashboardPanel>

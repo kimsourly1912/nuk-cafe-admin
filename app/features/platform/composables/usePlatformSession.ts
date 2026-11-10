@@ -36,7 +36,7 @@ export function usePlatformSession() {
   const authFetch = useAuthRequest()
   // Captured now: the hooks below run after an `await`, where the Nuxt context is gone.
   const identity = useSessionIdentity()
-  const { user, checked, error: sessionError, generation, signingOut, setUser, reset, fetchSession, supersede } = useWorkspaceSession<PlatformSession>('platform', '/platform/me')
+  const { user, checked, error: sessionError, generation, signingOut, setUser, reset, fetchSession, supersede, leaveSignedOut } = useWorkspaceSession<PlatformSession>('platform', '/platform/me')
   const isSignedIn = computed(() => user.value !== null)
   const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
   const twoFactorEnabled = computed(() => user.value?.twoFactorEnabled ?? false)
@@ -121,15 +121,8 @@ export function usePlatformSession() {
       // Preserve the existing local sign-out behavior when the network fails.
     }
     if (identity.generation.value !== startedIn) return
-    signingOut.value = true
-    reset(true)
-    await identity.change('logout', 'platform')
-    try {
-      await navigateTo(PLATFORM_SIGN_IN)
-    }
-    finally {
-      signingOut.value = false
-    }
+    // To sign in first, then the identity is cleared: the page being left never shows empty.
+    await leaveSignedOut(PLATFORM_SIGN_IN)
   }
 
   /**

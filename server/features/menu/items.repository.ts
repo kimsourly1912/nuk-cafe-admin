@@ -123,7 +123,7 @@ const deleteBlocker = (db: Db) => sql<ItemDeleteBlocker | null>`case
   when ${inAPromotion(db)} then 'promotion'
 end`.as('delete_blocker')
 
-/** The cafe's items the list's shared filters match (search, category, add-on group). */
+/** The cafe's items the list's shared filters match (search, category). */
 function filterConditions(db: Db, tenantId: string, query: ItemCountsQuery): SQL {
   // Items sit in sub-categories only, so a main category matches its sub-categories' items (two levels).
   const inCategory = query.categoryId
@@ -132,17 +132,7 @@ function filterConditions(db: Db, tenantId: string, query: ItemCountsQuery): SQL
         inArray(menuItems.categoryId, db.select({ id: menuCategories.id }).from(menuCategories).where(childrenOf(tenantId, query.categoryId))),
       )
     : undefined
-  const withGroup = query.modifierGroupId
-    ? exists(db
-        .select({ one: sql`1` })
-        .from(menuItemModifierGroups)
-        .where(and(
-          eq(menuItemModifierGroups.tenantId, menuItems.tenantId),
-          eq(menuItemModifierGroups.itemId, menuItems.id),
-          eq(menuItemModifierGroups.groupId, query.modifierGroupId),
-        )))
-    : undefined
-  return inTenant(menuItems, tenantId, inCategory, withGroup, searchIn(query.search, menuItems.name))
+  return inTenant(menuItems, tenantId, inCategory, searchIn(query.search, menuItems.name))
 }
 
 // --- Reads ---

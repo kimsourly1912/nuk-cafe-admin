@@ -13,11 +13,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const slug = splitTenantUrl(to.path)?.slug
   if (!slug || !isCounterPath(to.path)) return
 
-  const { user, isSignedIn, checked, mustChangePassword, sessionError, fetchSession, can } = useCounterSession()
+  const { user, isSignedIn, checked, mustChangePassword, sessionError, fetchSession, can, signingOut } = useCounterSession()
   if (!checked.value && !sessionError.value) await fetchSession()
 
   if (to.meta.public) {
-    if (to.path === counterSignInPath(slug) && isSignedIn.value) return navigateTo(counterRedirectTarget(to.query.redirect, slug), { replace: true })
+    if (to.path === counterSignInPath(slug) && isSignedIn.value && !signingOut.value) return navigateTo(counterRedirectTarget(to.query.redirect, slug), { replace: true })
     return
   }
 

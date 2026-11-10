@@ -44,7 +44,7 @@ export function useAuth() {
   // Captured now: login/logout call hooks after an `await`, where the Nuxt context is gone.
   const nuxtApp = useNuxtApp()
   const identity = useSessionIdentity()
-  const { user, checked, error: sessionError, generation, signingOut, setUser, reset, fetchSession, supersede } = useWorkspaceSession<AdminSession>('admin', '/admin/me')
+  const { user, checked, error: sessionError, generation, signingOut, setUser, reset, fetchSession, supersede, leaveSignedOut } = useWorkspaceSession<AdminSession>('admin', '/admin/me')
   const isLoggedIn = computed(() => user.value !== null)
   const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
 
@@ -153,15 +153,8 @@ export function useAuth() {
     }
     if (identity.generation.value !== startedIn) return
     const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug
-    signingOut.value = true
-    reset(true)
-    await identity.change('logout', 'admin')
-    try {
-      await navigateTo(slug ? loginPath(slug) : CAFES_PATH)
-    }
-    finally {
-      signingOut.value = false
-    }
+    // To login first, then the identity is cleared: the page being left never shows empty.
+    await leaveSignedOut(slug ? loginPath(slug) : CAFES_PATH)
   }
 
   function clearSession() {

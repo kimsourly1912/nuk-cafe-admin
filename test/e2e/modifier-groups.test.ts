@@ -1,11 +1,10 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import type { MenuItemSummary } from '../../shared/contracts/menu-items'
 import type { Modifier, ModifierGroup } from '../../shared/contracts/menu-modifiers'
 import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
-import { failures, MockFailure, menuItemOf, menuItemSummaryOf, mockApi, pageOf, setupE2e, toast, toastAction } from './support/mock-api'
+import { failures, MockFailure, mockApi, setupE2e, toast, toastAction } from './support/mock-api'
 
 await setupE2e()
 
@@ -21,9 +20,6 @@ const MILK = groupOf('grp-1', 'Milk choices', [addOn('mod-1', 'Whole milk', 0, {
 const SYRUPS = groupOf('grp-2', 'Syrups', ['Vanilla', 'Caramel', 'Hazelnut', 'Mocha', 'Honey', 'Maple'].map((name, i) => addOn(`syr-${i}`, name, 50)), { maxSelect: 3, itemCount: 1 })
 const OLD = groupOf('grp-3', 'Seasonal extras', [addOn('mod-5', 'Gingerbread crumb', 75)], { status: 'archived', version: 2 })
 
-const LATTE = menuItemSummaryOf('item-1', 'Iced latte', { categoryName: 'Coffee', status: 'active' })
-const USERS = [LATTE, ...['Cappuccino', 'Matcha latte', 'Mocha', 'Flat white'].map((name, i) => menuItemSummaryOf(`item-${i + 2}`, name, { status: 'active' }))]
-
 /** Groups as the server last answered them (`answering` writes here), so refetches see changes. */
 const latest = new Map<string, ModifierGroup>()
 const current = (group: ModifierGroup) => latest.get(group.id) ?? group
@@ -38,7 +34,6 @@ function backend(groups: ModifierGroup[] = [MILK, SYRUPS, OLD], extra: Record<st
       if (!group) throw failures.notFound('This add-on group was not found.')
       return group
     },
-    'GET /admin/menu/items': ({ url }) => pageOf(url.searchParams.get('modifierGroupId') === 'grp-1' ? USERS : [], 1, Number(url.searchParams.get('pageSize') ?? 20)),
     ...extra,
   }
 }
@@ -346,19 +341,14 @@ describe('new add-on group', () => {
 })
 
 describe('add-on group page', () => {
-  it('shows the group, its add-ons in a table, and the menu items that use it', async () => {
-    const { page, api } = await openGroup()
+  it('shows the group, its add-ons in a table', async () => {
+    const { page } = await openGroup()
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByText('Milk choices').waitFor()
     await page.getByText('Required · choose exactly 1').first().waitFor()
     await page.getByText('3 active add-ons').waitFor()
     expect(await rowsShown(page)).toEqual(['Whole milk', 'Oat milk', 'Almond milk'])
     expect(await row(page, 'Whole milk').getByRole('checkbox').isChecked()).toBe(true)
     await page.getByText('Default prices can be overridden on individual menu items.').waitFor()
-    // Usage: the first 5, each opening the item, and View all.
-    await page.getByRole('heading', { name: 'Used by 5 menu items' }).waitFor()
-    expect(api.calls).toContain('GET /admin/menu/items')
-    await page.getByRole('link', { name: /Iced latte/ }).waitFor()
-    expect(await page.getByRole('link', { name: /Iced latte/ }).getAttribute('href')).toBe('/c/nuk/admin/products?item=item-1')
     // Settings: derived rule, status, last updated.
     await page.getByText('Customers must choose exactly 1. Menu items can override these rules.').waitFor()
     await page.getByText('Last updated 28 Sep 2026').waitFor()
@@ -778,48 +768,13 @@ describe('add-on rows by the width of their column', () => {
     const { page } = await openGroup(backend(), 'grp-1', 1440)
     await page.getByRole('checkbox', { name: 'Oat milk is preselected' }).waitFor()
     expect(await row(page, 'Oat milk').getByText(/^Default price/).isVisible()).toBe(false)
-    const reorderAbove = async () => {
+    const reorderPosition = async () => {
       await page.getByRole('button', { name: 'Reorder', exact: true }).click()
       const bar = page.getByRole('toolbar', { name: 'Reorder' })
       await bar.waitFor()
       return bar.evaluate(el => getComputedStyle(el).position)
     }
-    expect(await reorderAbove()).toBe('static')
-  })
-})
-
-describe('from an add-on group to its menu items', () => {
-  const ITEMS_BACKEND = (seen: URLSearchParams[]): Record<string, MockHandler> => ({
-    'GET /admin/menu/items': ({ url }) => {
-      if (url.searchParams.get('pageSize') !== '1') seen.push(url.searchParams)
-      return pageOf<MenuItemSummary>(url.searchParams.get('modifierGroupId') ? [LATTE] : [LATTE, menuItemSummaryOf('item-7', 'Scone')])
-    },
-    'GET /admin/menu/modifier-groups': () => [MILK],
-    'GET /admin/menu/items/{id}': () => menuItemOf('item-1', 'Iced latte'),
-    'GET /admin/menu/option-sets': () => [],
-    'GET /admin/menu/availability-rules': () => [],
-  })
-
-  it('filters Menu items by the group, named and removable', async () => {
-    const seen: URLSearchParams[] = []
-    const { page } = await open(ITEMS_BACKEND(seen), '/c/nuk/admin/products?modifierGroupId=grp-1')
-    await page.getByRole('button', { name: 'Offers Milk choices: remove this filter' }).waitFor()
-    expect(seen[0]?.get('modifierGroupId')).toBe('grp-1')
-    await page.getByRole('article', { name: 'Iced latte', exact: true }).waitFor()
-    expect(await page.getByRole('article', { name: 'Scone', exact: true }).count()).toBe(0)
-    await page.getByRole('button', { name: 'Offers Milk choices: remove this filter' }).click()
-    await page.getByRole('article', { name: 'Scone', exact: true }).waitFor()
-    expect(new URL(page.url()).searchParams.get('modifierGroupId')).toBeNull()
-  })
-
-  it('opens the item a link names, and closing it removes only `item` from the URL (D90)', async () => {
-    const seen: URLSearchParams[] = []
-    const { page, api } = await open(ITEMS_BACKEND(seen), '/c/nuk/admin/products?modifierGroupId=grp-1&item=item-1')
-    await expect.poll(() => api.calls).toContain('GET /admin/menu/items/item-1')
-    await expect.poll(() => page.getByRole('dialog').getByLabel('Name', { exact: true }).inputValue()).toBe('Iced latte')
-    expect(new URL(page.url()).searchParams.get('item')).toBe('item-1')
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
-    await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBeNull()
-    expect(new URL(page.url()).searchParams.get('modifierGroupId')).toBe('grp-1')
+    // From lg the bar sticks to the bottom of the panel (pinned) instead of sitting above the list.
+    expect(await reorderPosition()).toBe('sticky')
   })
 })

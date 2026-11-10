@@ -10,7 +10,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | API/server architecture and integrity | D39–D45, D52, D71, D116, D194, D200; version, idempotency, guard, audit, repository, shared owner conditions, token queues, connect codes, joined snapshots and JSON-bound sets, archive and permanent delete |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256, D263, D264, D268, D269, D270, D271; counter board layout; motion, animation, transitions, easing curves |
-| Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248; organization, tenant, branch, platform console |
+| Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248, D272; organization, tenant, branch, platform console, Better Auth endpoint allowlist |
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250, D257, D265, D266; KHQR recovery, review cases, customer order index |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109, D254 |
@@ -315,3 +315,5 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D270](decisions.md#d270-the-categories-page-as-two-panels-with-a-photo-banner-2026-11-06) | Categories as two panels: main categories, a photo banner, subcategories; `?category=`, local during Reorder (2026-11-06) |
 
 | [D271](decisions.md#d271-categories-goes-back-to-the-tree-d270-is-rolled-back-2026-11-10) | Categories back to the tree layout; PR #274 (D270) reverted, `moveItems` with it (2026-11-10) |
+
+| [D272](decisions.md#d272-only-the-better-auth-endpoints-our-pages-use-answer-over-http-2026-11-10) | Only the Better Auth endpoints our pages use answer over HTTP; owners could promote members through `/organization/update-member-role` (2026-11-10) |
