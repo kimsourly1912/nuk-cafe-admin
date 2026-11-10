@@ -12,7 +12,7 @@ import type { DiningTable } from '#shared/contracts/branches'
 import type { CustomLook, Finish, Floor, InnerWall, ItemKind, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory } from '../designer/catalog'
-import { FINISH_SWATCHES, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK } from '../designer/catalog'
+import { FINISH_SWATCHES, findLook, ITEM_SPECS, itemFinish, lookPhoto, NEW_TABLE_LOOK } from '../designer/catalog'
 import { FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, outsideOutline, snap } from '../designer/geometry'
 import { areaM2, edgeNames, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
@@ -523,7 +523,17 @@ function chooseStarter(starter: Starter) {
               @pointerdown="startLibraryDrag($event, { kind: 'look', lookId: look.id })"
               @click="placeInMiddle({ kind: 'look', lookId: look.id })"
             >
+              <!-- A look's photo (step 3b) in place of its shape's icon; its name follows, so no alt text. -->
+              <img
+                v-if="lookPhoto(look)"
+                :src="lookPhoto(look)!.url"
+                alt=""
+                draggable="false"
+                class="size-10 rounded object-cover"
+                data-testid="look-photo"
+              >
               <UIcon
+                v-else
                 :name="LOOK_ICONS[look.shape]"
                 class="size-5 text-primary"
               />
@@ -704,6 +714,13 @@ function chooseStarter(starter: Starter) {
           @update:model-value="value => { const look = findLook(looks, String(value)); updateTable(selectedPlacement!.tableId, { lookId: look.id, width: look.defaultWidth, depth: look.defaultDepth }) }"
         />
       </UFormField>
+      <img
+        v-if="lookPhoto(selectedLook)"
+        :src="lookPhoto(selectedLook)!.url"
+        :alt="`Photo of the look ${selectedLook.name}`"
+        class="aspect-square w-32 rounded-md object-cover"
+        data-testid="table-look-photo"
+      >
       <div class="flex flex-wrap gap-2">
         <UButton
           v-if="isCustom(selectedLook)"

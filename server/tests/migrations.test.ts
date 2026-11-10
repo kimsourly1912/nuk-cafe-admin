@@ -563,3 +563,20 @@ describe('0059_custom_looks', () => {
     for (const file of files.slice(at + 1)) await applyMigration(client, file)
   })
 })
+
+describe('0060_look_photos', () => {
+  it('keeps every look, without a photo; the old Worker\'s insert (no photo column named) still works', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0060_look_photos.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    const look = (id: string) => `insert into custom_furniture_looks (id, tenant_id, name, shape, base, chair, finishes, default_width_cm, default_depth_cm) values ('${id}', 't1', '${id}', 'rect', 'legs', 'none', '{}', 160, 80)`
+    await client.batch([`insert into organization (id, name, slug, created_at) values ('t1', 'NUK Cafe', 'nuk', 1)`, look('before')])
+    await applyMigration(client, files[at]!)
+    await client.execute(look('after'))
+    const rows = (await client.execute('select id, version, photo_asset_id from custom_furniture_looks order by id')).rows.map(row => ({ ...row }))
+    expect(rows).toEqual([{ id: 'after', version: 1, photo_asset_id: null }, { id: 'before', version: 1, photo_asset_id: null }])
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+})

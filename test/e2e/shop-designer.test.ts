@@ -83,6 +83,23 @@ async function clickPlan(page: Page, point: Point) {
   await page.mouse.click(at.x, at.y)
 }
 
+/** A real PNG drawn in the page (the crop dialog has to open it). */
+async function photoFile(page: Page) {
+  const bytes = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 600
+    canvas.height = 400
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#8a5a34'
+    context.fillRect(0, 0, 600, 400)
+    const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+    return [...new Uint8Array(await blob.arrayBuffer())]
+  })
+  return { name: 'table.png', mimeType: 'image/png', buffer: Buffer.from(bytes) }
+}
+
+const lookList = (page: Page) => page.evaluate(path => fetch(path).then(response => response.json()), `/api/c/${lab.slug}/admin/furniture-looks`) as Promise<CustomLook[]>
+
 const positionOf = async (page: Page, label: string) => {
   const transform = await plan(page).getByTestId(`plan-table-${label}`).getAttribute('transform')
   const [, x, y] = /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(transform ?? '') ?? []
@@ -420,7 +437,7 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('combobox', { name: 'Look' }).click()
     await page.getByRole('option', { name: 'Walnut window' }).click()
     await save(page)
-    const looks = () => page.evaluate(path => fetch(path).then(response => response.json()), `/api/c/${lab.slug}/admin/furniture-looks`) as Promise<CustomLook[]>
+    const looks = () => lookList(page)
     const [look] = await looks()
     expect(look).toMatchObject({ name: 'Walnut window', shape: 'rect', base: 'legs', defaultWidth: 150, tables: 1, finishes: { top: 'walnut' } })
     const l1 = (await branchTables(page)).find(table => table.label === 'L1')!
@@ -444,6 +461,61 @@ describe('the shop designer on saved layouts', () => {
     await page.getByText('Look "Walnut bar" deleted').first().waitFor()
     await expect.poll(() => library.getByTestId('look-custom-Walnut bar').count()).toBe(0)
     expect(await looks()).toEqual([])
+  })
+
+  it('a look\'s photo (step 3b): picked in the form, shown in Table looks, the table\'s panel and its 3D card; removed again', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').waitFor()
+    const library = page.getByRole('complementary', { name: 'Library' })
+    const form = () => page.getByRole('dialog', { name: /look$/i })
+
+    // New look with a photo: picked, framed square, uploaded before the look is saved.
+    await library.getByRole('button', { name: 'New look' }).click()
+    await form().getByLabel('Name').fill('Oak photo table')
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), form().getByRole('button', { name: 'Upload photo' }).click()])
+    await chooser.setFiles(await photoFile(page))
+    const crop = page.getByRole('dialog', { name: 'Crop photo' })
+    await crop.getByTestId('crop-frame').waitFor()
+    await crop.getByRole('button', { name: 'Use photo' }).click()
+    await form().getByRole('button', { name: 'Replace photo' }).waitFor()
+    await form().getByRole('button', { name: 'Save look' }).click()
+    await page.getByText('Look "Oak photo table" saved').first().waitFor()
+    const [look] = await lookList(page)
+    expect(look!.photo?.url).toMatch(/^\/media\//)
+
+    // Table looks: the photo in place of the shape's icon, served by this server.
+    const thumb = library.getByTestId('look-custom-Oak photo table').getByTestId('look-photo')
+    expect(await thumb.getAttribute('src')).toBe(look!.photo!.url)
+    await expect.poll(() => thumb.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+
+    // L1 takes it: its panel shows the photo; saved, its 3D card does too.
+    await plan(page).getByTestId('plan-table-L1').click()
+    await page.getByRole('combobox', { name: 'Look' }).click()
+    await page.getByRole('option', { name: 'Oak photo table' }).click()
+    await page.getByRole('img', { name: 'Photo of the look Oak photo table' }).waitFor()
+    await save(page)
+    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await drawn(page)
+    const card = page.getByTestId('table-card')
+    await card.getByRole('img', { name: 'Photo of the look Oak photo table' }).waitFor()
+    await shot(page, 'look-photo-3d-card')
+    await card.getByRole('button', { name: 'Show on plan' }).click()
+
+    // Removed from the look: gone from Table looks and the panel.
+    await library.getByRole('button', { name: 'Edit the look Oak photo table' }).click()
+    await form().getByRole('button', { name: 'Remove', exact: true }).click()
+    await form().getByRole('button', { name: 'Save', exact: true }).click()
+    await expect.poll(() => thumb.count()).toBe(0)
+    expect(await page.getByRole('img', { name: 'Photo of the look Oak photo table' }).count()).toBe(0)
+    expect((await lookList(page))[0]).toMatchObject({ name: 'Oak photo table', photo: null, version: 2 })
+
+    // Left as found: L1 on a built-in look, the look deleted.
+    await page.getByRole('combobox', { name: 'Look' }).click()
+    await page.getByRole('option', { name: 'Round café table' }).click()
+    await save(page)
+    const deleted = await page.evaluate(path => fetch(path, { method: 'DELETE' }).then(response => response.status), `/api/c/${lab.slug}/admin/furniture-looks/${look!.id}?version=2`)
+    expect(deleted).toBe(204)
   })
 
   it('a look deleted elsewhere while a draft uses it is named, and the standard look lets the layout save', { timeout: 60_000 }, async () => {

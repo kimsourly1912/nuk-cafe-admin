@@ -4,6 +4,8 @@
  * shape, a base, chairs and finishes part by part, with the same generated model the building
  * uses on a turntable. New looks start from another look's values. A look is shared: saving an
  * edit changes every table placed with it, in every branch; each table keeps its own size.
+ * A look may have a photo (step 3b), shown in Table looks and a table's details. A new look starts
+ * without one, also when it starts from a look that has one: a photo belongs to one look.
  * Open via `useOverlay().create(LookFormModal)`; emits `close(look)` with the look as saved.
  */
 import type { CreateLookInput, CustomLook, Finish, LookChair, TableBase, TableLook, TableShape } from '#shared/contracts/shop-layout'
@@ -51,8 +53,12 @@ const state = reactive({
     frame: lookFinish(source, 'frame'),
     seat: lookFinish(source, 'seat'),
   } as Record<'top' | 'base' | 'frame' | 'seat', Finish>,
+  photoId: props.look?.photo?.id,
+  photoUrl: props.look?.photo?.url,
 })
 const saving = ref(false)
+/** The photo is uploading: saving waits for it. */
+const uploading = ref(false)
 const { isCompact: fullscreen } = useLayoutContext()
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
 const { create, update, remove } = useLookMutations()
@@ -85,6 +91,7 @@ const body = computed<CreateLookInput>(() => {
     },
     defaultWidth: state.width,
     defaultDepth: round.value ? state.width : state.depth,
+    photoId: state.photoId ?? null,
   }
 })
 
@@ -101,12 +108,15 @@ const widthIssue = computed(() => sizeIssue(state.width))
 const depthIssue = computed(() => (round.value ? undefined : sizeIssue(state.depth)))
 /** The server's answer, until the name changes. */
 const serverNameIssue = ref<string>()
+/** The photo can't be used (cleaned up after a day unsaved, or used meanwhile), until another is chosen. */
+const serverPhotoIssue = ref<string>()
 const serverError = ref<string>()
 watch(() => state.name, () => (serverNameIssue.value = undefined))
+watch(() => state.photoId, () => (serverPhotoIssue.value = undefined))
 
 async function save() {
   touched.value = true
-  if (nameIssue.value || widthIssue.value || depthIssue.value || saving.value) return
+  if (nameIssue.value || widthIssue.value || depthIssue.value || saving.value || uploading.value) return
   saving.value = true
   serverError.value = undefined
   const result = props.look
@@ -120,7 +130,8 @@ async function save() {
   }
   if (result.status !== 'error') return
   serverNameIssue.value = result.error.fieldErrors?.name?.[0]
-  if (!serverNameIssue.value) serverError.value = result.error.message
+  serverPhotoIssue.value = result.error.fieldErrors?.photoId?.[0]
+  if (!serverNameIssue.value && !serverPhotoIssue.value) serverError.value = result.error.message
 }
 
 async function removeLook() {
@@ -279,6 +290,22 @@ const resetView = () => viewer?.reset()
             />
           </UFormField>
 
+          <UFormField
+            label="Photo"
+            help="Optional: a photo of the real table, shown in Table looks and the table's details."
+            :error="serverPhotoIssue"
+          >
+            <ImageInput
+              v-model:image-url="state.photoUrl"
+              v-model:image-id="state.photoId"
+              v-model:uploading="uploading"
+              alt="Look photo"
+              noun="photo"
+              :crop-ratio="1"
+              :disabled="saving"
+            />
+          </UFormField>
+
           <UFormField label="Shape">
             <UFieldGroup
               role="group"
@@ -427,7 +454,7 @@ const resetView = () => viewer?.reset()
               form="look-form"
               :label="look ? 'Save' : 'Save look'"
               :loading="saving"
-              :disabled="Boolean(look) && !unsaved.isDirty.value"
+              :disabled="(Boolean(look) && !unsaved.isDirty.value) || uploading"
             />
           </UTooltip>
         </div>

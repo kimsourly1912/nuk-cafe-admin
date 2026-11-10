@@ -8,6 +8,7 @@
  */
 import type { DiningTable } from '#shared/contracts/branches'
 import type { LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { findLook, lookPhoto } from '../designer/catalog'
 import type { Viewpoint } from '../designer/geometry'
 import type { BuildingViewer } from '../designer/scene/building-viewer'
 import type { StageStats } from '../designer/scene/stage'
@@ -53,7 +54,8 @@ const selected = computed(() => {
   const floor = props.layout.floors.find(candidate => candidate.id === placement?.floorId)
   if (!placement || !table || !floor) return null
   const details = props.diningTables.find(candidate => candidate.id === table.id)
-  return { table, floor, area: details?.area ?? null, qrUrl: details?.qrUrl ?? null }
+  const look = findLook(props.looks, placement.lookId)
+  return { table, floor, look, photo: lookPhoto(look), area: details?.area ?? null, qrUrl: details?.qrUrl ?? null }
 })
 const insideName = computed(() => props.layout.floors.find(floor => floor.id === insideFloor.value)?.name)
 
@@ -389,6 +391,20 @@ function selectFromList(tableId: string) {
             aria-label="Clear selection"
             @click="selectedTable = null"
           />
+        </div>
+        <div
+          class="mt-2 flex items-center gap-2"
+          data-testid="table-card-look"
+        >
+          <img
+            v-if="selected.photo"
+            :src="selected.photo.url"
+            :alt="`Photo of the look ${selected.look.name}`"
+            class="size-12 rounded-md object-cover"
+          >
+          <p class="text-sm text-toned">
+            {{ selected.look.name }}
+          </p>
         </div>
         <div class="mt-3 flex gap-2">
           <UButton

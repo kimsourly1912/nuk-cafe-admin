@@ -16,6 +16,8 @@ export interface LookRow {
   finishes: LookFinishes
   defaultWidthCm: number
   defaultDepthCm: number
+  /** A `media_assets` id of the cafe's (step 3b), or `null`. */
+  photoAssetId: string | null
   version: number
 }
 
@@ -33,6 +35,7 @@ const lookColumns = {
   finishes: customFurnitureLooks.finishes,
   defaultWidthCm: customFurnitureLooks.defaultWidthCm,
   defaultDepthCm: customFurnitureLooks.defaultDepthCm,
+  photoAssetId: customFurnitureLooks.photoAssetId,
   version: customFurnitureLooks.version,
 }
 

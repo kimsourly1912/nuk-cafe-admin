@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { MAX_BRANCH_TABLES } from './branches'
+import { idSchema as uploadIdSchema } from './common'
 
 /**
  * A branch's shop layout (D273, docs/plans/shop-designer.md): floors drawn as outlines with walls,
@@ -228,6 +229,11 @@ const lookFields = {
   finishes: lookFinishesSchema,
   defaultWidth: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
   defaultDepth: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
+  /**
+   * The look's photo (step 3b): an upload of this cafe's (`POST …/admin/media`), or `null` for none.
+   * Left out, the look has none: an edit sends the whole look, its photo included.
+   */
+  photoId: v.optional(v.nullable(uploadIdSchema), null),
 }
 
 /** `POST …/admin/furniture-looks`: a new custom look for the whole cafe (every branch). */
@@ -246,6 +252,8 @@ export type UpdateLookInput = v.InferOutput<typeof updateLookSchema>
 
 /** One of the cafe's custom looks, as `GET …/admin/furniture-looks` lists them by name. */
 export interface CustomLook extends TableLook {
+  /** Shown in the look picker and a table's details; `null` without one. */
+  photo: { id: string, url: string } | null
   version: number
   /** How many placed tables use it, in every branch's saved layout. It can't be deleted while any does. */
   tables: number

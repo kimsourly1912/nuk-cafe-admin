@@ -3,6 +3,14 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 3b: look photos (D273, 2026-11-10)
+
+- **Built:** a custom look's optional photo (migration `0060_look_photos`): **Photo** in the look's form (the shared `<ImageInput>`, framed square), shown in Table looks, the table's panel and its card in View in 3D. Attached while the look uses it, released when an edit drops or replaces it or the look is deleted, in that write's batch. [Plan → Step 3b](plans/shop-designer.md#step-3b-look-photos-built-2026-11-10).
+- **Decided:** no foreign key to `media_assets`, like menu item images, posters and the logo (the plan's first draft named one); why in the plan.
+- **Evidence:** server `branches.looks.service.test.ts` 25 (6 new), `migrations.test.ts` `0060_look_photos`; real-server e2e `shop-designer.test.ts` (12, one new: upload, the photo in the three places, Remove). Guards checked by removing them (plan). `pnpm lint` and `pnpm typecheck` clean, `pnpm test:unit` 2697 passed (179 files), e2e `shop-layout-api` and `sample-data` pass. Full `pnpm test:e2e` not run locally (feature-local change; CI runs every shard).
+- **Also on 2026-11-10:** PR #281 (steps 2c and 3a) merged after its e2e flake was fixed in the test (How to verify → D249).
+- **To check on staging:** the plan's review steps; an upload from a phone.
+
 ### Shop designer step 3a: custom table looks (D273, 2026-11-10)
 
 - **Built:**

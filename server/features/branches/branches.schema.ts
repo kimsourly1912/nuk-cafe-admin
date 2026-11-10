@@ -174,6 +174,12 @@ export const customFurnitureLooks = sqliteTable('custom_furniture_looks', {
   finishes: text({ mode: 'json' }).$type<LookFinishes>().notNull(),
   defaultWidthCm: integer().notNull(),
   defaultDepthCm: integer().notNull(),
+  /**
+   * The look's photo (step 3b): a `media_assets` id of the same tenant (the media feature owns that
+   * table and its lifecycle; attached while the look uses it, checked by the media feature's
+   * tenant-scoped attach), like a menu item's image.
+   */
+  photoAssetId: text(),
   version: integer().notNull().default(1),
   createdAt: instant().notNull().default(nowMs),
   updatedAt: instant().notNull().default(nowMs),

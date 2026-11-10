@@ -97,6 +97,11 @@ export function findLook(looks: readonly TableLook[], id: string): TableLook {
   return looks.find(look => look.id === id) ?? BUILT_IN_LOOKS[0]!
 }
 
+/** A custom look's photo (step 3b); built-in looks have none. */
+export function lookPhoto(look: TableLook): { id: string, url: string } | null {
+  return 'photo' in look ? (look.photo as { id: string, url: string } | null) : null
+}
+
 /** A slot's finish on an item, or the kind's default. */
 export function itemFinish(kind: ItemKind, finishes: Partial<Record<string, Finish>>, key: string): Finish {
   const slot = ITEM_SPECS[kind].slots.find(candidate => candidate.key === key)

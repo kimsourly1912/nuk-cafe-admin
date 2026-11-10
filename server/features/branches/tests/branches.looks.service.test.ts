@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { MAX_CUSTOM_LOOKS } from '#shared/contracts/shop-layout'
 import type { CreateLookInput, Floor, Placement } from '#shared/contracts/shop-layout'
 import type { Actor } from '#server/features/identity'
+import { mediaAssets } from '#server/features/media/media.schema'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { getLayout, saveLayout } from '#server/features/branches/branches.layout.service'
 import { replaceLayoutStatements } from '#server/features/branches/branches.layout.repository'
@@ -11,7 +12,7 @@ import { deleteLookStatement, findLook, looksWithUse, lookUse, updateLookStateme
 import { archiveTable, createTable } from '#server/features/branches/branches.service'
 import { customFurnitureLooks } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
-import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db, Statement } from '#server/utils/batch'
@@ -47,6 +48,7 @@ const look = (name: string, extra: Partial<CreateLookInput> = {}): CreateLookInp
   finishes: { top: 'walnut', base: 'graphite', frame: 'walnut', seat: 'navy' },
   defaultWidth: 160,
   defaultDepth: 80,
+  photoId: null,
   ...extra,
 })
 
@@ -224,6 +226,80 @@ describe('looks on the plan', () => {
   })
 })
 
+// Step 3b: a look's photo is an upload of the cafe's, attached while the look uses it.
+describe('a look\'s photo', () => {
+  async function upload(id = newId(), tenantId = TEST_TENANT) {
+    await db.insert(mediaAssets).values({ id, tenantId, objectKey: `t/${tenantId}/menu/${id}.webp`, mimeType: 'image/webp', byteSize: 10, sha256: 'x' })
+    return id
+  }
+  const stateOf = async (id: string) => (await db.select({ state: mediaAssets.state }).from(mediaAssets).where(eq(mediaAssets.id, id)))[0]?.state
+  const photoOf = (id: string) => ({ id, url: `/media/t/${TEST_TENANT}/menu/${id}.webp` })
+
+  it('attaches a new look\'s photo and lists it; a look without one has none', async () => {
+    const photo = await upload()
+    const created = await createLook(db, actor, look('Walnut long', { photoId: photo }))
+    expect(created.photo).toEqual(photoOf(photo))
+    expect(await stateOf(photo)).toBe('attached')
+    await createLook(db, actor, look('Plain'))
+    expect((await listLooks(db, TEST_TENANT)).map(row => [row.name, row.photo])).toEqual([['Plain', null], ['Walnut long', photoOf(photo)]])
+  })
+
+  it('an edit attaches the new photo and releases the old one; no photo releases it; the same photo stays attached', async () => {
+    const first = await upload()
+    const created = await createLook(db, actor, look('Walnut long', { photoId: first }))
+    const renamed = await updateLook(db, actor, created.id, { version: 1, ...look('Walnut table', { photoId: first }) })
+    expect([renamed.photo, await stateOf(first)]).toEqual([photoOf(first), 'attached'])
+    const second = await upload()
+    const replaced = await updateLook(db, actor, created.id, { version: 2, ...look('Walnut table', { photoId: second }) })
+    expect([replaced.photo, await stateOf(first), await stateOf(second)]).toEqual([photoOf(second), 'temporary', 'attached'])
+    const removed = await updateLook(db, actor, created.id, { version: 3, ...look('Walnut table') })
+    expect([removed.photo, await stateOf(second)]).toEqual([null, 'temporary'])
+    const audits = await db.select({ metadata: auditEvents.metadata }).from(auditEvents).where(eq(auditEvents.action, 'branch.look.update'))
+    expect(audits.map(row => (row.metadata as { photoChanged: boolean }).photoChanged)).toEqual([false, true, true])
+  })
+
+  it('deleting a look releases its photo', async () => {
+    const photo = await upload()
+    const created = await createLook(db, actor, look('Walnut long', { photoId: photo }))
+    await deleteLook(db, actor, created.id, { version: 1 })
+    expect(await stateOf(photo)).toBe('temporary')
+  })
+
+  it('refuses another cafe\'s upload, one in use, and an unknown one, on create and on edit, writing nothing', async () => {
+    await ensureTenant(db, 'tenant-2', 'other')
+    const theirs = await upload(newId(), 'tenant-2')
+    const used = await upload()
+    await createLook(db, actor, look('Uses it', { photoId: used }))
+    for (const photoId of [theirs, used, newId()])
+      await expectApiError(() => createLook(db, actor, look('Walnut long', { photoId })), 422, 'MEDIA_NOT_AVAILABLE', ['photoId'])
+    const plain = await createLook(db, actor, look('Plain'))
+    await expectApiError(() => updateLook(db, actor, plain.id, { version: 1, ...look('Plain', { photoId: theirs }) }), 422, 'MEDIA_NOT_AVAILABLE', ['photoId'])
+    expect(await stateOf(theirs)).toBe('temporary')
+    expect((await listLooks(db, TEST_TENANT)).map(row => [row.name, row.version])).toEqual([['Plain', 1], ['Uses it', 1]])
+  })
+
+  it('a photo used or cleaned up between the check and the write: the look isn\'t saved either (the attach guard)', async () => {
+    const photo = await upload()
+    const cleanUp = () => db.delete(mediaAssets).where(eq(mediaAssets.id, photo))
+    await expectApiError(() => createLook(interleaved(db, cleanUp), actor, look('Walnut long', { photoId: photo })), 422, 'MEDIA_NOT_AVAILABLE', ['photoId'])
+    expect(await listLooks(db, TEST_TENANT)).toEqual([])
+
+    const plain = await createLook(db, actor, look('Plain'))
+    const other = await upload()
+    const useIt = () => db.update(mediaAssets).set({ state: 'attached' }).where(eq(mediaAssets.id, other))
+    await expectApiError(() => updateLook(interleaved(db, useIt), actor, plain.id, { version: 1, ...look('Renamed', { photoId: other }) }), 422, 'MEDIA_NOT_AVAILABLE', ['photoId'])
+    expect(await listLooks(db, TEST_TENANT)).toMatchObject([{ name: 'Plain', photo: null, version: 1 }])
+  })
+
+  it('a look whose photo is gone (a sample-data reset deletes uploads) shows none, and can be saved without it', async () => {
+    const photo = await upload()
+    const created = await createLook(db, actor, look('Walnut long', { photoId: photo }))
+    await db.delete(mediaAssets).where(eq(mediaAssets.id, photo))
+    expect((await listLooks(db, TEST_TENANT))[0]!.photo).toBeNull()
+    expect((await updateLook(db, actor, created.id, { version: 1, ...look('Walnut long') })).photo).toBeNull()
+  })
+})
+
 describe('tenants', () => {
   const OTHER = 'tenant-2'
   let theirBranch: string
@@ -260,7 +336,7 @@ describe('tenants', () => {
     expect(await lookUse(db, TEST_TENANT, theirLook, 5)).toEqual({ total: 0, tables: [] })
     const before = await findLook(db, OTHER, theirLook)
     await db.batch([
-      updateLookStatement(db, TEST_TENANT, theirLook, 1, { name: 'Taken', shape: 'round', base: 'pedestal', chair: 'none', finishes: { top: 'walnut', base: 'walnut' }, defaultWidthCm: 60, defaultDepthCm: 60 }, new Date()),
+      updateLookStatement(db, TEST_TENANT, theirLook, 1, { name: 'Taken', shape: 'round', base: 'pedestal', chair: 'none', finishes: { top: 'walnut', base: 'walnut' }, defaultWidthCm: 60, defaultDepthCm: 60, photoAssetId: null }, new Date()),
       deleteLookStatement(db, TEST_TENANT, theirLook, 1),
     ])
     expect(await findLook(db, OTHER, theirLook)).toEqual(before)
