@@ -58,11 +58,8 @@ const archived = computed(() => props.table.status === 'archived')
         >
           {{ table.label }}
         </h3>
-        <p
-          v-if="table.area"
-          class="truncate text-sm text-muted"
-        >
-          {{ table.area }}
+        <p class="truncate text-sm text-muted">
+          {{ [table.area, `${table.seats} ${table.seats === 1 ? 'seat' : 'seats'}`].filter(Boolean).join(' · ') }}
         </p>
         <UBadge
           :label="archived ? 'Archived' : 'Active'"

@@ -22,9 +22,12 @@ export function parseInput<T extends v.GenericSchema>(schema: T, input: unknown)
   throw apiError(400, ErrorCodes.VALIDATION_FAILED, 'Some of the submitted data is invalid.', { fieldErrors })
 }
 
-/** The JSON body, size-limited and validated. */
-export async function readValidBody<T extends v.GenericSchema>(event: H3Event, schema: T): Promise<v.InferOutput<T>> {
-  const bytes = await readLimitedBody(event, MAX_JSON_BYTES)
+/**
+ * The JSON body, size-limited and validated. `maxBytes` raises the limit for one route; the
+ * Cloudflare entry's `workerBodyLimit` must allow the same for its path.
+ */
+export async function readValidBody<T extends v.GenericSchema>(event: H3Event, schema: T, maxBytes = MAX_JSON_BYTES): Promise<v.InferOutput<T>> {
+  const bytes = await readLimitedBody(event, maxBytes)
   let body: unknown
   try {
     body = bytes.length ? JSON.parse(new TextDecoder().decode(bytes)) : {}

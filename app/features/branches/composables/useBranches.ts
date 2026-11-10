@@ -86,7 +86,7 @@ const tableLock = (change: TableChange) => `dining-table:${change.table.id}`
 export function useTableMutations(surface: TablesSurface = 'admin') {
   const tableUrl = (table: DiningTable, action = '') => `${tablesUrl(table.branchId, surface)}/${table.id}${action}`
   const create = useMutation(
-    (input: NewTable) => apiFetch<DiningTable>(tablesUrl(input.branchId, surface), { method: 'POST', body: { label: input.label, area: input.area } }),
+    (input: NewTable) => apiFetch<DiningTable>(tablesUrl(input.branchId, surface), { method: 'POST', body: { label: input.label, area: input.area, seats: input.seats } }),
     {
       id: `branches:${surface}:table-create`,
       key: input => `${input.branchId}:${input.label.toLowerCase()}`,

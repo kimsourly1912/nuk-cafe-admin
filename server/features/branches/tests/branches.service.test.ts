@@ -257,7 +257,7 @@ describe('table QR tokens', () => {
 
 describe('dining tables', () => {
   it('creates a table with a QR link on the site, stores only its hash, audits without the token', async () => {
-    const table = await createTable(db, actor, branch, { label: 'Table 1', area: 'Main floor' }, qr)
+    const table = await createTable(db, actor, branch, { label: 'Table 1', area: 'Main floor', seats: 2 }, qr)
     expect(table).toMatchObject({ branchId: branch, label: 'Table 1', area: 'Main floor', status: 'active', version: 1 })
     expect(table.qrUrl).toMatch(/^https:\/\/cafe\.example\/table\/[\w-]{22}$/)
 
@@ -270,14 +270,14 @@ describe('dining tables', () => {
   })
 
   it('shows the same QR again, and resolves it to the branch and table', async () => {
-    const table = await createTable(db, actor, branch, { label: 'Table 1', area: null }, qr)
+    const table = await createTable(db, actor, branch, { label: 'Table 1', area: null, seats: 2 }, qr)
     const [listed] = await listTables(db, TEST_TENANT, branch, { status: 'active' }, qr)
     expect(listed!.qrUrl).toBe(table.qrUrl)
     expect(await resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl))).toEqual({ branch: { id: branch, name: `Branch ${branch}` }, table: { id: table.id, label: 'Table 1' } })
   })
 
   it('a scanned QR anywhere names its cafe; archived tables and paused cafes are 404 (D140)', async () => {
-    const table = await createTable(db, actor, branch, { label: 'Table 1', area: null }, qr)
+    const table = await createTable(db, actor, branch, { label: 'Table 1', area: null, seats: 2 }, qr)
     const token = tokenOf(table.qrUrl)
     expect(await scanTableToken(db, token)).toEqual({ cafe: { slug: TEST_TENANT, name: `Cafe ${TEST_TENANT}` }, branch: { id: branch, name: `Branch ${branch}` }, table: { id: table.id, label: 'Table 1' } })
     await expectApiError(() => scanTableToken(db, 'not-a-token'), 404, 'NOT_FOUND')
@@ -289,8 +289,8 @@ describe('dining tables', () => {
   })
 
   it('lists by label as people read them, per status', async () => {
-    for (const label of ['Table 10', 'Table 2', 'patio 1']) await createTable(db, actor, branch, { label, area: null }, qr)
-    const old = await createTable(db, actor, branch, { label: 'Old', area: null }, qr)
+    for (const label of ['Table 10', 'Table 2', 'patio 1']) await createTable(db, actor, branch, { label, area: null, seats: 2 }, qr)
+    const old = await createTable(db, actor, branch, { label: 'Old', area: null, seats: 2 }, qr)
     await archiveTable(db, actor, branch, old.id, { version: 1 }, qr)
     expect((await listTables(db, TEST_TENANT, branch, { status: 'active' }, qr)).map(t => t.label)).toEqual(['patio 1', 'Table 2', 'Table 10'])
     expect((await listTables(db, TEST_TENANT, branch, { status: 'archived' }, qr)).map(t => [t.label, t.qrUrl])).toEqual([['Old', null]])
@@ -298,31 +298,31 @@ describe('dining tables', () => {
   })
 
   it('refuses a label an active table in the branch has (any case); other branches and archived tables don\'t count', async () => {
-    const first = await createTable(db, actor, branch, { label: 'Table 1', area: null }, qr)
-    await expectApiError(() => createTable(db, actor, branch, { label: 'table 1', area: null }, qr), 409, 'TABLE_LABEL_TAKEN', ['label'])
-    await createTable(db, actor, await addBranch(), { label: 'Table 1', area: null }, qr)
+    const first = await createTable(db, actor, branch, { label: 'Table 1', area: null, seats: 2 }, qr)
+    await expectApiError(() => createTable(db, actor, branch, { label: 'table 1', area: null, seats: 2 }, qr), 409, 'TABLE_LABEL_TAKEN', ['label'])
+    await createTable(db, actor, await addBranch(), { label: 'Table 1', area: null, seats: 2 }, qr)
     await archiveTable(db, actor, branch, first.id, { version: 1 }, qr)
-    await createTable(db, actor, branch, { label: 'Table 1', area: null }, qr)
+    await createTable(db, actor, branch, { label: 'Table 1', area: null, seats: 2 }, qr)
     // Restoring into a taken label is refused.
     await expectApiError(() => restoreTable(db, actor, branch, first.id, { version: 2 }, qr), 409, 'TABLE_LABEL_TAKEN')
   })
 
   it('renames and clears the area from the version read; the QR stays', async () => {
-    const table = await createTable(db, actor, branch, { label: 'T1', area: 'Patio' }, qr)
+    const table = await createTable(db, actor, branch, { label: 'T1', area: 'Patio', seats: 2 }, qr)
     const renamed = await updateTable(db, actor, branch, table.id, { version: 1, label: 'Patio 01', area: null }, qr)
     expect(renamed).toMatchObject({ label: 'Patio 01', area: null, version: 2, qrUrl: table.qrUrl })
     await expectApiError(() => updateTable(db, actor, branch, table.id, { version: 1, label: 'X' }, qr), 409, 'VERSION_CONFLICT')
   })
 
   it('refuses a stale table write that goes stale between the check and the write', async () => {
-    const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
+    const table = await createTable(db, actor, branch, { label: 'T1', area: null, seats: 2 }, qr)
     const racing = interleaved(db, () => db.update(diningTables).set({ version: 2 }).where(eq(diningTables.id, table.id)))
     await expectApiError(() => rotateTableQr(racing, actor, branch, table.id, { version: 1 }, qr), 409, 'VERSION_CONFLICT')
     expect(await resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl))).toMatchObject({ table: { id: table.id } })
   })
 
   it('rotating makes a new QR and the printed one stops working', async () => {
-    const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
+    const table = await createTable(db, actor, branch, { label: 'T1', area: null, seats: 2 }, qr)
     const rotated = await rotateTableQr(db, actor, branch, table.id, { version: 1 }, qr)
     expect(rotated.qrUrl).not.toBe(table.qrUrl)
     await expectApiError(() => resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
@@ -333,7 +333,7 @@ describe('dining tables', () => {
   })
 
   it('an archived table\'s QR stops working; restoring brings the same QR back', async () => {
-    const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
+    const table = await createTable(db, actor, branch, { label: 'T1', area: null, seats: 2 }, qr)
     const archived = await archiveTable(db, actor, branch, table.id, { version: 1 }, qr)
     expect(archived).toMatchObject({ status: 'archived', qrUrl: null })
     await expectApiError(() => resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
@@ -345,14 +345,14 @@ describe('dining tables', () => {
   })
 
   it('a table in an archived branch doesn\'t resolve, and the branch\'s tables can\'t be added to', async () => {
-    const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
+    const table = await createTable(db, actor, branch, { label: 'T1', area: null, seats: 2 }, qr)
     await db.update(branches).set({ status: 'archived' }).where(eq(branches.id, branch))
     await expectApiError(() => resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
-    await expectApiError(() => createTable(db, actor, branch, { label: 'T2', area: null }, qr), 409, 'INVALID_STATE')
+    await expectApiError(() => createTable(db, actor, branch, { label: 'T2', area: null, seats: 2 }, qr), 409, 'INVALID_STATE')
   })
 
   it('an unknown or malformed token, another secret\'s token, and another branch\'s table are 404', async () => {
-    const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
+    const table = await createTable(db, actor, branch, { label: 'T1', area: null, seats: 2 }, qr)
     await expectApiError(() => resolveTableToken(db, TEST_TENANT, 'x'.repeat(22)), 404, 'NOT_FOUND')
     await expectApiError(() => resolveTableToken(db, TEST_TENANT, '../../etc'), 404, 'NOT_FOUND')
     const otherSecretToken = await tableToken('another-secret', table.id, 1)
@@ -371,7 +371,7 @@ describe('dining tables', () => {
     })))
     // 10 rows a statement: 80 parameters, under D1's 100.
     for (let i = 0; i < rows.length; i += 10) await db.insert(diningTables).values(rows.slice(i, i + 10))
-    await expectApiError(() => createTable(db, actor, branch, { label: 'One more', area: null }, qr), 409, 'TABLE_LIMIT')
+    await expectApiError(() => createTable(db, actor, branch, { label: 'One more', area: null, seats: 2 }, qr), 409, 'TABLE_LIMIT')
   })
 })
 
@@ -454,9 +454,9 @@ describe('tenants', () => {
   })
 
   it('refuses every write to another tenant\'s branch and its tables, changing nothing', async () => {
-    const table = await createTable(db, theirOwner, theirs, { label: 'T1', area: null }, qr)
+    const table = await createTable(db, theirOwner, theirs, { label: 'T1', area: null, seats: 2 }, qr)
     await expectApiError(() => updateBranchSettings(db, actor, theirs, { version: 1, name: 'Mine now' }), 404, 'NOT_FOUND')
-    await expectApiError(() => createTable(db, actor, theirs, { label: 'T2', area: null }, qr), 404, 'NOT_FOUND')
+    await expectApiError(() => createTable(db, actor, theirs, { label: 'T2', area: null, seats: 2 }, qr), 404, 'NOT_FOUND')
     await expectApiError(() => updateTable(db, actor, theirs, table.id, { version: table.version, label: 'X' }, qr), 404, 'NOT_FOUND')
     await expectApiError(() => archiveTable(db, actor, theirs, table.id, { version: table.version }, qr), 404, 'NOT_FOUND')
     await expectApiError(() => rotateTableQr(db, actor, theirs, table.id, { version: table.version }, qr), 404, 'NOT_FOUND')
@@ -465,7 +465,7 @@ describe('tenants', () => {
   })
 
   it('doesn\'t resolve another tenant\'s table QR', async () => {
-    const table = await createTable(db, theirOwner, theirs, { label: 'T1', area: null }, qr)
+    const table = await createTable(db, theirOwner, theirs, { label: 'T1', area: null, seats: 2 }, qr)
     await expectApiError(() => resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
     expect((await resolveTableToken(db, OTHER, tokenOf(table.qrUrl))).table.id).toBe(table.id)
   })
@@ -474,7 +474,7 @@ describe('tenants', () => {
 describe('deleting a table permanently (D200)', () => {
   const exists = async (id: string) => (await db.select({ id: diningTables.id }).from(diningTables).where(eq(diningTables.id, id))).length === 1
   const archived = async (label: string) => {
-    const table = await createTable(db, actor, branch, { label, area: null }, qr)
+    const table = await createTable(db, actor, branch, { label, area: null, seats: 2 }, qr)
     return archiveTable(db, actor, branch, table.id, { version: table.version }, qr)
   }
 
@@ -487,7 +487,7 @@ describe('deleting a table permanently (D200)', () => {
   })
 
   it('refuses an active table, a stale version, another branch and an unknown one', async () => {
-    const active = await createTable(db, actor, branch, { label: 'Table 1', area: null }, qr)
+    const active = await createTable(db, actor, branch, { label: 'Table 1', area: null, seats: 2 }, qr)
     await expectApiError(() => deleteTable(db, actor, branch, active.id, { version: active.version }), 409, 'INVALID_STATE')
     const table = await archiveTable(db, actor, branch, active.id, { version: active.version }, qr)
     await expectApiError(() => deleteTable(db, actor, branch, table.id, { version: active.version }), 409, 'VERSION_CONFLICT')
@@ -514,7 +514,7 @@ describe('deleting a table permanently (D200)', () => {
   })
 
   it('the delete statement itself refuses an active table, and another branch\'s', async () => {
-    const active = await createTable(db, actor, branch, { label: 'Table 4', area: null }, qr)
+    const active = await createTable(db, actor, branch, { label: 'Table 4', area: null, seats: 2 }, qr)
     const gone = await archived('Table 5')
     const other = await addBranch()
     await db.batch([deleteTableStatement(db, TEST_TENANT, branch, active.id, active.version), deleteTableStatement(db, TEST_TENANT, other, gone.id, gone.version)])
@@ -526,7 +526,7 @@ describe('deleting a table permanently (D200)', () => {
     const theirBranch = 'their-branch'
     await insertBranch(db, { id: theirBranch, name: 'Theirs', timezone: 'Asia/Phnom_Penh', tenantId: 'tenant-2' })
     const owner: Actor = { ...actor, tenantId: 'tenant-2', userId: 'their-owner' }
-    const created = await createTable(db, owner, theirBranch, { label: 'Table 1', area: null }, qr)
+    const created = await createTable(db, owner, theirBranch, { label: 'Table 1', area: null, seats: 2 }, qr)
     const table = await archiveTable(db, owner, theirBranch, created.id, { version: created.version }, qr)
     await insertSoldLine(db, { itemId: 'ours', tableId: table.id })
     expect((await listTables(db, 'tenant-2', theirBranch, { status: 'archived' }, qr))[0]?.deleteBlocker).toBeNull()

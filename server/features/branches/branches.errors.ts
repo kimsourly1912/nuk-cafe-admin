@@ -11,6 +11,7 @@ export const BranchErrorCodes = {
   TABLE_LIMIT: 'TABLE_LIMIT',
   QR_NOT_CONFIGURED: 'QR_NOT_CONFIGURED',
   TABLE_HAS_ORDERS: 'TABLE_HAS_ORDERS',
+  LAYOUT_TABLE_UNAVAILABLE: 'LAYOUT_TABLE_UNAVAILABLE',
 } as const
 
 export const branchNotFound = () => notFound('This branch')
@@ -62,6 +63,20 @@ export const tableNotArchived = (message = 'This table isn\'t archived.') =>
 /** A permanent delete of a table orders were placed at (D200): it stays archived. */
 export const tableHasOrders = () =>
   apiError(409, BranchErrorCodes.TABLE_HAS_ORDERS, 'Orders were placed at this table, so it stays archived to keep your order history.')
+
+export const layoutChanged = () => versionConflict('This shop layout')
+
+/**
+ * A save places tables that aren't active tables of this branch any more (archived or deleted
+ * meanwhile), or never were. Named by their place in the save, not by label: an id from elsewhere
+ * says nothing about another branch's tables.
+ */
+export const layoutTablesUnavailable = (positions: number[]) =>
+  apiError(409, BranchErrorCodes.LAYOUT_TABLE_UNAVAILABLE, positions.length === 1
+    ? 'A table on this plan was archived or removed meanwhile. Take it off the plan and save again.'
+    : `${positions.length} tables on this plan were archived or removed meanwhile. Take them off the plan and save again.`, {
+    fieldErrors: Object.fromEntries(positions.map(index => [`layout.placements.${index}.tableId`, ['Archived or removed meanwhile']])),
+  })
 
 /** A deployed server without `NUXT_QR_SECRET` (docs/server/operations.md → Configuration). */
 export const qrNotConfigured = () =>

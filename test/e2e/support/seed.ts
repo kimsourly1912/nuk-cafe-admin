@@ -134,7 +134,7 @@ async function seedSecondCafe(db: Db, qr: { secret: string, baseUrl: string }): 
   // A promotion running all year on its whole menu (M1, D163): $3.00 → $2.40 for the customer's
   // promotion tests; Brown Bean's other tests read prices from the quote, never write them down.
   const promotion = await createPromotion(db, actor, { name: 'Bean week', description: 'Every drink 20% off.', discount: { kind: 'percent', percent: 20 }, scope: 'menu', itemIds: [], categoryIds: [], branchIds: [], startsOn: '2026-01-01', endsOn: null, posterId: null, publish: true })
-  const table = await createTable(db, actor, branchId, { label: 'B1', area: null }, qr)
+  const table = await createTable(db, actor, branchId, { label: 'B1', area: null, seats: 2 }, qr)
   return { slug: cafe.slug, name: cafe.name, branchId, itemName, tableToken: tokenOf(table.qrUrl), promotionId: promotion.id }
 }
 
@@ -173,9 +173,9 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   }
 
   const qr = { secret: qrSecret, baseUrl: 'http://e2e.local' }
-  const openTable = await createTable(db, actor, openBranchId, { label: 'T01', area: 'Main floor' }, qr)
-  const closedTable = await createTable(db, actor, closedBranchId, { label: 'K01', area: null }, qr)
-  const spareTable = await createTable(db, actor, openBranchId, { label: 'T02', area: 'Main floor' }, qr)
+  const openTable = await createTable(db, actor, openBranchId, { label: 'T01', area: 'Main floor', seats: 4 }, qr)
+  const closedTable = await createTable(db, actor, closedBranchId, { label: 'K01', area: null, seats: 2 }, qr)
+  const spareTable = await createTable(db, actor, openBranchId, { label: 'T02', area: 'Main floor', seats: 2 }, qr)
   const secondCafe = await seedSecondCafe(db, qr)
   // NUK Cafe's own Bakong token (T2d, D148), sealed with the e2e server's key: its counter checks
   // KHQRs with the stand-in for Bakong. Brown Bean has none.

@@ -202,6 +202,7 @@ export const SAMPLE_HOURS = [
 
 /** Sample tables: T01–T08 on the main floor, P01–P04 on the patio. */
 export const SAMPLE_TABLES = [
-  ...Array.from({ length: 8 }, (_, i) => ({ label: `T${String(i + 1).padStart(2, '0')}`, area: 'Main floor' })),
-  ...Array.from({ length: 4 }, (_, i) => ({ label: `P${String(i + 1).padStart(2, '0')}`, area: 'Patio' })),
+  // Inside, tables for four and for two in turn; the patio's are for two.
+  ...Array.from({ length: 8 }, (_, i) => ({ label: `T${String(i + 1).padStart(2, '0')}`, area: 'Main floor', seats: i % 2 ? 2 : 4 })),
+  ...Array.from({ length: 4 }, (_, i) => ({ label: `P${String(i + 1).padStart(2, '0')}`, area: 'Patio', seats: 2 })),
 ]

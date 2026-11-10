@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PHOTO_UPLOAD_MAX_BYTES, IMAGE_MAX_BYTES } from '#shared/contracts/media'
+import { LAYOUT_MAX_BODY_BYTES } from '#shared/contracts/shop-layout'
 import { boundedWorkerRequest, workerBodyLimit } from '#server/utils/worker-body'
 
 describe('Cloudflare entry body limits', () => {
@@ -8,6 +9,9 @@ describe('Cloudflare entry body limits', () => {
     expect(workerBodyLimit('/api/c/cafe/admin/media/photos')).toBe(PHOTO_UPLOAD_MAX_BYTES)
     expect(workerBodyLimit('/api/c/cafe/admin/media')).toBe(IMAGE_MAX_BYTES + 64 * 1024)
     expect(workerBodyLimit('/api/c/cafe/admin/media/photos/id/source')).toBe(64 * 1024)
+    // A shop layout is saved whole (D273); its tables and other branch routes keep the default.
+    expect(workerBodyLimit('/api/c/cafe/admin/branches/b1/layout')).toBe(LAYOUT_MAX_BODY_BYTES)
+    expect(workerBodyLimit('/api/c/cafe/admin/branches/b1/tables')).toBe(64 * 1024)
     expect(workerBodyLimit('/c/cafe')).toBeUndefined()
   })
 

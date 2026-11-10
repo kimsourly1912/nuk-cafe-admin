@@ -27,7 +27,7 @@ beforeEach(async () => {
   await db.insert(branchStaff).values({ tenantId: OTHER, branchId: 'their-branch', userId: 'person', role: 'manager', createdAt: NOW })
   await run(
     ...branchRepo.replaceHoursStatements(db, OTHER, 'their-branch', [{ weekday: 1, startMinute: 480, endMinute: 1020 }]),
-    branchRepo.insertTableStatement(db, { id: 'their-table', tenantId: OTHER, branchId: 'their-branch', label: 'Table 1', area: 'Inside', qrTokenHash: 'their-hash', now: NOW }),
+    branchRepo.insertTableStatement(db, { id: 'their-table', tenantId: OTHER, branchId: 'their-branch', label: 'Table 1', area: 'Inside', seats: 2, qrTokenHash: 'their-hash', now: NOW }),
     customers.insertProfileStatement(db, OTHER, 'person', 'THEIRCODE'),
     tenants.insertNotesStatement(db, OTHER, notes),
   )

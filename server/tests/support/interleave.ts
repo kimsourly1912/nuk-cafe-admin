@@ -3,12 +3,14 @@ import type { Db } from '#server/utils/batch'
 /**
  * The database, but its next `batch` first runs `meanwhile` (another request's write): the change
  * lands between the service's checks and its write, which only the in-batch guards can catch.
+ * `skip` passes that many batches first, for a service whose checks read with a batch.
  */
-export function interleaved(db: Db, meanwhile: () => Promise<unknown>): Db {
+export function interleaved(db: Db, meanwhile: () => Promise<unknown>, skip = 0): Db {
   let pending = true
+  let skipped = 0
   return new Proxy(db, {
     get(target, key, receiver) {
-      if (key === 'batch' && pending) {
+      if (key === 'batch' && pending && skipped++ >= skip) {
         return async (statements: unknown) => {
           pending = false
           await meanwhile()

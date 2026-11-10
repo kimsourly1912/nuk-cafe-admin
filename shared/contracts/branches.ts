@@ -16,6 +16,10 @@ export const BRANCH_NAME_MAX = 60
 export const BRANCH_ADDRESS_MAX = 200
 export const TABLE_LABEL_MAX = 20
 export const TABLE_AREA_MAX = 40
+/** People at a table (D273): the shop designer draws as many chairs. */
+export const TABLE_SEATS_MIN = 1
+export const TABLE_SEATS_MAX = 20
+export const TABLE_SEATS_DEFAULT = 2
 /** Active branches per cafe (D197; later the cafe's subscription sets it). */
 export const MAX_BRANCHES = 10
 /** Tables per branch, archived ones included. */
@@ -77,6 +81,7 @@ export interface DiningTable {
   label: string
   /** Where it is ("Main floor", "Patio"); `null`: not set. */
   area: string | null
+  seats: number
   status: DiningTableStatus
   /** The link printed as its QR code; `null` while archived (the QR doesn't work then). */
   qrUrl: string | null
@@ -98,10 +103,17 @@ export type TableListQuery = v.InferOutput<typeof tableListQuerySchema>
 
 const tableLabel = nameSchema(TABLE_LABEL_MAX)
 const tableArea = optionalText(TABLE_AREA_MAX)
+const tableSeats = v.pipe(
+  v.number(),
+  v.integer('Whole people only'),
+  v.minValue(TABLE_SEATS_MIN, `At least ${TABLE_SEATS_MIN}`),
+  v.maxValue(TABLE_SEATS_MAX, `At most ${TABLE_SEATS_MAX}`),
+)
 
 export const createTableSchema = v.strictObject({
   label: tableLabel,
   area: v.optional(tableArea, null),
+  seats: v.optional(tableSeats, TABLE_SEATS_DEFAULT),
 })
 export type CreateTableInput = v.InferOutput<typeof createTableSchema>
 
@@ -110,6 +122,7 @@ export const updateTableSchema = v.strictObject({
   version: versionSchema,
   label: v.optional(tableLabel),
   area: v.optional(tableArea),
+  seats: v.optional(tableSeats),
 })
 export type UpdateTableInput = v.InferOutput<typeof updateTableSchema>
 

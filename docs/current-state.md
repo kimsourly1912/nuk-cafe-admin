@@ -20,7 +20,7 @@ Snapshot reviewed against main `ff2ca27` and GitHub's PR list, 2026-11-06. Read 
 
 Each is its own step and branch.
 
-- **Shop designer (D273):** step 1, the client-only prototype, built on `claude/awesome-ritchie-elqas4` (2026-11-10; no PR yet): dev and staging only, from a branch's Dining tables. Next: the owner's review on staging and on a real phone and tablet, then step 2a, the server ([plan](plans/shop-designer.md#step-1-the-prototype-built-2026-11-10)). Its migration takes the next free number then.
+- **Shop designer (D273):** step 1, the prototype, merged and approved by the owner on staging (2026-11-10). Step 2a, the server (migration `0058_shop_layout`, layout GET/PUT, `seats` on tables), built on `claude/awesome-ritchie-elqas4` (2026-11-10), in review. Next: step 2b, the editor on saved layouts ([plan](plans/shop-designer.md#step-2a-the-server-built-2026-11-10)).
 - **Account security step 5: Switch person on the counter** ([plan](plans/account-security.md)). Steps 1–4 merged (D242, D243, D246–D248); step 5 has no code yet.
 - **First-load rule (D238):** check other pages against the UI checklist item, one page per branch ([progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30)).
 - **KHQR recovery follow-ups (D266):** an owner "check again" action, a Telegram alert for new review cases, explicit Bakong 429 handling. The next free migration number is `0058`.

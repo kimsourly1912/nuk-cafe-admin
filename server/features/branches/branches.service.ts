@@ -13,6 +13,7 @@ import { auditStatement } from '#server/features/platform'
 import { branchArchived, branchChanged, branchClosedNow, branchHoursProblem, branchLimit, branchNameTaken, branchNotFound, tableArchived, tableChanged, tableHasOrders, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
 import type { QrConfig } from './branches.qr'
 import { isTokenShaped, tableQrUrl, tableToken, tokenHash } from './branches.qr'
+import * as layoutRepo from './branches.layout.repository'
 import * as repo from './branches.repository'
 import type { BranchRow, TableRow } from './branches.repository'
 
@@ -140,7 +141,7 @@ export async function getBranchPause(db: Db, tenantId: string, branchId: string,
  */
 export async function pauseBranch(db: Db, actor: Actor, branchId: string, input: PauseBranchInput, now = new Date()): Promise<BranchPause> {
   const { tenantId } = actor
-  const branch = await activeBranch(db, tenantId, branchId)
+  const branch = await loadActiveBranch(db, tenantId, branchId)
   const closesIn = minutesUntilClosed(await repo.hoursOf(db, tenantId, branchId), localTime(now, branch.timezone))
   if (closesIn === null) throw branchClosedNow(branch.name)
   const minutes = input.for === 'closing' ? closesIn : Math.min(PAUSE_MINUTES[input.for], closesIn)
@@ -156,7 +157,7 @@ export async function pauseBranch(db: Db, actor: Actor, branchId: string, input:
 /** Takes online orders again at once. Not paused: nothing to change, nothing audited. */
 export async function resumeBranch(db: Db, actor: Actor, branchId: string, now = new Date()): Promise<BranchPause> {
   const { tenantId } = actor
-  await activeBranch(db, tenantId, branchId)
+  await loadActiveBranch(db, tenantId, branchId)
   const current = await getBranchPause(db, tenantId, branchId, now)
   if (!current.pausedUntil) return current
   await runPauseBatch(db, [
@@ -180,10 +181,12 @@ async function runPauseBatch(db: Db, statements: Statement[]) {
 
 // --- Settings and hours ---
 
-const audit = (db: Db, actor: Actor, action: string, targetType: string, targetId: string, metadata: Record<string, unknown>) =>
+/** An audit row in the branches feature's own namespace (`branch.<action>`). */
+export const audit = (db: Db, actor: Actor, action: string, targetType: string, targetId: string, metadata: Record<string, unknown>) =>
   auditStatement(db, actor, { action: `branch.${action}`, targetType, targetId, metadata })
 
-async function loadBranch(db: Db, tenantId: string, id: string): Promise<BranchRow> {
+/** The cafe's branch, archived or not; another cafe's or an unknown one is 404. */
+export async function loadBranch(db: Db, tenantId: string, id: string): Promise<BranchRow> {
   const branch = await repo.findBranch(db, tenantId, id)
   if (!branch) throw branchNotFound()
   return branch
@@ -285,6 +288,7 @@ async function toTable(row: TableRow, qr: QrConfig): Promise<DiningTable> {
     branchId: row.branchId,
     label: row.label,
     area: row.area,
+    seats: row.seats,
     status: row.status,
     qrUrl: row.status === 'active' ? tableQrUrl(qr, await tableToken(qr.secret, row.id, row.qrVersion)) : null,
     qrRotatedAt: toIso(row.qrRotatedAt),
@@ -295,7 +299,8 @@ async function toTable(row: TableRow, qr: QrConfig): Promise<DiningTable> {
   }
 }
 
-async function activeBranch(db: Db, tenantId: string, branchId: string): Promise<BranchRow> {
+/** The branch, refused while archived: what every write to a branch starts with. */
+export async function loadActiveBranch(db: Db, tenantId: string, branchId: string): Promise<BranchRow> {
   const branch = await loadBranch(db, tenantId, branchId)
   if (branch.status === 'archived') throw branchArchived()
   return branch
@@ -341,23 +346,24 @@ export async function listTables(db: Db, tenantId: string, branchId: string, que
  * before the write: two simultaneous adds at the limit can both pass).
  */
 export async function createTable(db: Db, actor: Actor, branchId: string, input: CreateTableInput, qr: QrConfig): Promise<DiningTable> {
-  await activeBranch(db, actor.tenantId, branchId)
+  await loadActiveBranch(db, actor.tenantId, branchId)
   if (await repo.countTables(db, actor.tenantId, branchId) >= MAX_BRANCH_TABLES) throw tableLimit()
   const id = newId()
   const hash = await tokenHash(await tableToken(qr.secret, id, 1))
   await runTableBatch(db, [
-    repo.insertTableStatement(db, { id, tenantId: actor.tenantId, branchId, label: input.label, area: input.area, qrTokenHash: hash, now: new Date() }),
-    audit(db, actor, 'table.create', 'dining_table', id, { branchId, label: input.label, area: input.area }),
+    repo.insertTableStatement(db, { id, tenantId: actor.tenantId, branchId, label: input.label, area: input.area, seats: input.seats, qrTokenHash: hash, now: new Date() }),
+    audit(db, actor, 'table.create', 'dining_table', id, { branchId, label: input.label, area: input.area, seats: input.seats }),
   ], input.label)
   return loadTable(db, actor.tenantId, branchId, id, qr)
 }
 
-/** Renames the table or changes its area; its QR stays the same. */
+/** Renames the table or changes its area or seats; its QR stays the same. */
 export async function updateTable(db: Db, actor: Actor, branchId: string, tableId: string, input: UpdateTableInput, qr: QrConfig): Promise<DiningTable> {
   const current = await openTable(db, actor.tenantId, branchId, tableId, input.version)
   const changes = {
     ...(input.label !== undefined && { label: input.label }),
     ...(input.area !== undefined && { area: input.area }),
+    ...(input.seats !== undefined && { seats: input.seats }),
   }
   await runTableBatch(db, [
     repo.touchTableStatement(db, actor.tenantId, tableId, input.version, changes, new Date()),
@@ -365,17 +371,22 @@ export async function updateTable(db: Db, actor: Actor, branchId: string, tableI
     audit(db, actor, 'table.update', 'dining_table', tableId, {
       ...(input.label !== undefined && input.label !== current.label && { label: { from: current.label, to: input.label } }),
       ...(input.area !== undefined && input.area !== current.area && { area: { from: current.area, to: input.area } }),
+      ...(input.seats !== undefined && input.seats !== current.seats && { seats: { from: current.seats, to: input.seats } }),
     }),
   ], input.label ?? current.label)
   return loadTable(db, actor.tenantId, branchId, tableId, qr)
 }
 
-/** Archives the table: its QR stops working until it's restored. */
+/**
+ * Archives the table: its QR stops working until it's restored, and it leaves the shop layout
+ * (D273) in the same batch. Restoring doesn't put it back: it waits in the editor's Unplaced list.
+ */
 export async function archiveTable(db: Db, actor: Actor, branchId: string, tableId: string, input: TableVersionInput, qr: QrConfig): Promise<DiningTable> {
   const current = await openTable(db, actor.tenantId, branchId, tableId, input.version)
   await runTableBatch(db, [
     repo.touchTableStatement(db, actor.tenantId, tableId, input.version, { status: 'archived' }, new Date()),
     requireOneChange(db),
+    layoutRepo.deletePlacementStatement(db, actor.tenantId, branchId, tableId),
     audit(db, actor, 'table.archive', 'dining_table', tableId, {}),
   ], current.label)
   return loadTable(db, actor.tenantId, branchId, tableId, qr)
@@ -383,7 +394,7 @@ export async function archiveTable(db: Db, actor: Actor, branchId: string, table
 
 /** Restores the table with the same QR, unless an active table took its label meanwhile. */
 export async function restoreTable(db: Db, actor: Actor, branchId: string, tableId: string, input: TableVersionInput, qr: QrConfig): Promise<DiningTable> {
-  await activeBranch(db, actor.tenantId, branchId)
+  await loadActiveBranch(db, actor.tenantId, branchId)
   const current = await openTable(db, actor.tenantId, branchId, tableId, input.version, true)
   if (current.status !== 'archived') throw tableNotArchived()
   await runTableBatch(db, [
