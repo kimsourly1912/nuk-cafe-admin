@@ -20,11 +20,10 @@
   - Cloudflare's D1 limits page was unreachable from the session (the host is blocked). Local D1 measured instead: SQL text over 100,000 bytes is refused, and bound values aren't counted.
 - **Evidence:**
   - `pnpm lint` and `pnpm typecheck` clean.
-  - `pnpm test:unit`: 2637 passed, 1 skipped (177 files), before the malformed-floor test; the layout file then had 23 of 23 passing.
-  - Guard removal: the version guard, the active-tables guard, both tenant filters and the archive's placement delete each make a test fail.
+  - `pnpm test:unit`: 2638 passed, 1 skipped (177 files).
+  - Guard removal: the version guard, the active-tables guard, both tenant filters and the archive's placement delete each make a test fail. The malformed-floor test throws a `TypeError` without its fix.
   - Real D1: the largest layout saved, and a stale save and an archived table were refused by D1's batch.
-  - e2e (built server): `branches`, `manager-tools` and `shop-designer` passed. In `shop-layout-api`, two of three tests passed; the third found the 500 above, which is now fixed.
-  - The full `pnpm test:e2e` run is in progress.
+  - Full `pnpm test:e2e` (68 files): 912 passed, 28 failed, all 30–40 s timeouts at a load average of 16–23 on 4 cores. The failures were in `option-sets`, `categories`, `two-factor`, `products` and `google-account`, none touched by this step. Rerun alone, each file passed: 27, 43, 19, 66 and 74 tests. `shop-layout-api`, `branches`, `manager-tools` and `shop-designer` passed in the full run.
 - **Not verified:** a save on staging's D1. The production D1 figures come from Cloudflare's page, which this session couldn't read.
 
 ### Shop designer step 1: the prototype (D273, 2026-11-10)
