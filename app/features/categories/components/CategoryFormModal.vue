@@ -42,11 +42,6 @@ const base = shallowRef(props.category)
 const hasSubs = computed(() => (base.value?.childCount ?? 0) > 0)
 const { isCompact: fullscreen } = useLayoutContext()
 
-const all = useAllCategories()
-/** A new subcategory takes its parent's menu items (D270): how many, as the form says and the save sends. */
-const parent = computed(() => all.data.value?.find(c => c.id === state.parentId))
-const movingItems = computed(() => isEdit.value ? 0 : parent.value?.itemCount ?? 0)
-
 const { create, update } = useCategoryMutations()
 const saving = ref(false)
 
@@ -77,6 +72,7 @@ function reopenActions(draft: CategoryForm) {
 
 /** The last refused save, shown in the modal; `conflict`: someone else saved first (409). */
 const lastError = ref<{ message: string, conflict: boolean }>()
+const all = useAllCategories()
 const reloading = ref(false)
 
 /** Takes the latest version of the category; the form keeps what the user typed. */
@@ -102,16 +98,11 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
   saving.value = true
   const result = base.value
     ? await update.execute({ id: base.value.id, name: data.name, body: toUpdateCategoryBody(data, base.value) }, overrides)
-    : await create.execute(toCreateCategoryBody(data, movingItems.value), overrides)
+    : await create.execute(toCreateCategoryBody(data), overrides)
   saving.value = false
 
   if (!result.ok) {
-    if (result.status === 'error') {
-      // Only an edit has a version to reload. A new one was refused over the items to move: the fresh
-      // list says how many there are now, and the next Create names that.
-      lastError.value = { message: result.error.message, conflict: !!base.value && result.error.code === 'VERSION_CONFLICT' }
-      if (!base.value) await all.refresh()
-    }
+    if (result.status === 'error') lastError.value = { message: result.error.message, conflict: result.error.code === 'VERSION_CONFLICT' }
     return
   }
   unsaved.markClean()
@@ -182,19 +173,9 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
             :exclude-id="category?.id"
             none-label="None (top-level category)"
             aria-label="Parent category"
-            :allow-items="!isEdit"
             :disabled="hasSubs"
           />
         </UFormField>
-
-        <UAlert
-          v-if="movingItems"
-          color="neutral"
-          variant="subtle"
-          icon="i-lucide-info"
-          :title="`${pluralize(movingItems, ['menu item', 'menu items'])} will move into this subcategory`"
-          :description="`A category holds either subcategories or menu items, so what's in ${parent?.name} moves here. Customers keep seeing it.`"
-        />
 
         <UFormField
           label="Availability"

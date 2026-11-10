@@ -280,9 +280,7 @@ describe('publishing and archiving', () => {
     // A top-level category holding items directly is a leaf too.
     const food = await topLevelWithToast()
     const archived = await archiveItem(db, actor, food.item.id, { version: 1 })
-    // Moved under it, not created there: a new sub-category takes the archived items along (D270).
-    const sandwiches = await createCategory(db, actor, { name: 'Sandwiches', description: '', parentId: null, availabilityRuleIds: [] })
-    await updateCategory(db, actor, sandwiches.id, { version: sandwiches.version, parentId: food.id })
+    await createCategory(db, actor, { name: 'Sandwiches', description: '', parentId: food.id, availabilityRuleIds: [] })
     await expectApiError(() => restoreItem(db, actor, food.item.id, { version: archived.version }), 422, 'CATEGORY_NOT_A_LEAF')
   })
 })

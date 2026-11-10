@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availabilityLabel, contentsLabel, mainContentsLabel, mainSummaryLabel } from '../schemas/category-display'
+import { availabilityLabel, contentsLabel } from '../schemas/category-display'
 
 const rule = (name: string, status: 'active' | 'archived' = 'active') => ({ id: name, name, status })
 
@@ -32,24 +32,5 @@ describe('contents label', () => {
     expect(contentsLabel({ childCount: 0, itemCount: 1 })).toBe('1 item')
     expect(contentsLabel({ childCount: 0, itemCount: 12 })).toBe('12 items')
     expect(contentsLabel({ childCount: 0, itemCount: 0 })).toBe('Empty')
-  })
-})
-
-describe('a main category\'s contents', () => {
-  const subs = [{ itemCount: 9 }, { itemCount: 0 }, { itemCount: 23 }]
-
-  it('adds its subcategories\' items up, for its card and its banner', () => {
-    expect(mainContentsLabel({ childCount: 3, itemCount: 0 }, subs)).toBe('3 subcategories · 32 items')
-    expect(mainSummaryLabel({ childCount: 3, itemCount: 0 }, subs)).toBe('32 items across 3 subcategories')
-    expect(mainSummaryLabel({ childCount: 1, itemCount: 0 }, [{ itemCount: 1 }])).toBe('1 item across 1 subcategory')
-  })
-
-  it('says one figure when there is one: no "0 items", and its own items when it holds them', () => {
-    const empty = [{ itemCount: 0 }, { itemCount: 0 }]
-    expect(mainContentsLabel({ childCount: 2, itemCount: 0 }, empty)).toBe('2 subcategories')
-    expect(mainSummaryLabel({ childCount: 2, itemCount: 0 }, empty)).toBe('2 subcategories')
-    expect(mainContentsLabel({ childCount: 0, itemCount: 4 }, [])).toBe('4 items')
-    expect(mainSummaryLabel({ childCount: 0, itemCount: 4 }, [])).toBe('4 items')
-    expect(mainContentsLabel({ childCount: 0, itemCount: 0 }, [])).toBe('Empty')
   })
 })

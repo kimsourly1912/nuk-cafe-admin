@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import type { Actor } from '#server/features/identity'
-import { menuCategories, menuCategoryAvailability, menuItems, menuPromotionCategories } from '#server/features/menu/menu.schema'
+import { menuCategories, menuCategoryAvailability, menuPromotionCategories } from '#server/features/menu/menu.schema'
 import { deleteCategoryStatement } from '#server/features/menu/categories.repository'
 import { createAvailabilityRule } from '#server/features/menu/availability.service'
 import { createPromotion } from '#server/features/menu/promotions.service'
 import { archiveCategory, createCategory, deleteCategory, getCategory, listCategories, reorderCategories, restoreCategory, updateCategory } from '#server/features/menu/categories.service'
-import { archiveItem, createItem, deleteItem, restoreItem, updateItem } from '#server/features/menu/items.service'
+import { archiveItem, createItem, deleteItem, updateItem } from '#server/features/menu/items.service'
 import { createTestDb, ensureTenant, insertSoldLine, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
@@ -73,79 +73,6 @@ describe('creating', () => {
     const racing = interleaved(db, () => db.update(menuCategories).set({ status: 'archived' }).where(eq(menuCategories.id, coffee.id)))
     await expectApiError(() => createCategory(racing, actor, { name: 'Filter', description: '', parentId: coffee.id, availabilityRuleIds: [] }), 422, 'PARENT_NOT_AVAILABLE')
     expect(await listCategories(db, TEST_TENANT, { status: 'all' })).toHaveLength(1)
-  })
-
-  describe('moving the parent\'s items into a new sub-category (D270)', () => {
-    const itemIn = (categoryId: string, name: string) => createItem(db, actor, { categoryId, name, description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 100, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
-    const sub = (client: Db, parentId: string, moveItems?: number) => createCategory(client, actor, { name: 'Pastry', description: '', parentId, availabilityRuleIds: [], moveItems })
-
-    it('moves them all, archived ones too, in one write, keeping their order and raising their versions', async () => {
-      const bakery = await create('Bakery')
-      const first = await itemIn(bakery.id, 'Croissant')
-      const second = await itemIn(bakery.id, 'Muffin')
-      const old = await itemIn(bakery.id, 'Scone')
-      const archived = await archiveItem(db, actor, old.id, { version: old.version })
-
-      const pastry = await sub(db, bakery.id, 2)
-
-      expect(pastry).toMatchObject({ parentId: bakery.id, itemCount: 2 })
-      expect(await getCategory(db, TEST_TENANT, bakery.id)).toMatchObject({ itemCount: 0, childCount: 1 })
-      const rows = await db.select().from(menuItems).where(eq(menuItems.categoryId, pastry.id)).orderBy(menuItems.sortOrder)
-      expect(rows.map(r => r.name)).toEqual(['Croissant', 'Muffin', 'Scone'])
-      expect(rows.map(r => r.sortOrder)).toEqual([first.sortOrder, second.sortOrder, archived.sortOrder])
-      expect(rows.map(r => r.version)).toEqual([first.version + 1, second.version + 1, archived.version + 1])
-      expect(await db.select().from(menuItems).where(eq(menuItems.categoryId, bakery.id))).toEqual([])
-      const [row] = await db.select().from(auditEvents).where(eq(auditEvents.targetId, pastry.id))
-      expect(row).toMatchObject({ action: 'menu.category.create', metadata: expect.objectContaining({ movedItems: 2 }) })
-    })
-
-    it('takes the archived items of a parent holding only those, so they can still be restored', async () => {
-      const bakery = await create('Bakery')
-      const old = await itemIn(bakery.id, 'Scone')
-      const archived = await archiveItem(db, actor, old.id, { version: old.version })
-
-      const pastry = await sub(db, bakery.id)
-
-      const [row] = await db.select().from(menuItems).where(eq(menuItems.id, old.id))
-      expect(row).toMatchObject({ categoryId: pastry.id, version: archived.version + 1 })
-      await expect(restoreItem(db, actor, old.id, { version: row!.version })).resolves.toMatchObject({ categoryId: pastry.id })
-    })
-
-    it('refuses an edit opened before the move, so the item can\'t go back', async () => {
-      const bakery = await create('Bakery')
-      const croissant = await itemIn(bakery.id, 'Croissant')
-      await sub(db, bakery.id, 1)
-      await expectApiError(() => updateItem(db, actor, croissant.id, { version: croissant.version, name: 'Butter croissant' }), 409, 'VERSION_CONFLICT')
-    })
-
-    it('still refuses a sub-category that doesn\'t ask for the move', async () => {
-      const bakery = await create('Bakery')
-      await itemIn(bakery.id, 'Croissant')
-      await expectApiError(() => sub(db, bakery.id), 422, 'CATEGORY_HAS_ITEMS')
-    })
-
-    it('refuses another number than it holds, changing nothing', async () => {
-      const bakery = await create('Bakery')
-      await itemIn(bakery.id, 'Croissant')
-      await expectApiError(() => sub(db, bakery.id, 2), 409, 'VERSION_CONFLICT')
-      expect(await listCategories(db, TEST_TENANT, { status: 'all' })).toHaveLength(1)
-      expect(await getCategory(db, TEST_TENANT, bakery.id)).toMatchObject({ itemCount: 1, childCount: 0 })
-    })
-
-    it('refuses when an item arrives between the check and the write, changing nothing', async () => {
-      const bakery = await create('Bakery')
-      await itemIn(bakery.id, 'Croissant')
-      const late = await itemIn(bakery.id, 'Muffin')
-      await archiveItem(db, actor, late.id, { version: late.version })
-      const racing = interleaved(db, () => db.update(menuItems).set({ status: 'draft' }).where(eq(menuItems.id, late.id)))
-      await expectApiError(() => sub(racing, bakery.id, 1), 409, 'VERSION_CONFLICT')
-      expect(await listCategories(db, TEST_TENANT, { status: 'all' })).toHaveLength(1)
-      expect((await db.select().from(menuItems).where(eq(menuItems.categoryId, bakery.id)))).toHaveLength(2)
-    })
-
-    it('refuses a move with no parent to take them from', async () => {
-      await expectApiError(() => createCategory(db, actor, { name: 'Pastry', description: '', parentId: null, availabilityRuleIds: [], moveItems: 1 }), 422, 'PARENT_NOT_AVAILABLE')
-    })
   })
 
   it('writes an audit row with who and which request', async () => {

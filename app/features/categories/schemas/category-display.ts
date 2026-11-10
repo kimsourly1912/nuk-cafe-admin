@@ -44,38 +44,6 @@ export function availabilityLabel(
  */
 export function contentsLabel(category: Pick<MenuCategory, 'childCount' | 'itemCount'>): string {
   if (category.childCount) return `${category.childCount} ${category.childCount === 1 ? 'subcategory' : 'subcategories'}`
-  if (category.itemCount) return itemsLabel(category.itemCount)
+  if (category.itemCount) return `${category.itemCount} ${category.itemCount === 1 ? 'item' : 'items'}`
   return 'Empty'
-}
-
-/** A category's status badge (All and Archived views), everywhere a category is listed. */
-export function statusBadge(status: MenuCategory['status']) {
-  return status === 'archived'
-    ? { label: 'Archived', icon: 'i-lucide-archive', color: 'neutral' as const, variant: 'subtle' as const }
-    : { label: 'Active', icon: 'i-lucide-circle-check', color: 'success' as const, variant: 'subtle' as const }
-}
-
-/** Menu items filtered to a category, and a new one already in it (paths inside the cafe). */
-export const manageItemsPath = (categoryId: string) => `/admin/products?categoryId=${categoryId}`
-export const newItemPath = (categoryId: string) => `/admin/products/new?categoryId=${categoryId}`
-
-const itemsLabel = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}`
-
-type Contents = Pick<MenuCategory, 'childCount' | 'itemCount'>
-
-/** A main category's items: its own, or those of its active subcategories (never both, D44). */
-function totalItems(main: Contents, activeSubs: Pick<MenuCategory, 'itemCount'>[]) {
-  return activeSubs.reduce((total, sub) => total + sub.itemCount, main.itemCount)
-}
-
-/** A main category's card: "6 subcategories · 32 items", or `contentsLabel` when there's one figure. */
-export function mainContentsLabel(main: Contents, activeSubs: Pick<MenuCategory, 'itemCount'>[]): string {
-  const items = totalItems(main, activeSubs)
-  return main.childCount && items ? `${contentsLabel(main)} · ${itemsLabel(items)}` : contentsLabel(main)
-}
-
-/** A main category's banner: "32 items across 6 subcategories", or `contentsLabel` likewise. */
-export function mainSummaryLabel(main: Contents, activeSubs: Pick<MenuCategory, 'itemCount'>[]): string {
-  const items = totalItems(main, activeSubs)
-  return main.childCount && items ? `${itemsLabel(items)} across ${contentsLabel(main)}` : contentsLabel(main)
 }

@@ -8,7 +8,7 @@ import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
 import * as availabilityRepo from './availability.repository'
 import { planRuleLinks, ruleLinksFailure } from './availability.service'
-import { categoryArchived, categoryChanged, categoryHasHistory, categoryNameTaken, categoryNotArchived, categoryNotFound, parentArchived, parentHasItems, parentItemsChanged, parentNotAvailable, siblingsChanged, tooDeep } from './categories.errors'
+import { categoryArchived, categoryChanged, categoryHasHistory, categoryNameTaken, categoryNotArchived, categoryNotFound, parentArchived, parentHasItems, parentNotAvailable, siblingsChanged, tooDeep } from './categories.errors'
 import * as repo from './categories.repository'
 import * as itemsRepo from './items.repository'
 import type { CategoryListRow } from './categories.repository'
@@ -66,12 +66,12 @@ async function runCategoryBatch(db: Db, statements: Statement[], name: string, o
   }
 }
 
-/** Checks a future parent: active, top-level, and holding the items expected to move (none, usually). */
-async function ensureParent(db: Db, tenantId: string, parentId: string, moveItems = 0) {
+/** Checks a future parent: active and top-level. */
+async function ensureParent(db: Db, tenantId: string, parentId: string) {
   const parent = await repo.findCategory(db, tenantId, parentId)
   if (!parent || parent.status !== 'active') throw parentNotAvailable()
   if (parent.parentId !== null) throw tooDeep('parent-is-sub')
-  if (await itemsRepo.countListedItems(db, tenantId, parentId) !== moveItems) throw moveItems ? parentItemsChanged() : parentHasItems()
+  if (await itemsRepo.countListedItems(db, tenantId, parentId) > 0) throw parentHasItems()
 }
 
 /**
@@ -98,32 +98,24 @@ export async function getCategory(db: Db, tenantId: string, id: string): Promise
   return loadCategory(db, tenantId, id)
 }
 
-/**
- * A new category at the end of its parent's (or the top level's) list. A sub-category takes all of
- * its parent's menu items in the same batch (D270), so a category never holds both (D44): the drafts
- * and active ones only when `moveItems` names how many, the archived ones always, since left in a
- * category with sub-categories they could never be restored.
- */
+/** A new category at the end of its parent's (or the top level's) list. */
 export async function createCategory(db: Db, actor: Actor, input: CreateCategoryInput): Promise<MenuCategory> {
   const { tenantId } = actor
-  const moveItems = input.moveItems ?? 0
-  if (moveItems && !input.parentId) throw parentNotAvailable()
-  if (input.parentId) await ensureParent(db, tenantId, input.parentId, moveItems)
+  if (input.parentId) await ensureParent(db, tenantId, input.parentId)
   const addedRules = await planRuleLinks(db, tenantId, input.availabilityRuleIds)
   const id = newId()
   const now = new Date()
   const statements: Statement[] = [
-    ...(input.parentId ? [repo.requireActiveTopLevel(db, tenantId, input.parentId), itemsRepo.requireListedCount(db, tenantId, input.parentId, moveItems)] : []),
+    ...(input.parentId ? [repo.requireActiveTopLevel(db, tenantId, input.parentId), itemsRepo.requireListedCount(db, tenantId, input.parentId, 0)] : []),
     ...availabilityRepo.requireActiveRules(db, tenantId, addedRules),
     repo.insertCategoryStatement(db, { id, tenantId, parentId: input.parentId, name: input.name, description: input.description, sortOrder: await repo.nextSortOrder(db, tenantId, input.parentId), now }),
     ...availabilityRepo.replaceCategoryRulesStatements(db, tenantId, id, input.availabilityRuleIds),
-    ...(input.parentId ? [itemsRepo.moveCategoryItemsStatement(db, tenantId, input.parentId, id, now)] : []),
-    audit(db, actor, 'create', id, { parentId: input.parentId, availabilityRules: input.availabilityRuleIds, ...(moveItems ? { movedItems: moveItems } : {}) }),
+    audit(db, actor, 'create', id, { parentId: input.parentId, availabilityRules: input.availabilityRuleIds }),
   ]
-  // The parent was archived, became a sub-category or its items changed, or a chosen rule was
-  // archived, between the check and the write.
+  // The parent was archived, became a sub-category or got items, or a chosen rule was archived,
+  // between the check and the write.
   await runCategoryBatch(db, statements, input.name, async () => {
-    if (input.parentId) await ensureParent(db, tenantId, input.parentId, moveItems)
+    if (input.parentId) await ensureParent(db, tenantId, input.parentId)
     return await ruleLinksFailure(db, tenantId, input.availabilityRuleIds, addedRules) ?? parentNotAvailable()
   })
   return loadCategory(db, tenantId, id)

@@ -23,9 +23,8 @@ export function toCategoryForm(category?: MenuCategory): CategoryForm {
   }
 }
 
-/** `moveItems`: how many menu items the form said would move from the parent into it (D270). */
-export function toCreateCategoryBody(form: CategoryForm, moveItems = 0): CreateCategoryInput {
-  return { name: form.name.trim(), description: form.description.trim(), parentId: form.parentId ?? null, availabilityRuleIds: [...form.availabilityRuleIds], ...(moveItems ? { moveItems } : {}) }
+export function toCreateCategoryBody(form: CategoryForm): CreateCategoryInput {
+  return { name: form.name.trim(), description: form.description.trim(), parentId: form.parentId ?? null, availabilityRuleIds: [...form.availabilityRuleIds] }
 }
 
 /**
