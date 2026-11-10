@@ -3,6 +3,12 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer planned (D273, 2026-11-10)
+
+- Owner brief: a game-like "build mode" to draw a branch as floors, walls and furniture, place its real dining tables and explore it in 3D. Reviewed the brief against the code (dining tables, QR tokens, media, permissions, CSP, feature boundaries), made mockups in Claude Design (the owner's canvas, frames 1–8), then agreed the changes now in frame 9 and [D273](decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10): placements as rows (one per table, same cafe and branch by FK), seats on the table with chairs from seats, shared looks, `table:manage` for layouts and owner-only `furniture:manage` for looks, Load latest / Overwrite with mine on a conflict.
+- The owner supplied a 3D visual target ([image](plans/shop-designer/visual-target-3d.webp)); the plan's 3D section says how the build approaches it (generated resizable parts, glTF props without WASM decoders, image-based lighting, measured quality levels).
+- No code yet. Next: step 1, the client-only prototype, which also measures bundle size and frame time on a real phone and tablet. [Plan](plans/shop-designer.md).
+
 ### Better Auth endpoint allowlist (D272, 2026-11-10)
 
 - Auth audit finding: over HTTP, a cafe owner could call `/api/auth/organization/update-member-role` and make branch staff an owner (200; better-auth 1.7.7 skips permissions for the creator role), bypassing the platform's owner routes, audit and version guard. Branch staff could `/organization/leave` and list members. Now an `onRequest` plugin answers 404 to every `/api/auth` endpoint not on the allowlist of what pages use.
