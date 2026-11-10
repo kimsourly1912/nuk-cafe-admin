@@ -1,11 +1,12 @@
 # Shop designer plan
 
-Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **planned, no code yet.** Next step: step 1 (prototype).
+Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) built, in review** (2026-11-10, [below](#step-1-the-prototype-built-2026-11-10)). Next: the owner reviews it on staging, then step 2a (server).
 
 Design references:
 
 - **Mockups (Claude Design canvas, the owner's):** <https://claude.ai/artifact/4R9sZD3iADJqFsybdhffo8>. Frames 1–8 are the screens; frame 9 (9A–9F) holds what was agreed on 2026-11-10. The canvas uses the app's current UI style (amber primary, stone neutrals, Nuxt UI).
 - **3D visual target (owner, 2026-11-10):** [visual-target-3d.webp](shop-designer/visual-target-3d.webp). The built 3D view aims for this render's warmth and detail, not the flat shapes of the canvas's 3D frames. The UI chrome around it still follows the UI standard ([docs/reference/ui.md](../reference/ui.md)).
+- **Furniture studio references (owner, 2026-11-10):** [chair](shop-designer/studio-chair.webp), [table](shop-designer/studio-table.webp), [counter](shop-designer/studio-counter.webp): start from a preset (Tables, Chairs, Fixtures), a turntable preview with 3D and Top view, and Customize with dimensions, base style and finishes per part (frame and upholstery, tabletop and base, cabinet and countertop). They replace frame 8's dialog as the place where custom looks are made (step 3a).
 
 ## Purpose and scope
 
@@ -52,12 +53,12 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 
 | Route | Permission | Notes |
 |---|---|---|
-| `GET /api/c/<slug>/admin/branches/{branchId}/layout` | `table: ['manage']` | Floors, placements, the branch's active tables (for Unplaced), custom looks, `version`. No layout yet: an empty layout with `version: 0` |
-| `PUT /api/c/<slug>/admin/branches/{branchId}/layout` | `table: ['manage']` | Whole layout + `version`. One `db.batch`: version guard, upsert floors, delete removed floors, replace placements, audit row. 409 `STALE_VERSION` keeps nothing; 409/422 when a placed table is no longer active in this branch |
+| `GET /api/c/<slug>/admin/branches/{branchId}/layout` | `branch: ['update']` | Floors, placements, the branch's active tables (for Unplaced), custom looks, `version`. No layout yet: an empty layout with `version: 0` |
+| `PUT /api/c/<slug>/admin/branches/{branchId}/layout` | `branch: ['update']` | Whole layout + `version`. One `db.batch`: version guard, upsert floors, delete removed floors, replace placements, audit row. 409 `STALE_VERSION` keeps nothing; 409/422 when a placed table is no longer active in this branch |
 | `GET/POST/PATCH …/admin/furniture-looks[/{id}]`, `DELETE …/{id}` | new `furniture: ['manage']` (owner) | PATCH and DELETE name `version`; DELETE refused while used (409 lists the tables) |
-| Table form (existing routes) | `table: ['manage']` | + `seats` |
+| Table form (existing routes) | `branch: ['update']` (admin), `table: ['manage']` (counter, D198) | + `seats` |
 
-- The routes use `table: ['manage']` so a counter surface for managers (D198) can be added later without a permission change. The admin portal is owners only (D52), so the first release is used by owners.
+- The admin routes check `branch: ['update']`, like the admin's dining-table routes: a cafe permission only owners hold (the admin portal is owners only, D52). Managers manage tables on the counter, where routes check the branch permission `table: ['manage']` for the path's branch (D198); a counter surface for the layout would follow that pattern without a new permission. (Corrected 2026-11-10: the first draft named `table: ['manage']` for the admin routes, but that is a branch-role permission owners don't hold as a cafe permission.)
 - `furniture: ['manage']` is owner-only like menu write and media upload: looks are cafe-wide.
 
 ## Editor (Design shop)
@@ -89,7 +90,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 
 ## Permissions
 
-- View and edit the layout: `table: ['manage']` (owners and managers; the admin UI reaches owners only for now). Custom looks: `furniture: ['manage']` (owner). Photo upload: `media: ['upload']` (owner). Platform superadmins get no access (D135).
+- View and edit the layout: owners in the admin (`branch: ['update']`); managers later on the counter (`table: ['manage']` for their branch, D198). Custom looks: `furniture: ['manage']` (owner). Photo upload: `media: ['upload']` (owner). Platform superadmins get no access (D135).
 
 ## Steps (one branch and PR each)
 
@@ -117,3 +118,19 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 | Bad geometry | Unit: shared schema rejects open polygons, overlapping openings, out-of-range numbers |
 | 3D unavailable | e2e: WebGL disabled shows the message; the lists work |
 | QR unchanged | Server: moving, restyling, unplacing a table leaves `qr_version` and the token hash unchanged |
+
+## Step 1: the prototype (built 2026-11-10)
+
+Client-only on demo data in the real layout schema; nothing is saved. On the dev server and staging only (`runtimeConfig.public.shopDesignerPrototype`, `NUXT_PUBLIC_SHOP_DESIGNER_PROTOTYPE`; off in production): `/c/<slug>/admin/prototypes/shop-designer`, owners (`branch: ['update']`), linked from a branch's Dining tables tab. Step 2 replaces it with the real tables in that tab and removes the flag.
+
+- **Where:** `shared/contracts/shop-layout.ts` (the layout schema the save route will use); `app/features/branches/designer/` (catalog, geometry, demo, and `scene/`: materials, furniture, building, scene, stage, building and studio viewers); `app/features/branches/components/` (`ShopDesignerPrototypePage`, `DesignShopEditor`, `FloorPlanCanvas`, `BuildingView3D`, `BuildingNavigator`, `FurnitureStudio`); `composables/useLayoutDraft.ts`.
+- **Design shop:** library (Unplaced tables with drag or Place on map, furniture by category), the SVG plan (snap 25/5 cm, turn handle in 15° steps, pan, wheel and pinch zoom, keyboard), the move pad, undo/redo (one step per gesture), floor tabs with the floor below shown faintly, the outside-outline warning, the inspector (floor, size, rotation, look with "Also used by", Remove from map; furniture finishes).
+- **View in 3D:** three.js 0.187.0 (pinned), loaded on demand; exterior, cutaway (roof and camera-facing walls hidden, floors pulled apart, leader labels), inside a floor at worked-out viewpoints, tap-to-select with the table card (Show on plan returns to the editor), floor and table lists (a drawer on phones), loading and unavailable states, light and dark.
+- **Furniture studio:** the owner's references as a preview: presets, turntable with 3D and Top view, dimensions, base style, chairs, finishes per part. Save to library and the photo are shown disabled (steps 3a, 3b).
+- **Models:** generated from code, with the owner's visual target as the aim: bevelled parts, canvas-drawn grain, weave, speckle, planks and tiles; image-based light, one soft sun (`PCFShadowMap` with a radius: 0.187 removed `PCFSoftShadowMap`), warm lamps, ACES tone mapping. No glTF props yet: chairs, plants and lamps are generated too. glTF for fixed-size props stays the plan for step 3.
+- **Quality:** measured, not guessed: up to 30 frames, or about a second on a slow device (4+ frames), then high, medium or low (pixel ratio, shadow size and softness, lamps). The prototype shows the result ("Quality low · 854 ms a frame" in the e2e browser's software renderer, which first spent 23 s measuring 45 frames: the cap came from that).
+- **Size (production build, gzip -9):** three.js in two lazy chunks of 92 and 66 kB, loaded only by View in 3D and the studio; the prototype page's own chunk 21 kB. No other page imports three.js.
+- **Not in step 1:** saving (2a), drawing outlines, Draw wall, openings and floors in the editor (2b; the demo's shapes come from data), table looks from the catalog onto a table (the inspector's Look does it), custom looks (3a), photos (3b), glTF props (3), real-device measurements (a phone and a tablet the owner uses).
+- **Tests:** `app/features/branches/tests/designer-geometry.test.ts` (contract rules, chairs from seats, wall pieces, normals, snapping, outside-outline, viewpoints), `designer-scene.test.ts` (each model fills its plan footprint; a resized table keeps its leg thickness; one chair per seat; tables on their floors at the plan's positions; rotation agrees between 2D and 3D; walls per edge), `test/e2e/shop-designer.test.ts` (Place on map + pad + undo, drag from the library snapped, T03 moved upstairs and found on the First floor in 3D, cutaway, inside with no Entrance upstairs, Show on plan, the studio, a 390 px phone, dark mode; `SHOP_DESIGNER_SCREENSHOTS=1` keeps screenshots).
+- **Review on staging:** open a branch → Dining tables → Open prototype. Move a table upstairs (inspector → Floor), open View in 3D, find it on its floor; try the same with touch on a tablet, and note the quality line on a real phone and tablet.
+

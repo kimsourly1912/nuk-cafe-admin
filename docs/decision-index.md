@@ -318,4 +318,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 
 | [D272](decisions.md#d272-only-the-better-auth-endpoints-our-pages-use-answer-over-http-2026-11-10) | Only the Better Auth endpoints our pages use answer over HTTP; owners could promote members through `/organization/update-member-role` (2026-11-10) |
 
-| [D273](decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10) | Shop designer: branch layout separate from dining tables (placements as rows, one per table), seats on the table, shared looks, `table:manage` / owner-only `furniture:manage`, SVG editor and three.js viewer aiming for the owner's visual target (2026-11-10) |
+| [D273](decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10) | Shop designer: branch layout separate from dining tables (placements as rows, one per table), seats on the table, shared looks, `branch:update` (admin) / `table:manage` (counter) / owner-only `furniture:manage`, SVG editor and three.js viewer aiming for the owner's visual target (2026-11-10) |
