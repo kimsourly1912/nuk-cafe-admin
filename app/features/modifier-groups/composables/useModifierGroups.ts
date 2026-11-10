@@ -1,5 +1,3 @@
-import type { Page } from '#shared/contracts/common'
-import type { MenuItemSummary } from '#shared/contracts/menu-items'
 import type { CreateModifierGroupInput, Modifier, ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { ConfirmOptions } from '~/utils/mutation'
 
@@ -25,17 +23,6 @@ export const fetchModifierGroup = (id: string) => apiFetch<ModifierGroup>(`${BAS
 /** One group, for its page. Refreshed with the feature (`modifier-groups:*`). */
 export function useModifierGroup(id: string) {
   return useApiQuery(`modifier-groups:group:${id}`, () => fetchModifierGroup(id))
-}
-
-/** How many menu items the page lists by name; "View all" opens the rest on the Menu items page. */
-export const USAGE_PREVIEW = 5
-
-/**
- * The first menu items that offer the group (drafts and published, like `itemCount`), for the
- * page's "Used by" list. Product changes refresh it too (they invalidate `modifier-groups`).
- */
-export function useModifierGroupItems(id: string) {
-  return useApiQuery(`modifier-groups:items:${id}`, () => apiFetch<Page<MenuItemSummary>>('/admin/menu/items', { query: { modifierGroupId: id, pageSize: USAGE_PREVIEW } }))
 }
 
 export const activeModifiers = (group: ModifierGroup) => group.modifiers.filter(m => m.status === 'active')

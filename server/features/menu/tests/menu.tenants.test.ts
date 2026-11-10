@@ -73,11 +73,10 @@ describe('menu tenants', () => {
     expect((await listItems(db, OTHER, { page: 1, pageSize: 20, status: 'all' })).total).toBe(0)
     // A filter naming our records still lists only theirs.
     expect((await listItems(db, OTHER, { page: 1, pageSize: 20, categoryId: menu.coffee.id })).total).toBe(0)
-    expect((await listItems(db, OTHER, { page: 1, pageSize: 20, modifierGroupId: menu.milk.id })).total).toBe(0)
     // The list's counts too, also when their filters name our records.
     const none = { draft: { items: 0, withoutPhoto: 0 }, active: { items: 0, withoutPhoto: 0 }, archived: { items: 0, withoutPhoto: 0 } }
     expect(await countItems(db, OTHER, {})).toEqual(none)
-    expect(await countItems(db, OTHER, { categoryId: menu.coffee.id, modifierGroupId: menu.milk.id })).toEqual(none)
+    expect(await countItems(db, OTHER, { categoryId: menu.coffee.id })).toEqual(none)
     expect((await countItems(db, TEST_TENANT, {})).active.items).toBe(1)
 
     await expectApiError(() => getCategory(db, OTHER, menu.coffee.id), 404, 'NOT_FOUND')

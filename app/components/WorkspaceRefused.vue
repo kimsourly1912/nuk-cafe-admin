@@ -75,6 +75,7 @@ const primary = computed(() => {
 const panel = useTemplateRef<HTMLElement>('panel')
 onMounted(() => panel.value?.focus())
 
+const identity = useSessionIdentity()
 async function useAnotherAccount() {
   signingOut.value = true
   try {
@@ -86,6 +87,9 @@ async function useAnotherAccount() {
   finally {
     signingOut.value = false
   }
+  // Like every sign-out: this tab forgets the account (the store's header, cached reads) and the
+  // other tabs are told, instead of still showing it signed in.
+  await identity.change('logout')
   emit('signed-out')
 }
 </script>

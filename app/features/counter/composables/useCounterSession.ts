@@ -39,7 +39,7 @@ export function useCounterSession() {
   // Captured now: the hooks below run after an `await`, where the Nuxt context is gone.
   const nuxtApp = useNuxtApp()
   const identity = useSessionIdentity()
-  const { user, checked, error: sessionError, generation, signingOut, setUser, reset, fetchSession, supersede } = useWorkspaceSession<CounterSession>('counter', '/counter/me')
+  const { user, checked, error: sessionError, generation, signingOut, setUser, reset, fetchSession, supersede, leaveSignedOut } = useWorkspaceSession<CounterSession>('counter', '/counter/me')
   const isSignedIn = computed(() => user.value !== null)
   const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
 
@@ -119,15 +119,8 @@ export function useCounterSession() {
     }
     if (identity.generation.value !== startedIn) return
     const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug
-    signingOut.value = true
-    reset(true)
-    await identity.change('logout', 'counter')
-    try {
-      await navigateTo(slug ? counterSignInPath(slug) : CAFES_PATH)
-    }
-    finally {
-      signingOut.value = false
-    }
+    // To sign in first, then the identity is cleared: the queue being left never shows empty.
+    await leaveSignedOut(slug ? counterSignInPath(slug) : CAFES_PATH)
   }
 
   /**

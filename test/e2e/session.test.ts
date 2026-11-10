@@ -117,10 +117,20 @@ describe('switching users in the same browser', () => {
       if (frame === page.mainFrame()) visited.push(new URL(frame.url()).pathname)
     })
     const before = api.calls.length
+    // Every render until login: the categories page must never show without its list (it showed its
+    // empty state for a moment when the sign-out cleared the data before moving to login).
+    await page.evaluate(() => {
+      const seen: string[] = []
+      ;(window as unknown as { emptiedBeforeLogin: string[] }).emptiedBeforeLogin = seen
+      new MutationObserver(() => {
+        if (location.pathname.endsWith('/admin/categories') && !document.body.innerText.includes('Tea')) seen.push(document.body.innerText.slice(0, 200))
+      }).observe(document.body, { childList: true, subtree: true, characterData: true })
+    })
 
     await logout(page, 'alice')
     await expect.poll(() => page.url()).toBe(url('/c/nuk/admin/login'))
     await page.waitForTimeout(500)
+    expect(await page.evaluate(() => (window as unknown as { emptiedBeforeLogin: string[] }).emptiedBeforeLogin)).toEqual([])
     expect(visited).not.toContain('/c/nuk/admin')
     // The login page reads only the cafe's public name and logo; no admin data after the sign-out.
     expect(api.calls.slice(before).filter(call => call.includes('/admin/'))).toEqual([])

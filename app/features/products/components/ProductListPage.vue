@@ -3,8 +3,6 @@
  * Menu items: a card grid (pictures drive this screen) with a Grid / List switch; the list is the
  * table. Filters (search, category, status tabs) and the page are in the URL; the view is
  * remembered per viewer. States are actions: Publish, Unpublish, Archive, Restore (D70).
- * Links from other pages (D75): `?modifierGroupId=` shows the items offering an add-on group (a
- * filter that can be removed).
  * Photos (D160): a line under the tabs says how many items have no photo, with **Show them**
  * (`?photo=missing`, also the home page's setup step); with that filter on, Save in the slide-over
  * is **Save and next**, opening the next item on the page.
@@ -24,7 +22,6 @@ import { CategorySelect } from '~/features/categories'
 import { DELETE_BLOCKED, useItemCounts, useItemList, useItemMutations } from '../composables/useItems'
 import { itemOnMenuPath, ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
 import ProductCard from './ProductCard.vue'
-import ProductGroupFilter from './ProductGroupFilter.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 import ProductReorderModal from './ProductReorderModal.vue'
 
@@ -40,7 +37,6 @@ const TABS = [
 const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
   search: '',
   categoryId: ANY as string,
-  modifierGroupId: '',
   /** `missing`: only items without a photo (D160). */
   photo: '',
   status: ANY as string,
@@ -301,11 +297,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             aria-label="Category"
             class="min-w-0 flex-1 sm:w-48 sm:flex-none lg:w-56"
           />
-          <ProductGroupFilter
-            v-if="filters.modifierGroupId"
-            :group-id="filters.modifierGroupId"
-            @clear="filters.modifierGroupId = ''"
-          />
           <UButton
             v-if="filters.photo"
             label="No photo"
@@ -421,30 +412,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           @click="filters.photo = 'missing'"
         />
       </p>
-
-      <BulkActionsBar
-        v-if="selecting"
-        :count="selection.count"
-        :all-selected="selection.allSelected"
-        @toggle-all="selection.toggleAll(!selection.allSelected)"
-      >
-        <UButton
-          :label="selectedDrafts.length && selectedDrafts.length < selection.count ? `Publish ${pluralize(selectedDrafts.length, ['draft', 'drafts'])}` : 'Publish selected'"
-          icon="i-lucide-send"
-          color="neutral"
-          variant="subtle"
-          :disabled="!selectedDrafts.length"
-          @click="publishSelected"
-        />
-        <UButton
-          label="Archive selected"
-          icon="i-lucide-archive"
-          color="neutral"
-          variant="subtle"
-          :disabled="!selection.count"
-          @click="archiveSelected"
-        />
-      </BulkActionsBar>
 
       <ApiErrorAlert
         v-if="error"
@@ -645,6 +612,31 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         v-model:page-size="pageSize"
         :total="data?.total ?? 0"
       />
+
+      <BulkActionsBar
+        v-if="selecting"
+        expanded="pinned"
+        :count="selection.count"
+        :all-selected="selection.allSelected"
+        @toggle-all="selection.toggleAll(!selection.allSelected)"
+      >
+        <UButton
+          :label="selectedDrafts.length && selectedDrafts.length < selection.count ? `Publish ${pluralize(selectedDrafts.length, ['draft', 'drafts'])}` : 'Publish selected'"
+          icon="i-lucide-send"
+          color="neutral"
+          variant="subtle"
+          :disabled="!selectedDrafts.length"
+          @click="publishSelected"
+        />
+        <UButton
+          label="Archive selected"
+          icon="i-lucide-archive"
+          color="neutral"
+          variant="subtle"
+          :disabled="!selection.count"
+          @click="archiveSelected"
+        />
+      </BulkActionsBar>
     </template>
   </UDashboardPanel>
 </template>

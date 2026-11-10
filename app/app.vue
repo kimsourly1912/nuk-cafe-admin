@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { isAdminPath } from '~/features/auth'
-import { isCounterPath } from '~/features/counter'
-import { isPlatformPath } from '~/features/platform'
+import { isAdminPath, useAuth } from '~/features/auth'
+import { isCounterPath, useCounterSession } from '~/features/counter'
+import { isPlatformPath, usePlatformSession } from '~/features/platform'
 import { webManifestPath } from '#shared/contracts/cafe'
 import type { Workspace } from '#shared/contracts/account'
 
@@ -22,6 +22,22 @@ const siteName = computed(() => {
 // The customer site just loads it on the next page change.
 const isWorkspace = computed(() => isAdminPath(route.path) || isCounterPath(route.path) || isPlatformPath(route.path))
 const rechecking = useState('session-identity:rechecking', () => false)
+// A workspace page whose session just ended (expired, signed out in another tab) is on its way to
+// sign-in (`plugins/api.ts`): the skeleton until then, not the page's empty states without its data.
+// The router's route, not `useRoute()`: here that one follows the page on screen and only moves
+// once <NuxtPage> renders the next page, which the skeleton keeps from ever happening.
+const auth = useAuth()
+const counter = useCounterSession()
+const platform = usePlatformSession()
+const currentRoute = useRouter().currentRoute
+const sessionEnded = computed(() => {
+  const { path, meta } = currentRoute.value
+  if (meta.public) return false
+  if (isAdminPath(path)) return !auth.user.value
+  if (isCounterPath(path)) return !counter.user.value
+  if (isPlatformPath(path)) return !platform.user.value
+  return false
+})
 
 // The counter and the admin install as the cafe's own apps (D202): each links its manifest. The
 // customer site and the platform console don't.
@@ -59,7 +75,7 @@ useHead(computed(() => {
   <UApp>
     <NuxtLayout>
       <TaskFrameSkeleton
-        v-if="rechecking && isWorkspace"
+        v-if="(rechecking && isWorkspace) || sessionEnded"
         :fields="2"
       />
       <NuxtPage v-else />

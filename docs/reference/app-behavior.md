@@ -242,7 +242,9 @@ Any identity change (login, logout, expiry, a different staff member via another
 | Superseded/unmounted query responses | Ignored | Nuxt (promise identity), independent of the above |
 | Unsaved forms | Discarded **without** a dialog; a form keeping drafts keeps the input for the same person (D151) | `useLeaveGuard().discardAll()` → `discard('session')` |
 | Voluntary logout with unsaved input | Asks first; only "Discard" continues | `useAuth().logout` → `confirmLeave` |
-| Voluntary logout | Signed out here first, then straight to login with no `?redirect=`: the home page isn't opened and nothing is read after the sign-out (the same for the counter and the console) | `logout`/`signOut` set `signingOut`, which the session-lost watcher in `plugins/api.ts` skips |
+| Voluntary logout | Signed out here first, then straight to login with no `?redirect=`: the home page isn't opened and nothing is read after the sign-out (the same for the counter and the console). The page being left stays as it was until login replaces it; the identity is cleared after that (`page:finish`, at most 2 s), so its empty states never flash (e2e `session.test.ts`) | `useWorkspaceSession().leaveSignedOut` sets `signingOut`, which the session-lost watcher in `plugins/api.ts` and the sign-in pages' "already signed in" redirect skip |
+| Session lost on a workspace page (expired, logged out in another tab) | Until the redirect to sign-in lands, the shell shows the skeleton instead of the page without its session and data | `app.vue` (`sessionEnded`) |
+| Use another account (`<WorkspaceRefused>`) | A sign-out like any other: this tab forgets the account and the other tabs are told | `identity.change('logout')` |
 | Open overlays (form modals, confirmations) | Closed | `useOverlay().closeAll()` |
 | Toasts ("Reopen" drafts, "Retry failed") | Cleared | `useToast().clear()` |
 | Mutation errors, results, "removed" marks | Reset; in-flight calls and record locks stay until they settle | `resetMutationOutcomes()` |

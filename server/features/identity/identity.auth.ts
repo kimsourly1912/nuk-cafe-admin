@@ -4,6 +4,7 @@ import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { outboxStatement } from '#server/features/platform'
+import { authEndpointAllowlist } from './auth-endpoints'
 import { googleTwoFactor, isGoogleCallback } from './google-two-factor'
 import { MAIL_KINDS } from './identity.mail'
 import { platformAc, platformRoles, tenantAc, tenantRoles } from './identity.permissions'
@@ -231,6 +232,8 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       },
     },
     plugins: [
+      // Over HTTP only the endpoints our pages use (`auth-endpoints.ts`); the server's calls go through.
+      authEndpointAllowlist(),
       admin({
         ac: platformAc,
         roles: platformRoles,

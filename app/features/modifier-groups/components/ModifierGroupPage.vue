@@ -2,7 +2,7 @@
 /**
  * One add-on group on its own page, `/admin/add-ons/:id` (D75): a wide Add-ons column (the add-ons with
  * price and Preselected, search, Add / Edit in a dialog, the ⋮ actions, Reorder mode, archived
- * add-ons, and which menu items use the group) and a Settings column (name and selection rules).
+ * add-ons) and a Settings column (name and selection rules).
  * On phones the two columns are the tabs "Add-ons" and "Settings".
  *
  * Saving (owner, 2026-09-28): the settings are a draft saved by **Save changes** in one PATCH; every
@@ -25,7 +25,6 @@ import AddOnFormModal from './AddOnFormModal.vue'
 import AddOnReorderList from './AddOnReorderList.vue'
 import AddOnRow from './AddOnRow.vue'
 import ModifierGroupSettings from './ModifierGroupSettings.vue'
-import ModifierGroupUsage from './ModifierGroupUsage.vue'
 
 const tenantPath = useTenantPath()
 
@@ -613,8 +612,19 @@ const headerActions = computed(() => archived.value
                 >
                   Reorder add-ons
                 </h2>
-                <!-- The mode's actions: at the bottom of the screen below lg, above the list from lg -->
-                <BottomActionBar label="Reorder">
+                <p class="text-sm text-muted">
+                  Drag an add-on or use its arrows. Customers see them in this order.
+                </p>
+                <AddOnReorderList
+                  :modifiers="orderRows"
+                  :disabled="savingOrder"
+                  @move="moveAddOn"
+                />
+                <!-- The mode's actions: at the bottom of the screen below lg, stuck to the bottom of the panel from lg (last in the section) -->
+                <BottomActionBar
+                  label="Reorder"
+                  expanded="pinned"
+                >
                   <p class="min-w-0 flex-1 text-sm text-muted">
                     {{ orderDirty ? 'The new order isn\'t saved yet.' : 'Nothing is saved until Save order.' }}
                   </p>
@@ -634,22 +644,7 @@ const headerActions = computed(() => archived.value
                     />
                   </div>
                 </BottomActionBar>
-                <p class="text-sm text-muted">
-                  Drag an add-on or use its arrows. Customers see them in this order.
-                </p>
-                <AddOnReorderList
-                  :modifiers="orderRows"
-                  :disabled="savingOrder"
-                  @move="moveAddOn"
-                />
               </section>
-            </UCard>
-
-            <UCard
-              v-if="mode === 'browse'"
-              variant="outline"
-            >
-              <ModifierGroupUsage :group="group" />
             </UCard>
           </div>
 

@@ -166,8 +166,6 @@ const variations = v.pipe(v.array(variationSchema), v.minLength(1), v.maxLength(
 const itemFilters = {
   search: optionalParam(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   categoryId: optionalParam(idSchema),
-  /** Items that offer this add-on group (the Add-ons page's "Used by" list). */
-  modifierGroupId: optionalParam(idSchema),
 }
 
 export const itemListQuerySchema = v.object({

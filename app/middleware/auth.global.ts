@@ -14,13 +14,13 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const slug = splitTenantUrl(to.path)?.slug
   if (!slug || !isAdminPath(to.path)) return
 
-  const { isLoggedIn, checked, mustChangePassword, sessionError, fetchSession, can } = useAuth()
+  const { isLoggedIn, checked, mustChangePassword, sessionError, fetchSession, can, signingOut } = useAuth()
 
   if (!checked.value && !sessionError.value) await fetchSession()
 
   if (to.meta.public) {
-    // Logged-in users have no business on the login page.
-    if (to.path === loginPath(slug) && isLoggedIn.value) return navigateTo(loginRedirectTarget(to.query.redirect, slug), { replace: true })
+    // Logged-in users have no business on the login page; one signing out is on its way there.
+    if (to.path === loginPath(slug) && isLoggedIn.value && !signingOut.value) return navigateTo(loginRedirectTarget(to.query.redirect, slug), { replace: true })
     return
   }
 

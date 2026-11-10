@@ -195,13 +195,13 @@ describe('bottom action bar', () => {
     }).toBe(true)
   })
 
-  it('sits above the tree from lg, in the page flow', async () => {
+  it('is pinned under the tree from lg: last in the body, sticky to the panel\'s bottom', async () => {
     const page = await open(1280)
     await page.getByRole('button', { name: 'Select', exact: true }).click()
     const bar = page.getByRole('toolbar', { name: 'Bulk actions' })
     await bar.waitFor()
-    expect(await bar.evaluate(el => getComputedStyle(el).position)).toBe('static')
+    expect(await bar.evaluate(el => getComputedStyle(el).position)).toBe('sticky')
     const tree = (await page.getByRole('list', { name: 'Categories', exact: true }).boundingBox())!
-    expect((await bar.boundingBox())!.y).toBeLessThan(tree.y)
+    expect((await bar.boundingBox())!.y).toBeGreaterThan(tree.y)
   })
 })

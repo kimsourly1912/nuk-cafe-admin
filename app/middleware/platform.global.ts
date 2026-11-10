@@ -10,11 +10,11 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (useError().value && (import.meta.server || useNuxtApp().isHydrating)) return
   if (!isPlatformPath(to.path)) return
 
-  const { isSignedIn, checked, mustChangePassword, twoFactorEnabled, sessionError, fetchSession } = usePlatformSession()
+  const { isSignedIn, checked, mustChangePassword, twoFactorEnabled, sessionError, fetchSession, signingOut } = usePlatformSession()
   if (!checked.value && !sessionError.value) await fetchSession()
 
   if (to.meta.public) {
-    if (to.path === PLATFORM_SIGN_IN && isSignedIn.value) return navigateTo(platformRedirectTarget(to.query.redirect), { replace: true })
+    if (to.path === PLATFORM_SIGN_IN && isSignedIn.value && !signingOut.value) return navigateTo(platformRedirectTarget(to.query.redirect), { replace: true })
     return
   }
 

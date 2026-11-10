@@ -4,6 +4,12 @@ import { API_ERROR_MESSAGES, ApiError } from './api-error'
 export type ApiFetchOptions = Omit<FetchOptions<'json'>, 'retry' | 'baseURL'> & {
   /** A superseded session read must not change auth state, even when it fails with 401. */
   isCurrent?: () => boolean
+  /**
+   * The answer is the same for every identity (public settings such as the sign-in providers): kept
+   * across a session change instead of discarded. A sign-in page opened by a sign-out starts its
+   * reads before the old identity is cleared (`leaveSignedOut`). Never for anything identity-bound.
+   */
+  anyIdentity?: boolean
 }
 export type ApiFetch = <T>(path: string, options?: ApiFetchOptions) => Promise<T>
 
@@ -53,13 +59,14 @@ export function createApiFetch({ baseFetch, onSessionLost, onPasswordChangeRequi
       status: 0,
       detail: `Response to ${path} discarded: the session changed while it was in flight.`,
     })
+    const changed = () => !options?.anyIdentity && sessionGeneration() !== generation
     let data: T
     try {
-      const { isCurrent: _isCurrent, ...fetchOptions } = options ?? {}
+      const { isCurrent: _isCurrent, anyIdentity: _anyIdentity, ...fetchOptions } = options ?? {}
       data = await baseFetch<T>(path, { ...fetchOptions, retry: 0 } as FetchOptions<'json'>)
     }
     catch (error) {
-      if (sessionGeneration() !== generation || options?.isCurrent?.() === false) throw stale()
+      if (changed() || options?.isCurrent?.() === false) throw stale()
       const apiError = ApiError.from(error)
       if (apiError.kind === 'unauthorized' || apiError.code === 'NOT_ADMIN') onSessionLost()
       else if (apiError.code === 'PASSWORD_CHANGE_REQUIRED') onPasswordChangeRequired?.()
@@ -74,7 +81,7 @@ export function createApiFetch({ baseFetch, onSessionLost, onPasswordChangeRequi
       }
       throw apiError
     }
-    if (sessionGeneration() !== generation || options?.isCurrent?.() === false) throw stale()
+    if (changed() || options?.isCurrent?.() === false) throw stale()
     return data
   }
 
