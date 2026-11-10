@@ -1,10 +1,11 @@
 import type { LayoutTable, ShopLayout } from '#shared/contracts/shop-layout'
 
 /**
- * The prototype's demo (step 1, D273): a three-floor shophouse matching the mockups' sample data.
+ * A sample layout for the designer's tests (D273; the step 1 prototype's demo): a three-floor
+ * shophouse matching the mockups' sample data.
  * Ground: T01–T05, counter, stairs, front door, two windows. First: T06–T08. Rooftop: an open
  * patio with railings, a stair kiosk, T09 and T10. T11 and T12 wait unplaced. Nothing here is a
- * real table; step 2 reads the branch's.
+ * real table.
  */
 
 export const DEMO_TABLES: LayoutTable[] = [

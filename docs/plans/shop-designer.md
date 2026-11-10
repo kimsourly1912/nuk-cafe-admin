@@ -1,6 +1,6 @@
 # Shop designer plan
 
-Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) reviewed by the owner on staging** (2026-11-10: "everything is so perfect"; their Android phone draws the 3D view in 23–30 ms a frame). **Step 2a (server) built, in review** (2026-11-10, [below](#step-2a-the-server-built-2026-11-10)). Next: step 2b (the editor on saved layouts).
+Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) reviewed by the owner on staging** (2026-11-10: "everything is so perfect"; their Android phone draws the 3D view in 23–30 ms a frame). **Step 2a (server) merged** (2026-11-10, [below](#step-2a-the-server-built-2026-11-10)). **Step 2b (the editor on saved layouts) built, in review** (2026-11-10, [below](#step-2b-the-editor-built-2026-11-10)). Next: step 2c (the viewer).
 
 Design references:
 
@@ -99,7 +99,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 |---|---|---|
 | 1. Prototype | Client-only, demo data in the real shared layout schema: one drag-to-place flow (snap, rotate, undo), a three-floor shophouse, a small model set (generated tables/walls + a few glTF props), exterior orbit, cutaway, click-to-enter. Measure bundle size and frame time on a real phone and tablet | Drag a demo table upstairs, open 3D and find it on the right floor; same with touch. Compare the look with the visual target |
 | 2a. Server (**built**) | Migration, `seats`, repository, service, layout GET/PUT, version conflict, two-cafe isolation test, size limits | Server tests incl. guard removal; real-server check |
-| 2b. Editor | Floors, outline, edges and openings, Draw wall, placing real tables, save and reopen, the 409 flow, floor menu, outside-outline flags | Recreate an L-shaped café with a patio and a three-floor shophouse; move a staging table and scan its original QR |
+| 2b. Editor (**built**) | Floors, outline, edges and openings, Draw wall, placing real tables, save and reopen, the 409 flow, floor menu, outside-outline flags | Recreate an L-shaped café with a patio and a three-floor shophouse; move a staging table and scan its original QR |
 | 2c. Viewer | Saved layouts in 3D, table card with View QR and Show on plan, quality levels | Find each table from the lists and in 3D on phone, tablet, desktop |
 | 3a. Looks | Starter catalog and custom looks | Edit a look used by three tables; delete refused while used |
 | 3b. Photos | Look photos via `media_assets` attach/release | Photo shows in the picker and table details |
@@ -122,7 +122,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 
 ## Step 1: the prototype (built 2026-11-10)
 
-Client-only on demo data in the real layout schema; nothing is saved. On the dev server and staging only (`runtimeConfig.public.shopDesignerPrototype`, `NUXT_PUBLIC_SHOP_DESIGNER_PROTOTYPE`; off in production): `/c/<slug>/admin/prototypes/shop-designer`, owners (`branch: ['update']`), linked from a branch's Dining tables tab. Step 2 replaces it with the real tables in that tab and removes the flag.
+Client-only on demo data in the real layout schema; nothing is saved. On the dev server and staging only (`runtimeConfig.public.shopDesignerPrototype`, `NUXT_PUBLIC_SHOP_DESIGNER_PROTOTYPE`; off in production): `/c/<slug>/admin/prototypes/shop-designer`, owners (`branch: ['update']`), linked from a branch's Dining tables tab. Step 2 replaces it with the real tables in that tab and removes the flag. (**Removed in step 2b**: the page, its flag and its link. The demo layout is now a test fixture, `app/features/branches/tests/demo-layout.ts`.)
 
 - **Where:** `shared/contracts/shop-layout.ts` (the layout schema the save route will use); `app/features/branches/designer/` (catalog, geometry, demo, and `scene/`: materials, furniture, building, scene, stage, building and studio viewers); `app/features/branches/components/` (`ShopDesignerPrototypePage`, `DesignShopEditor`, `FloorPlanCanvas`, `BuildingView3D`, `BuildingNavigator`, `FurnitureStudio`); `composables/useLayoutDraft.ts`.
 - **Design shop:** library (Unplaced tables with drag or Place on map, furniture by category), the SVG plan (snap 25/5 cm, turn handle in 15° steps, pan, wheel and pinch zoom, keyboard), the move pad, undo/redo (one step per gesture), floor tabs with the floor below shown faintly, the outside-outline warning, the inspector (floor, size, rotation, look with "Also used by", Remove from map; furniture finishes).
@@ -184,3 +184,49 @@ The layout is saved and read on the server; no screen uses it yet (step 2b). The
   `interleaved` gained a `skip` count, because the save's own checks read with a batch: without it, the "meanwhile" write landed before the checks and never reached the guards.
 - **Review:** server-only. The owner can see **Seats** on staging: a branch → Dining tables → New table or Edit, and on the counter's Manage → Dining tables.
 
+## Step 2b: the editor (built 2026-11-10)
+
+A branch's **Dining tables** tab has three views: **Table list**, **Design shop** and **View in 3D** (`?tab=tables&view=design|3d`). The designer views use the page's full width. The editor works on the branch's saved layout and its real tables, and **Save layout** (the navbar) saves the whole layout at the version it started from. The step 1 prototype page and its flag are gone.
+
+- **Where:**
+  - `app/features/branches/composables/useLayoutEditor.ts`: the saved layout, the draft on top of it, the version, the conflict, and the tables no longer active;
+  - `useBranches.ts`: `useBranchLayout`, `fetchBranchLayout`, `useLayoutMutations` (`branches:layout-save`);
+  - `designer/outline.ts`: corners, edges, doors and windows, as pure functions;
+  - `designer/starters.ts`: the four starters, and new floors;
+  - `designer/plan.ts`: the plan's selection, tools and ghost types;
+  - components: `DesignShopEditor`, `FloorPlanCanvas` (its `select`, `outline` and `wall` tools), `EdgePanel`, `LayoutStarterPicker`, `PickTableModal`, `BranchPage` (the views, Save layout).
+- **What the owner can do:**
+  - start from **Blank**, **Narrow shophouse**, **Wide café** or **Rooftop café** (6C), shown while the branch has no layout;
+  - add floors (on top, with the top floor's outline), and from each floor's **⋯** menu (9B): rename, height, roof, **Remove floor…** (6B, the dialog names the tables that become unplaced);
+  - **Draw outline** (3A): click corners on a Blank floor; on an existing one drag corners (right angles kept unless Alt), add one at an edge's handle, remove one with Delete, move one with the arrow keys; edge lengths are shown, and **Cancel** puts the shape back;
+  - click an edge (3B): **Wall**, **Railing** or **Open**, its length, **Door** (a **Gate** on a railing) and **Window** (walls only), each with width and position; doors and windows stay inside their edge when corners move (moved along, or dropped when there's no room);
+  - **Draw wall** (9A): click start and end; walls chain until Escape; a wall is selected and deleted from the plan;
+  - place real tables: Unplaced tables (drag, or **Place on map**), **New table** (the branch's own form, saved at once), and a **table look** from the library, which asks **Which table is this?** (2A: an unplaced table or New table); **Edit table** and **View QR** in the table's panel;
+  - see what's outside the outline (9C), and placed tables archived or deleted elsewhere (**Remove from map**);
+  - save: **Unsaved changes** beside **Save layout**; a floor without an outline is named before anything is sent; leaving the page asks first (the app's guard).
+- **A stale save (6A):** the draft stays, under "This layout was changed somewhere else" (with when it was saved). **Load latest** puts the latest layout in place as one undo step, so Undo brings the draft back on top of it, at the latest version. **Overwrite with mine** asks first ("QR codes are not affected"), then saves the draft at the latest version.
+- **Choices made while building:**
+  - **View in 3D shows the editor's layout, unsaved changes included**, not only what's saved (the plan's acceptance criterion 7 says "the saved layout"). While designing, the owner checks what they just drew; saving first would be a chore. Step 2c decides what a view from elsewhere (the table card, the counter later) shows.
+  - **The layout loads the first time Design shop or View in 3D opens**: the table list doesn't need it.
+  - **With nothing unsaved, the draft follows the server** (a refetch after a table change, a save seen on return), and its undo history starts over. With unsaved changes, the draft is kept and the save names its version.
+  - **A table archived elsewhere** shows as "… is no longer an active table here" with **Remove from map**; the server's 409 `LAYOUT_TABLE_UNAVAILABLE` refetches the tables so the editor names it.
+  - **Lengths and openings are typed in the edge's panel** (length, a door's width and position), rather than on the plan's labels (3A) or by dragging an opening along its edge. Inside walls are drawn and deleted, not dragged.
+  - **Below `lg` the library, and below `md` the selection's panel, open in a slide-over** (the Library button on the floor bar, Details on the move pad), so a tablet in portrait can place tables.
+  - **"Saved by Dara" (6A) is not shown**: the layout's GET names when it was saved, not by whom. Adding the name is a server change for a later step if the owner wants it.
+  - **The furniture studio is no longer reachable**: it was the prototype's preview of step 3a. Its code (`FurnitureStudio.vue`, `designer/scene/studio-viewer.ts`) stays for 3a.
+- **Not in 2b:**
+  - the quick actions beside a selected table (2B: Rotate 90°, Duplicate look), and corner handles to resize on the plan (the panel's width and depth do it);
+  - typing a length on the plan's label;
+  - the 3D items of step 2c: the table card's View QR, quality on real devices, the saved-or-draft question above.
+- **Tests:**
+  - `app/features/branches/tests/designer-outline.test.ts` (18): drawing and closing a shape; moving a corner with and without right angles; openings moved or dropped on a shorter edge; splitting and merging edges with their openings (corner 0 included); edge kinds and what each takes; a free spot for a new door; a widened opening pushing another; edge names either way round; every starter valid and table-free; Blank's message; new floors up to the limit. Every edited shape passes the shared contract.
+  - `test/e2e/shop-designer.test.ts` (7, the built server, no mocks; Layout Lab, a cafe seeded for this file only):
+    - a starter, a placed table saved and shown again, with its QR and version unchanged;
+    - a floor added, renamed and unroofed, an edge made a railing with a gate (a window refused), a wall drawn, all saved, then the floor removed with its table named, and that table placed again from a table look (Which table is this?);
+    - a stale save: Load latest, Undo, save; then Overwrite with mine after its confirmation;
+    - a table archived elsewhere named and removed before the save;
+    - Blank: an outline clicked corner by corner, then a corner moved with the arrow key (its neighbour follows);
+    - a placed table found on its floor in 3D, and Show on plan;
+    - a 390 px phone: the library in a slide-over, no sideways scrolling.
+  - `test/e2e/support/mock-api.ts` answers the layout route with an empty layout by default.
+- **Review on staging:** recreate an L-shaped café with a patio (Wide café, then Draw outline, then an edge made Open or Railing) and a three-floor shophouse (Narrow shophouse, Add floor twice, one roof off). Move a staging table and scan its original QR: it still opens that table.

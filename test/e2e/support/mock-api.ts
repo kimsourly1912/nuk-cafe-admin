@@ -167,6 +167,8 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /admin/branches/options': () => [],
   // A test listing branches gets them without hours (the opening-hours step still to do).
   'GET /admin/branches/{id}': ({ url: request }) => ({ id: request.pathname.split('/').pop(), name: 'Branch', timezone: 'Asia/Phnom_Penh', address: null, phone: null, status: 'active', hours: [], openNow: false, today: 1, version: 1 }),
+  // No shop layout yet (D273): Design shop shows the starters.
+  'GET /admin/branches/{id}/layout': () => ({ version: 0, updatedAt: null, floors: [], placements: [], tables: [] }),
   'GET /admin/menu/items': () => pageOf([]),
   'GET /admin/exchange-rates': () => ({ current: null, history: [] }),
   'GET /admin/khqr': () => ({ version: 1, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: ['USD'], updatedAt: null, updatedBy: null, automaticCheck: false, token: null, tokenStorage: false }),

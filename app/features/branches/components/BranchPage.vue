@@ -1,17 +1,23 @@
 <script setup lang="ts">
 /**
  * A branch (`/admin/branches/[id]`, D91, the owner's mockups): **Settings** and **Dining tables** tabs
- * under the navbar. The navbar's action follows the tab: Save changes (from `lg`; below it the
- * bottom bar) or New table. Both tabs stay mounted, so switching keeps the settings draft; the tab
- * is kept in the URL (`?tab=tables`, `useUrlTab`) without a route change, so switching never asks
- * about unsaved changes.
+ * under the navbar. Dining tables has three views (D273): **Table list**, **Design shop** (the 2D
+ * editor) and **View in 3D**; the last two use the page's full width. The navbar's action follows
+ * the tab: Save changes (from `lg`; below it the bottom bar), New table, or Save layout. Both tabs
+ * and the layout's draft stay alive, so switching keeps the settings and the layout drafts; the tab
+ * and view are kept in the URL (`?tab=tables&view=design`, `useUrlTab`) without a route change, so
+ * switching never asks about unsaved changes.
  */
+import { BUILT_IN_LOOKS } from '../designer/catalog'
 import { useAddBranch } from '../composables/useAddBranch'
 import { useBranchOptions } from '../composables/useBranchOptions'
 import { useBranchSettings, useBranchTables } from '../composables/useBranches'
+import { useLayoutEditor } from '../composables/useLayoutEditor'
 import BranchSkeleton from './BranchSkeleton.vue'
 import BranchSettingsTab from './BranchSettingsTab.vue'
 import BranchTablesTab from './BranchTablesTab.vue'
+import BuildingView3D from './BuildingView3D.vue'
+import DesignShopEditor from './DesignShopEditor.vue'
 
 const tenantPath = useTenantPath()
 
@@ -20,6 +26,7 @@ const props = defineProps<{ id: string }>()
 const { data: settings, error, refresh } = useBranchSettings(props.id)
 const { data: tables } = useBranchTables(props.id)
 const { data: branches } = useBranchOptions()
+const editor = useLayoutEditor(props.id)
 
 type Tab = 'settings' | 'tables'
 const tab = useUrlTab<Tab>(['settings', 'tables'])
@@ -33,6 +40,33 @@ const tabs = computed(() => [
   },
 ])
 
+type View = 'list' | 'design' | '3d'
+const view = useUrlTab<View>(['list', 'design', '3d'], 'view')
+const VIEWS: { value: View, label: string, icon: string }[] = [
+  { value: 'list', label: 'Table list', icon: 'i-lucide-list' },
+  { value: 'design', label: 'Design shop', icon: 'i-lucide-layout-dashboard' },
+  { value: '3d', label: 'View in 3D', icon: 'i-lucide-box' },
+]
+const designing = computed(() => tab.value === 'tables' && view.value !== 'list')
+watch(designing, value => value && editor.load(), { immediate: true })
+const layout = computed(() => editor.draft.layout.value)
+const summary = computed(() => {
+  const count = editor.tables.value.length
+  if (!editor.query.data.value || !layout.value.floors.length) return ''
+  const placed = layout.value.placements.length
+  const floors = layout.value.floors.length
+  return `${placed} of ${count} ${count === 1 ? 'table' : 'tables'} on the map · ${floors} ${floors === 1 ? 'floor' : 'floors'}`
+})
+
+/** The table picked in 3D; Show on plan selects it in Design shop. */
+const selectedTable = ref<string | null>(null)
+function showOnPlan(tableId: string) {
+  const placement = layout.value.placements.find(candidate => candidate.tableId === tableId)
+  if (placement) editor.floorId.value = placement.floorId
+  editor.selection.value = { kind: 'table', id: tableId }
+  view.value = 'design'
+}
+
 const settingsTab = useTemplateRef('settingsTab')
 const tablesTab = useTemplateRef('tablesTab')
 const several = computed(() => (branches.value?.length ?? 0) > 1)
@@ -44,7 +78,8 @@ const title = computed(() => settings.value?.name ?? 'Branch')
 <template>
   <UDashboardPanel
     id="branch"
-    class="page-narrow"
+    :class="!designing && 'page-narrow'"
+    :ui="designing ? { body: 'p-0 sm:p-0 overflow-hidden' } : undefined"
   >
     <template #header>
       <UDashboardNavbar>
@@ -70,7 +105,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
         </template>
         <template #right>
           <UButton
-            v-if="branches?.length === 1 && settings"
+            v-if="branches?.length === 1 && settings && !designing"
             label="Add branch"
             icon="i-lucide-plus"
             color="neutral"
@@ -92,6 +127,23 @@ const title = computed(() => settings.value?.name ?? 'Branch')
               @click="settingsTab?.save()"
             />
           </UTooltip>
+          <template v-else-if="designing">
+            <span
+              v-if="editor.isDirty.value"
+              class="hidden items-center gap-1.5 text-sm text-muted sm:inline-flex"
+              data-testid="layout-unsaved"
+            >
+              <span class="size-2 rounded-full bg-warning" />
+              Unsaved changes
+            </span>
+            <UButton
+              label="Save layout"
+              icon="i-lucide-save"
+              :disabled="!editor.isDirty.value"
+              :loading="editor.saving.value"
+              @click="editor.save()"
+            />
+          </template>
           <UTooltip
             v-else-if="tab === 'tables'"
             text="New table"
@@ -112,6 +164,32 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           :items="tabs"
           aria-label="Branch sections"
         />
+        <div
+          v-if="tab === 'tables'"
+          class="flex shrink-0 items-center gap-3"
+        >
+          <span
+            v-if="summary"
+            class="hidden text-sm text-muted xl:inline"
+          >{{ summary }}</span>
+          <UFieldGroup
+            size="sm"
+            role="group"
+            aria-label="Dining tables views"
+          >
+            <UButton
+              v-for="option in VIEWS"
+              :key="option.value"
+              :label="option.label"
+              :icon="option.icon"
+              :color="view === option.value ? 'primary' : 'neutral'"
+              :variant="view === option.value ? 'soft' : 'outline'"
+              :aria-pressed="view === option.value"
+              :ui="{ label: 'max-md:sr-only' }"
+              @click="view = option.value"
+            />
+          </UFieldGroup>
+        </div>
       </UDashboardToolbar>
     </template>
 
@@ -131,10 +209,49 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           @saved="value => settings = value"
         />
         <BranchTablesTab
-          v-show="tab === 'tables'"
+          v-show="tab === 'tables' && view === 'list'"
           ref="tablesTab"
           :branch-id="id"
         />
+        <DesignShopEditor
+          v-if="tab === 'tables' && view === 'design'"
+          :editor="editor"
+          :branch-id="id"
+          :dining-tables="tables ?? []"
+          :looks="BUILT_IN_LOOKS"
+          @view3d="view = '3d'"
+        />
+        <template v-else-if="tab === 'tables' && view === '3d'">
+          <div
+            v-if="!layout.floors.length"
+            class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center"
+          >
+            <UIcon
+              name="i-lucide-box"
+              class="size-8 text-muted"
+            />
+            <p class="font-semibold text-highlighted">
+              No shop layout yet
+            </p>
+            <p class="max-w-sm text-sm text-muted">
+              Draw the shop in Design shop and place its tables; then explore it here as a building.
+            </p>
+            <UButton
+              label="Design shop"
+              icon="i-lucide-layout-dashboard"
+              @click="view = 'design'"
+            />
+          </div>
+          <BuildingView3D
+            v-else
+            v-model:selected-table="selectedTable"
+            :layout="layout"
+            :tables="editor.tables.value"
+            :looks="BUILT_IN_LOOKS"
+            @show-on-plan="showOnPlan"
+            @design-shop="view = 'design'"
+          />
+        </template>
       </template>
     </template>
   </UDashboardPanel>

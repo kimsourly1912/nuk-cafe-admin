@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook } from '../designer/catalog'
-import { demoLayout, DEMO_TABLES } from '../designer/demo'
+import { demoLayout, DEMO_TABLES } from './demo-layout'
 import { chairPoses, floorViewpoints, outsideOutline, outwardNormal, pointInPolygon, rotatePoint, snap, wallPieces } from '../designer/geometry'
 
 const messages = (layout: unknown) => (v.safeParse(layoutSchema, layout).issues ?? []).map(issue => issue.message)

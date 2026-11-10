@@ -45,7 +45,7 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'guestLinker' | 'budgetShopper' | 'leaver' | 'temporaryStaff' | 'manager' | 'popupManager' | 'twoStepCashier', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'layoutOwner' | 'guestLinker' | 'budgetShopper' | 'leaver' | 'temporaryStaff' | 'manager' | 'popupManager' | 'twoStepCashier', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
   /**
@@ -53,6 +53,12 @@ export interface ShopSeed {
    * for the tests that check each cafe's address shows only its own.
    */
   secondCafe: { slug: string, name: string, branchId: string, itemName: string, tableToken: string, promotionId: string }
+  /**
+   * A cafe for the shop designer's browser tests (D273, shop-designer.test.ts) and nothing else:
+   * `/c/layout-lab`, owned by `layoutOwner`. "Lab Floor" has tables L1–L3; "Lab Annex" has A1.
+   * Neither has a layout until the tests save one.
+   */
+  layoutLab: { slug: string, branchId: string, annexBranchId: string }
 }
 
 export interface SeedCustomer {
@@ -96,6 +102,8 @@ const CUSTOMERS: ShopSeed['customers'] = {
   leaver: { name: 'Kanha Leav', email: 'kanha@example.com', password: 'long-enough-password-47' },
   // Not a customer: Brown Bean's second owner, who signs in at NUK Cafe's admin by mistake (T2c, D144).
   beanOwner: { name: 'Bea Brown', email: 'bea@brown-bean.example', password: 'long-enough-password-19' },
+  // Not a customer: Layout Lab's owner, who draws its shop layout (shop-designer.test.ts, D273).
+  layoutOwner: { name: 'Lina Lay', email: 'lina@layout-lab.example', password: 'long-enough-password-51' },
   // Not a customer: the counter's cashier (step 6.3), staff at Riverside.
   cashier: { name: 'Sophea Keo', email: 'sophea@example.com', password: 'long-enough-password-10' },
   // Not a customer: staff at Riverside still on the temporary password an admin gave them, who
@@ -117,6 +125,20 @@ async function addBranch(db: Db, name: string, tenantId = TEST_TENANT) {
 }
 
 const ALL_DAY = [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, startMinute: 0, endMinute: 1440 }))
+
+/** Layout Lab (D273): a cafe of its own, so the designer's saves race no other file's. */
+async function seedLayoutLab(db: Db, qr: { secret: string, baseUrl: string }): Promise<ShopSeed['layoutLab']> {
+  const cafe = { id: 'tenant-4', slug: 'layout-lab', name: 'Layout Lab' }
+  await ensureTenant(db, cafe.id, cafe.slug)
+  await db.update(organization).set({ name: cafe.name }).where(eq(organization.id, cafe.id))
+  const owner = await createAdmin(db, 'owner@layout-lab.example', cafe.id)
+  const actor: Actor = { userId: owner.userId, tenantId: cafe.id, role: 'owner' }
+  const branchId = await addBranch(db, 'Lab Floor', cafe.id)
+  const annexBranchId = await addBranch(db, 'Lab Annex', cafe.id)
+  for (const [label, seats] of [['L1', 4], ['L2', 2], ['L3', 2]] as const) await createTable(db, actor, branchId, { label, area: null, seats }, qr)
+  await createTable(db, actor, annexBranchId, { label: 'A1', area: null, seats: 2 }, qr)
+  return { slug: cafe.slug, branchId, annexBranchId }
+}
 
 /** Brown Bean (D141): its own owner, branch, menu and table, nothing shared with NUK Cafe. */
 async function seedSecondCafe(db: Db, qr: { secret: string, baseUrl: string }): Promise<ShopSeed['secondCafe']> {
@@ -177,6 +199,7 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   const closedTable = await createTable(db, actor, closedBranchId, { label: 'K01', area: null, seats: 2 }, qr)
   const spareTable = await createTable(db, actor, openBranchId, { label: 'T02', area: 'Main floor', seats: 2 }, qr)
   const secondCafe = await seedSecondCafe(db, qr)
+  const layoutLab = await seedLayoutLab(db, qr)
   // NUK Cafe's own Bakong token (T2d, D148), sealed with the e2e server's key: its counter checks
   // KHQRs with the stand-in for Bakong. Brown Bean has none.
   await saveBakongToken(db, actor, { version: 0, token: bakong.token }, { apiUrl: '', encryptionKey: bakong.encryptionKey })
@@ -184,7 +207,7 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)
   for (const customer of Object.values(CUSTOMERS)) await auth.api.signUpEmail({ body: customer })
-  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.followerD, CUSTOMERS.a11yGuest, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.guestLinker, CUSTOMERS.cashier, CUSTOMERS.beanOwner, CUSTOMERS.budgetShopper, CUSTOMERS.leaver, CUSTOMERS.manager, CUSTOMERS.popupManager, CUSTOMERS.twoStepCashier]) {
+  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.followerD, CUSTOMERS.a11yGuest, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.guestLinker, CUSTOMERS.cashier, CUSTOMERS.beanOwner, CUSTOMERS.layoutOwner, CUSTOMERS.budgetShopper, CUSTOMERS.leaver, CUSTOMERS.manager, CUSTOMERS.popupManager, CUSTOMERS.twoStepCashier]) {
     await db.update(user).set({ emailVerified: true }).where(eq(user.email, customer.email))
   }
   // An existing account keeps its password when it's given branch access (D49).
@@ -197,8 +220,10 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   // Brown Bean's owner too (the platform console adds an existing account so, D142).
   const [bea] = await db.select({ id: user.id }).from(user).where(eq(user.email, CUSTOMERS.beanOwner.email))
   await db.insert(member).values({ id: crypto.randomUUID(), organizationId: 'tenant-2', userId: bea!.id, role: 'owner', createdAt: new Date() })
+  const [lina] = await db.select({ id: user.id }).from(user).where(eq(user.email, CUSTOMERS.layoutOwner.email))
+  await db.insert(member).values({ id: crypto.randomUUID(), organizationId: 'tenant-4', userId: lina!.id, role: 'owner', createdAt: new Date() })
   await client.execute('delete from outbox_messages')
 
   client.close()
-  return { dbFile, customers: CUSTOMERS, secondCafe, spareTableToken: tokenOf(spareTable.qrUrl), openBranchId, closedBranchId, popupBranchId, openTableToken: tokenOf(openTable.qrUrl), closedTableToken: tokenOf(closedTable.qrUrl) }
+  return { dbFile, customers: CUSTOMERS, secondCafe, layoutLab, spareTableToken: tokenOf(spareTable.qrUrl), openBranchId, closedBranchId, popupBranchId, openTableToken: tokenOf(openTable.qrUrl), closedTableToken: tokenOf(closedTable.qrUrl) }
 }
