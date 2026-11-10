@@ -18,9 +18,9 @@
 - **Evidence:**
   - `pnpm lint` and `pnpm typecheck` clean.
   - `pnpm test:unit`: 2656 passed, 1 skipped (178 files). It includes `designer-outline.test.ts` (18).
-  - `test/e2e/shop-designer.test.ts`: 7 passed on the built server, before the look-picker step and the review fixes were added.
+  - `test/e2e/shop-designer.test.ts`: 7 passed on the built server, with the look-picker step and the review fixes (a second Save while one runs is skipped; Cancel compares content).
   - `branches`, `manager-tools`, `accessibility`, `request-budget`, `shop-layout-api` and `cafes`: 92 passed.
-  - Full `pnpm test:e2e`: running when this was committed. The result follows in the next commit.
+  - Full `pnpm test:e2e` (3 workers): 68 files, 941 tests passed. That was before the three review fixes, which touch only the designer, and its file passed again after them.
 - **Not verified:** a real phone or tablet with touch; a save on staging's D1.
 - How to verify: on staging, open a branch → Dining tables → Design shop. Pick Wide café, place a table, save, then reload: it is still there. Open the same layout in a second tab and save there; save in the first: **Load latest** / **Overwrite with mine** appear.
 
