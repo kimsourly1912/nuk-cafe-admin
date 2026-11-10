@@ -28,6 +28,8 @@ const dark = computed(() => colorMode.value === 'dark')
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
 const labels = useTemplateRef<HTMLDivElement>('labels')
 const status = ref<'loading' | 'ready' | 'unavailable'>('loading')
+/** The building's first frame is on screen: until then the loading state stays. */
+const drawn = ref(false)
 const mode = ref<'exterior' | 'cutaway' | 'inside'>('exterior')
 const focusedFloor = ref<string | null>(null)
 const insideFloor = ref<string | null>(null)
@@ -54,6 +56,7 @@ onMounted(async () => {
       labels: labels.value,
       dark: dark.value,
       onStats: value => (stats.value = value),
+      onFirstFrame: () => (drawn.value = true),
       onContextLost: () => (status.value = 'unavailable'),
       onSelectTable: id => (selectedTable.value = id),
       onSelectFloor: id => void focusFloor(id),
@@ -168,6 +171,7 @@ function selectFromList(tableId: string) {
           class="block size-full touch-none"
           aria-hidden="true"
           data-testid="building-canvas"
+          :data-drawn="drawn"
         />
         <div
           ref="labels"
@@ -175,7 +179,7 @@ function selectFromList(tableId: string) {
         />
 
         <div
-          v-if="status === 'loading'"
+          v-if="status === 'loading' || !drawn"
           class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-muted"
           role="status"
           aria-live="polite"

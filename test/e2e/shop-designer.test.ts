@@ -30,6 +30,8 @@ async function shot(page: Page, name: string) {
 }
 
 const plan = (page: Page) => page.getByTestId('floor-plan')
+/** The 3D view's first frame is on screen. */
+const drawn = (page: Page) => page.locator('[data-testid="building-canvas"][data-drawn="true"]').waitFor({ timeout: 40_000 })
 const unplaced = (page: Page, label: string) => page.getByTestId(`unplaced-${label}`)
 
 describe('shop designer prototype', () => {
@@ -74,7 +76,7 @@ describe('shop designer prototype', () => {
     expect(Number(y) % 25).toBe(0)
   })
 
-  it('moves T03 upstairs and finds it on the First floor in 3D', async () => {
+  it('moves T03 upstairs and finds it on the First floor in 3D', { timeout: 60_000 }, async () => {
     const page = await open()
     await plan(page).getByTestId('plan-table-T03').click()
     const panel = page.getByRole('complementary', { name: 'Selected table' })
@@ -86,8 +88,9 @@ describe('shop designer prototype', () => {
 
     await page.getByRole('tab', { name: 'View in 3D' }).click()
     await page.getByTestId('building-canvas').waitFor()
-    // The 3D view measured this device and drew the building.
-    await expect.poll(() => page.getByTestId('quality').count(), { timeout: 15_000 }).toBe(1)
+    // The building is drawn. Not the quality line: that waits for the device to be measured, slow
+    // in CI's software renderer (seconds a frame on 2 shared cores).
+    await drawn(page)
     const lists = page.getByRole('complementary', { name: 'Navigate the building' })
     await lists.getByTestId('list-table-T03').click()
     const card = page.getByTestId('table-card')
@@ -126,10 +129,10 @@ describe('shop designer prototype', () => {
     await shot(page, 'studio-table')
   })
 
-  it('works on a phone: the 3D view with its lists in a drawer', async () => {
+  it('works on a phone: the 3D view with its lists in a drawer', { timeout: 60_000 }, async () => {
     const page = await open(390, 844)
     await page.getByRole('tab', { name: 'View in 3D' }).click()
-    await expect.poll(() => page.getByTestId('quality').count(), { timeout: 15_000 }).toBe(1)
+    await drawn(page)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await page.getByRole('button', { name: 'Floors and tables' }).click()
     await page.getByRole('dialog').getByTestId('list-table-T09').click()
@@ -137,7 +140,7 @@ describe('shop designer prototype', () => {
     await shot(page, 'phone-3d')
   })
 
-  it('draws the 3D view in dark mode', async () => {
+  it('draws the 3D view in dark mode', { timeout: 60_000 }, async () => {
     const page = await createPage()
     await page.setViewportSize({ width: 1440, height: 900 })
     await mockApi(page)
@@ -145,7 +148,7 @@ describe('shop designer prototype', () => {
     await page.evaluate(() => localStorage.setItem('nuxt-color-mode', 'dark'))
     await page.goto(url(`${PATH}?tab=3d`), { waitUntil: 'hydration' })
     await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(true)
-    await expect.poll(() => page.getByTestId('quality').count(), { timeout: 15_000 }).toBe(1)
+    await drawn(page)
     await page.getByRole('button', { name: 'Cutaway' }).click()
     await page.getByRole('complementary', { name: 'Navigate the building' }).getByTestId('list-table-T06').click()
     await page.waitForTimeout(800)

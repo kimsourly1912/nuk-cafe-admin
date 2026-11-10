@@ -29,6 +29,8 @@ export interface StageOptions {
   labels?: HTMLElement
   dark: boolean
   onStats?: (stats: StageStats) => void
+  /** The first frame is on screen (a software renderer can take seconds to get there). */
+  onFirstFrame?: () => void
   onContextLost?: () => void
 }
 
@@ -106,6 +108,7 @@ export function createStage(options: StageOptions): Stage {
   let frame = 0
   let measuring: { frames: number, last: number, total: number } | null = null
   let disposed = false
+  let drawn = false
 
   function applyQuality(next: Quality) {
     quality = next
@@ -148,14 +151,19 @@ export function createStage(options: StageOptions): Stage {
     }
     for (const callback of beforeRender) callback()
     renderer.render(scene, camera)
+    if (!drawn) {
+      drawn = true
+      options.onFirstFrame?.()
+    }
     labels?.render(scene, camera)
     if (measuring) {
       if (measuring.frames > 0) measuring.total += now - measuring.last
       measuring.last = now
       measuring.frames++
-      // Up to 30 frames, but a slow device stops after about a second: it shouldn't spend long at
-      // a quality it can't afford (a software renderer took half a second a frame).
-      if (measuring.frames > 30 || (measuring.frames > 4 && measuring.total > 1000)) finishMeasure()
+      // Up to 30 frames, but a slow device stops after about a second (two frame times at least):
+      // it shouldn't spend long at a quality it can't afford. A software renderer took 0.5–3 s a
+      // frame, so waiting for more frames there took tens of seconds.
+      if (measuring.frames > 30 || (measuring.frames >= 3 && measuring.total > 1000)) finishMeasure()
       again = true
     }
     if (again) invalidate()
