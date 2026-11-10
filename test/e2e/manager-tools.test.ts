@@ -63,6 +63,8 @@ describe('manager tools on the counter (D198)', () => {
     await toast(page, `Table "${label}" added`).waitFor()
     const card = page.getByRole('article', { name: label, exact: true })
     await card.waitFor()
+    // The server's default: two seats (D273).
+    await card.getByText('2 seats').waitFor()
     // Archived again, so no other file sees an extra table at Riverside.
     await card.getByRole('button', { name: `Actions for ${label}` }).click()
     await page.getByRole('menuitem', { name: 'Archive' }).click()

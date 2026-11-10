@@ -439,6 +439,9 @@ describe('enabled Google account pages', () => {
       await expect.poll(() => api.calls.includes('POST /auth/sign-in/social')).toBe(true)
       expect(await google.textContent()).toContain('Cancel Google sign-in')
       expect(await page.getByRole('dialog').count()).toBe(0)
+      // A pressed button sinks a little and springs back (app.config.ts); a slow runner holds the
+      // press longer, so measure once its transition has ended.
+      await google.evaluate(button => Promise.all(button.getAnimations().map(animation => animation.finished)))
       expect(await google.boundingBox()).toEqual(before)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       if (process.env.AUTH_LAYOUT_SCREENSHOTS) {

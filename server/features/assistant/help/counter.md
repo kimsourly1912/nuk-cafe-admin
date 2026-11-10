@@ -63,7 +63,7 @@ The counter's **Sold out** page (`/counter/<branch>/sold-out`) switches individu
 
 Managers (and admins) have a **Manage** button in the counter's header, for the branch the counter is open at. Staff don't see it, and opening Dining tables or Reports by their address says **No access to this page** with **Back to the counter**.
 
-- **Dining tables**: the branch's tables and their QR codes, as on Admin → Branch → Dining tables: **New table**, edit a table's name or area, **View QR** to print or download it, **New QR** (the printed one stops working), archive and restore.
+- **Dining tables**: the branch's tables and their QR codes, as on Admin → Branch → Dining tables: **New table**, edit a table's name, area or seats, **View QR** to print or download it, **New QR** (the printed one stops working), archive and restore.
 - **Reports**: the branch's **Summary**, **Sales by item** and **Order history**, with **Print**. Choose the period at the top. Download CSV and Send to Telegram are on the admin's Reports only.
 
 - **Pause online orders**: stops customers ordering online for **15 minutes**, **30 minutes**, **1 hour** or **until closing**, with an optional reason (only staff see it). Orders already placed carry on, and ordering starts again by itself at the end. While paused the header says **Paused** and the queue shows **Online orders paused until …** with who paused it and why; **Resume now** (or **Manage → Resume online orders**) ends it at once. A closed branch can't be paused.

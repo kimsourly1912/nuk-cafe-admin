@@ -40,6 +40,7 @@ export interface TableRow {
   branchId: string
   label: string
   area: string | null
+  seats: number
   status: DiningTableStatus
   qrVersion: number
   qrRotatedAt: Date
@@ -50,7 +51,7 @@ export interface TableRow {
   deleteBlocker: TableDeleteBlocker | null
 }
 
-type TableChanges = Partial<Pick<TableRow, 'label' | 'area' | 'status' | 'qrVersion' | 'qrRotatedAt'>> & { qrTokenHash?: string }
+type TableChanges = Partial<Pick<TableRow, 'label' | 'area' | 'seats' | 'status' | 'qrVersion' | 'qrRotatedAt'>> & { qrTokenHash?: string }
 
 export interface ScannedTableRow {
   tableId: string
@@ -68,6 +69,8 @@ export interface ScannedTableRow {
 // --- Column lists and conditions ---
 
 export const activeBranch = eq(branches.status, 'active')
+
+export const activeTable = eq(diningTables.status, 'active')
 
 const branchColumns = {
   id: branches.id,
@@ -88,6 +91,7 @@ const tableColumns = (db: Db) => ({
   branchId: diningTables.branchId,
   label: diningTables.label,
   area: diningTables.area,
+  seats: diningTables.seats,
   status: diningTables.status,
   qrVersion: diningTables.qrVersion,
   qrRotatedAt: diningTables.qrRotatedAt,
@@ -212,7 +216,7 @@ export function replaceHoursStatements(db: Db, tenantId: string, branchId: strin
   return replaceAll(db, branchHours, inTenant(branchHours, tenantId, eq(branchHours.branchId, branchId)), windows.map(window => ({ tenantId, branchId, ...window })))
 }
 
-export function insertTableStatement(db: Db, row: { id: string, tenantId: string, branchId: string, label: string, area: string | null, qrTokenHash: string, now: Date }): Statement {
+export function insertTableStatement(db: Db, row: { id: string, tenantId: string, branchId: string, label: string, area: string | null, seats: number, qrTokenHash: string, now: Date }): Statement {
   return db.insert(diningTables).values({ ...row, qrVersion: 1, qrRotatedAt: row.now, createdAt: row.now, updatedAt: row.now })
 }
 
@@ -221,7 +225,7 @@ export function insertTableStatement(db: Db, row: { id: string, tenantId: string
  * `anyStatus`), applying `changes`. Follow it with `requireOneChange`.
  */
 export function touchTableStatement(db: Db, tenantId: string, id: string, version: number, changes: TableChanges, now: Date, anyStatus = false): Statement {
-  return updateAtVersion(db, diningTables, { tenantId, id, version }, { ...changes, updatedAt: now }, anyStatus ? undefined : eq(diningTables.status, 'active'))
+  return updateAtVersion(db, diningTables, { tenantId, id, version }, { ...changes, updatedAt: now }, anyStatus ? undefined : activeTable)
 }
 
 /**

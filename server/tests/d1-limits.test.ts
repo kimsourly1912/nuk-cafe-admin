@@ -28,6 +28,10 @@ import { insertObjectPlansStatements, deleteObjectPlansStatements, dueObjectDele
 import { dueMessages } from '#server/features/platform/platform.outbox.repository'
 import { listAuditEvents } from '#server/features/platform/platform.audit.repository'
 import { auditEvents, outboxMessages } from '#server/features/platform/platform.schema'
+import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
+import { getLayout, saveLayout } from '#server/features/branches'
+import { diningTables } from '#server/features/branches/branches.schema'
+import { largestLayout } from '#server/tests/support/layouts'
 import { addBranchStaff, createAdmin, createTestDb, createUser, D1_MAX_PARAMS, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 
 /**
@@ -204,5 +208,22 @@ describe('staff at their limits', () => {
     }
     const page = await listStaff(db, owner, { page: 1, pageSize: MAX_PAGE_SIZE })
     expect(page.items).toHaveLength(MAX_PAGE_SIZE)
+  })
+})
+
+describe('the shop layout at its limits (D273)', () => {
+  it('saves and reads back every floor full with every table of the branch placed, then saves it again', async () => {
+    const branchId = newId()
+    await insertBranch(db, { id: branchId, name: 'Shophouse', timezone: 'Asia/Phnom_Penh' })
+    const owner: Actor = { ...actor, userId: (await createUser(db)).id }
+    const tables = Array.from({ length: MAX_BRANCH_TABLES }, (_, n) => ({ id: newId(), tenantId: TEST_TENANT, branchId, label: `T${n}`, qrTokenHash: newId() }))
+    await db.batch(insertAll(db, diningTables, tables) as [never])
+    const input = largestLayout(tables.map(table => table.id))
+    const saved = await saveLayout(db, owner, branchId, input)
+    expect(saved.version).toBe(1)
+    expect(saved.floors).toEqual(input.layout.floors)
+    expect(saved.placements).toHaveLength(MAX_BRANCH_TABLES)
+    expect(await getLayout(db, TEST_TENANT, branchId)).toEqual(saved)
+    expect((await saveLayout(db, owner, branchId, { ...input, version: 1 })).version).toBe(2)
   })
 })

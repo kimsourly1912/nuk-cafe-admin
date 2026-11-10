@@ -407,6 +407,13 @@
       "when": 1793900812485,
       "tag": "0057_khqr_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1794299481606,
+      "tag": "0058_shop_layout",
+      "breakpoints": true
     }
   ]
 }

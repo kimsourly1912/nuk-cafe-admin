@@ -162,7 +162,7 @@ describe('reset', () => {
 
 describe('sample hours and tables', () => {
   it('sets the hours, then adds the tables a few per call, keeping labels already in use', async () => {
-    await createTable(db, admin, branchId, { label: 'T01', area: 'Terrace' }, qr)
+    await createTable(db, admin, branchId, { label: 'T01', area: 'Terrace', seats: 2 }, qr)
     let result = await loadSampleBranch(db, admin, { branchId, tablesOnly: false }, qr, ENV)
     expect((await getBranchSettings(db, TEST_TENANT, branchId)).hours).toHaveLength(7)
     const calls = [result.remainingTables]

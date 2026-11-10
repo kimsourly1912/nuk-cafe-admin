@@ -1,6 +1,6 @@
 # Shop designer plan
 
-Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) built, in review** (2026-11-10, [below](#step-1-the-prototype-built-2026-11-10)). Next: the owner reviews it on staging, then step 2a (server).
+Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) reviewed by the owner on staging** (2026-11-10: "everything is so perfect"; their Android phone draws the 3D view in 23–30 ms a frame). **Step 2a (server) built, in review** (2026-11-10, [below](#step-2a-the-server-built-2026-11-10)). Next: step 2b (the editor on saved layouts).
 
 Design references:
 
@@ -34,29 +34,30 @@ Design references:
 - **Removing a floor removes its placements** (cascade): those tables become unplaced.
 - **Items outside the outline** are flagged in the editor and saved anyway: a reminder, not an integrity rule.
 
-## Data model (migration `0058` or the next free number)
+## Data model (migration `0058_shop_layout`)
 
 Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the top-down view). Owned by the **branches** feature (it owns branches and dining tables, and the archive batch must write placements without a cross-feature write).
 
 | Table | Columns | Integrity |
 |---|---|---|
-| `dining_tables` (existing) | + `seats integer not null default 2` | `CHECK seats between 1 and 20` [Choice: bounds]. + `unique (tenant_id, branch_id, id)` as the placements' FK target |
-| `branch_layouts` | `tenant_id`, `branch_id` (PK with tenant), `version`, `updated_at`, `updated_by` | FK `(tenant_id, branch_id)` → `branches` restrict. The save lock (D41): every save names `version` |
-| `branch_layout_floors` | `id`, `tenant_id`, `branch_id`, `position`, `name`, `height_cm`, `has_roof`, `geometry` (JSON: outline polygon, edges with kind and openings, inside walls, fixtures, decor) | FK to `branch_layouts` cascade. `unique (branch_id, position)`. `CHECK height_cm between 200 and 800` [Choice] |
-| `branch_layout_placements` | `tenant_id`, `branch_id`, `table_id`, `floor_id`, `x_cm`, `y_cm`, `rotation`, `width_cm`, `depth_cm`, `look` (built-in key) or `custom_look_id` | **`unique (table_id)`**: a table appears once. FK `(tenant_id, branch_id, table_id)` → `dining_tables` cascade (same cafe and branch, enforced by the database). FK `floor_id` → floors cascade. FK `custom_look_id` → custom looks **restrict**. `CHECK` exactly one of `look` / `custom_look_id` |
+| `dining_tables` (existing) | + `seats integer not null default 2` | `CHECK seats between 1 and 20` (owner, 2026-11-10). + unique index `(tenant_id, branch_id, id)` as the placements' FK target |
+| `branch_layouts` | `tenant_id`, `branch_id` (PK), `version`, `updated_at`, `updated_by` (→ user, set null) | FK `(tenant_id, branch_id)` → `branches` restrict. The save lock (D41): every save names `version`. No row: version 0 |
+| `branch_layout_floors` | `tenant_id`, `branch_id`, `id` (PK: the editor's id, unique in its layout), `position`, `name`, `height_cm`, `has_roof`, `geometry` (JSON: outline polygon, edges with kind and openings, inside walls, furniture) | FK `(tenant_id, branch_id)` → `branch_layouts` cascade. `unique (tenant_id, branch_id, position)`. `CHECK position between 0 and 9`, `height_cm between 200 and 800` (owner, 2026-11-10) |
+| `branch_layout_placements` | `table_id` (PK), `tenant_id`, `branch_id`, `floor_id`, `x_cm`, `y_cm`, `rotation`, `width_cm`, `depth_cm`, `look` (built-in key) | **PK `table_id`**: a table appears once. FK `(tenant_id, branch_id, table_id)` → `dining_tables` cascade (same cafe and branch, enforced by the database). FK `(tenant_id, branch_id, floor_id)` → floors cascade. `CHECK rotation 0–359, width and depth 40–600`. Step 3a adds `custom_look_id` → custom looks **restrict** and `CHECK` exactly one of `look` / `custom_look_id` (a rebuild: nothing references this table) |
 | `custom_furniture_looks` | `id`, `tenant_id`, `name`, `base_shape`, `default_width_cm`, `default_depth_cm`, `height_cm`, `main_finish`, `accent_finish`, `photo_id`, `version` | Cafe-wide (every branch). `photo_id` → `media_assets` via the media attach/release statements |
 
-- Geometry JSON is validated by one Valibot schema in `shared/contracts/` used by the editor and the server: finite numbers, bounds, at most 10 floors, 64 outline corners, 200 objects per floor, openings inside their edge and not overlapping. **To verify:** the D1 limit on a row/value size before setting the JSON size cap.
+- Geometry JSON is validated by one Valibot schema in `shared/contracts/shop-layout.ts` used by the editor and the server: whole numbers in bounds, at most 10 floors, 64 outline corners, 200 objects and 100 inside walls per floor, openings inside their edge and not overlapping, and **at most 64 KB of JSON per floor** (`LAYOUT_MAX_FLOOR_BYTES`). Each floor is written by its own statement as one bound value, so no statement carries more than one floor. The save route takes up to 768 KB (`LAYOUT_MAX_BODY_BYTES`: ten full floors and 200 placements); other routes keep 64 KB.
+- **D1 limits (2026-11-10):** Cloudflare's limits page couldn't be read from the build session. Measured on local D1 (workerd, wrangler's platform proxy): SQL text over 100,000 bytes is refused (`SQLITE_TOOBIG`); bound values aren't counted (2.1 MB passed). The largest layout saves on local D1 (`server/tests/d1-search.test.ts`). **To verify on staging:** the first real save (a few KB) and, once, a large one.
 - Finishes are keys from a fixed palette (light oak, walnut, dark wood, black metal, steel, brass, green, terracotta, blue, linen, white marble, slate), not free colors.
 
 ## API contract (`shared/contracts/branches.ts`)
 
 | Route | Permission | Notes |
 |---|---|---|
-| `GET /api/c/<slug>/admin/branches/{branchId}/layout` | `branch: ['update']` | Floors, placements, the branch's active tables (for Unplaced), custom looks, `version`. No layout yet: an empty layout with `version: 0` |
-| `PUT /api/c/<slug>/admin/branches/{branchId}/layout` | `branch: ['update']` | Whole layout + `version`. One `db.batch`: version guard, upsert floors, delete removed floors, replace placements, audit row. 409 `STALE_VERSION` keeps nothing; 409/422 when a placed table is no longer active in this branch |
+| `GET /api/c/<slug>/admin/branches/{branchId}/layout` | `branch: ['update']` | `BranchLayout`: `version`, `updatedAt`, floors bottom first, placements, the branch's active tables (`id`, `label`, `seats`). No layout yet: empty at `version: 0`. Archived branches read |
+| `PUT /api/c/<slug>/admin/branches/{branchId}/layout` | `branch: ['update']` | `{ version, layout: { floors, placements } }` (`saveLayoutSchema`). One `db.batch`: the version (first save inserts the layout's row; later ones update at the version read + `requireOneChange`), placements and floors deleted and inserted again, a guard that every placed table is an active table of the branch, an audit row (`branch.layout.update`). 409 `VERSION_CONFLICT` saves nothing; 409 `LAYOUT_TABLE_UNAVAILABLE` on `layout.placements.<i>.tableId` when a placed table is archived, deleted or another branch's (by position, so nothing about other branches leaks); 409 `INVALID_STATE` for an archived branch. Answers the layout as saved |
 | `GET/POST/PATCH …/admin/furniture-looks[/{id}]`, `DELETE …/{id}` | new `furniture: ['manage']` (owner) | PATCH and DELETE name `version`; DELETE refused while used (409 lists the tables) |
-| Table form (existing routes) | `branch: ['update']` (admin), `table: ['manage']` (counter, D198) | + `seats` |
+| Table form (existing routes) | `branch: ['update']` (admin), `table: ['manage']` (counter, D198) | + `seats` (1–20; 2 when a new table names none) |
 
 - The admin routes check `branch: ['update']`, like the admin's dining-table routes: a cafe permission only owners hold (the admin portal is owners only, D52). Managers manage tables on the counter, where routes check the branch permission `table: ['manage']` for the path's branch (D198); a counter surface for the layout would follow that pattern without a new permission. (Corrected 2026-11-10: the first draft named `table: ['manage']` for the admin routes, but that is a branch-role permission owners don't hold as a cafe permission.)
 - `furniture: ['manage']` is owner-only like menu write and media upload: looks are cafe-wide.
@@ -97,7 +98,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 | Step | Deliverable | Review checkpoint |
 |---|---|---|
 | 1. Prototype | Client-only, demo data in the real shared layout schema: one drag-to-place flow (snap, rotate, undo), a three-floor shophouse, a small model set (generated tables/walls + a few glTF props), exterior orbit, cutaway, click-to-enter. Measure bundle size and frame time on a real phone and tablet | Drag a demo table upstairs, open 3D and find it on the right floor; same with touch. Compare the look with the visual target |
-| 2a. Server | Migration, `seats`, repository, service, layout GET/PUT, version conflict, two-cafe isolation test, size limits | Server tests incl. guard removal; real-server check |
+| 2a. Server (**built**) | Migration, `seats`, repository, service, layout GET/PUT, version conflict, two-cafe isolation test, size limits | Server tests incl. guard removal; real-server check |
 | 2b. Editor | Floors, outline, edges and openings, Draw wall, placing real tables, save and reopen, the 409 flow, floor menu, outside-outline flags | Recreate an L-shaped café with a patio and a three-floor shophouse; move a staging table and scan its original QR |
 | 2c. Viewer | Saved layouts in 3D, table card with View QR and Show on plan, quality levels | Find each table from the lists and in 3D on phone, tablet, desktop |
 | 3a. Looks | Starter catalog and custom looks | Edit a look used by three tables; delete refused while used |
@@ -133,4 +134,53 @@ Client-only on demo data in the real layout schema; nothing is saved. On the dev
 - **Not in step 1:** saving (2a), drawing outlines, Draw wall, openings and floors in the editor (2b; the demo's shapes come from data), table looks from the catalog onto a table (the inspector's Look does it), custom looks (3a), photos (3b), glTF props (3), real-device measurements (a phone and a tablet the owner uses).
 - **Tests:** `app/features/branches/tests/designer-geometry.test.ts` (contract rules, chairs from seats, wall pieces, normals, snapping, outside-outline, viewpoints), `designer-scene.test.ts` (each model fills its plan footprint; a resized table keeps its leg thickness; one chair per seat; tables on their floors at the plan's positions; rotation agrees between 2D and 3D; walls per edge), `test/e2e/shop-designer.test.ts` (Place on map + pad + undo, drag from the library snapped, T03 moved upstairs and found on the First floor in 3D, cutaway, inside with no Entrance upstairs, Show on plan, the studio, a 390 px phone, dark mode; `SHOP_DESIGNER_SCREENSHOTS=1` keeps screenshots).
 - **Review on staging:** open a branch → Dining tables → Open prototype. Move a table upstairs (inspector → Floor), open View in 3D, find it on its floor; try the same with touch on a tablet, and note the quality line on a real phone and tablet.
+
+## Step 2a: the server (built 2026-11-10)
+
+The layout is saved and read on the server; no screen uses it yet (step 2b). The prototype stays as it was until 2b replaces it. One visible change: dining tables have **Seats** (the table form on the admin and the counter, and each table card: "Main floor · 4 seats").
+
+- **Where:** migration `server/db/migrations/sqlite/0058_shop_layout.sql`; `server/features/branches/branches.schema.ts` (three tables, `seats`), `branches.layout.repository.ts`, `branches.layout.service.ts` (`getLayout`, `saveLayout`, exported by `index.ts`), `branches.errors.ts` (`layoutChanged`, `layoutTablesUnavailable`); routes `server/api/c/[slug]/admin/branches/[branchId]/layout.get.ts` and `layout.put.ts`; `shared/contracts/shop-layout.ts` (`saveLayoutSchema`, `BranchLayout`, `BUILT_IN_LOOK_IDS`, the byte limits) and `shared/contracts/branches.ts` (`seats`); `readValidBody`'s `maxBytes` and `workerBodyLimit` (the route's 768 KB). Archiving a table deletes its placement in the archive's batch (`branches.service.ts`).
+- **The migration is hand-edited.** drizzle-kit rebuilt `dining_tables` to add a table-level `CHECK` (copy, drop, rename with `PRAGMA foreign_keys=OFF`, which D1 ignores), and its copy selected `seats` from the old table, which has none. It is `ALTER TABLE … ADD seats … CHECK (seats between 1 and 20)` instead: the same rule as a column constraint. drizzle-kit then reports no schema changes.
+- **Choices made while building:**
+  - A floor's key is `(tenant_id, branch_id, id)`. The id is the editor's own, unique in its layout only, so two branches can both have a floor called `ground`, and one branch can never write another's floor.
+  - Floors and placements are replaced whole on every save, rather than upserted. It's simpler, and an upsert keyed by a client id could reach another branch's rows.
+  - Archiving a table doesn't change the layout's version. An open editor that still shows the table is refused on save with `LAYOUT_TABLE_UNAVAILABLE` naming it, instead of the whole draft being lost to a version conflict.
+  - Looks are stored as a built-in key now (`look`). Custom looks add their column in step 3a.
+- **Tests:**
+  - `server/features/branches/tests/branches.layout.service.test.ts` (23 tests):
+    - empty layout at version 0, with active tables by label;
+    - save, read back and audit; a whole replace, where a removed floor takes its tables with it;
+    - the tables' rows unchanged (version, QR version and hash);
+    - stale version, plus two races: a first save landing meanwhile (the layout's key) and a save landing meanwhile (the version guard);
+    - archived, another branch's or an unknown table, by position;
+    - a table archived meanwhile (the guard) and deleted meanwhile (the foreign key);
+    - the database refusing a placement in another branch;
+    - archive takes the table off the plan, restore doesn't put it back;
+    - permanent delete cascades;
+    - seats are the table's own, and the database's seats `CHECK`;
+    - an archived branch reads but can't save;
+    - two cafes, through the service and in the repository itself;
+    - a malformed floor is a 400, never a thrown error;
+    - the largest floor fits 64 KB, and one more item is refused;
+    - the largest save fits 768 KB.
+  - `server/tests/d1-limits.test.ts`: every floor full and 200 tables placed, under D1's 100 parameters.
+  - `server/tests/d1-search.test.ts`: the same on real D1, plus a stale save and an archived table refused by D1's batch.
+  - `server/tests/worker-body.test.ts`: the route's limit.
+  - `test/e2e/shop-layout-api.test.ts`, on the built server:
+    - an owner reads, places a table, and a stale save is 409, bad geometry 400;
+    - a 600 KB save is accepted and one over the limit is 413;
+    - a branch manager gets 403;
+    - another cafe's owner gets 403 on our cafe, and 404 with our branch's id at their own address.
+  - `test/e2e/branches.test.ts`: Seats in the add-table form.
+  - `test/e2e/manager-tools.test.ts`: the counter's new table shows "2 seats" from the real server.
+- **Found by the real-server test:** a floor with fewer corners than edges answered 500. Valibot runs every check of a pipe even after one failed, and the door-and-window check read a corner that wasn't there. The step 1 prototype's data was always well formed, so it never hit this. The check now runs only when the lists match: a 400 with the issue. The contract test fails without the fix (a `TypeError`).
+- **Guards checked by removing them:** each of these, removed, makes its test fail:
+  - the version guard;
+  - the active-tables guard;
+  - the repository's tenant filter;
+  - the guard's tenant filter;
+  - the archive's placement delete.
+
+  `interleaved` gained a `skip` count, because the save's own checks read with a batch: without it, the "meanwhile" write landed before the checks and never reached the guards.
+- **Review:** server-only. The owner can see **Seats** on staging: a branch → Dining tables → New table or Edit, and on the counter's Manage → Dining tables.
 

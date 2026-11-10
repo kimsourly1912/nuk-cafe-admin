@@ -3,6 +3,29 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 2a: the server (D273, 2026-11-10)
+
+- The owner approved step 1 on staging (PR #277 merged). Their Android phone draws the 3D view in 23–30 ms a frame. They chose the limits: seats 1–20, floors 2–8 m, at most 10 floors, 64 corners and 200 objects a floor.
+- **Built:**
+  - migration `0058_shop_layout`: `dining_tables.seats`, plus `branch_layouts`, `branch_layout_floors` and `branch_layout_placements`;
+  - `GET`/`PUT /api/c/<slug>/admin/branches/{branchId}/layout` (`branch: ['update']`), saved whole at a version, with 64 KB per floor and a 768 KB body;
+  - `seats` in the table contract, the form (admin and counter) and the card;
+  - archiving a table deletes its placement.
+
+  [Plan → Step 2a](plans/shop-designer.md#step-2a-the-server-built-2026-11-10).
+- **Found while building:**
+  - drizzle-kit wanted to rebuild `dining_tables`, and its copy was broken. The migration is hand-edited to `ADD COLUMN … CHECK`.
+  - `interleaved` fired before the save's own read batch, so the guard tests passed with the guards removed. It now takes a `skip` count.
+  - The real-server test found a 500 for a malformed floor. Valibot keeps running checks after one fails; fixed in the contract, with a test.
+  - Cloudflare's D1 limits page was unreachable from the session (the host is blocked). Local D1 measured instead: SQL text over 100,000 bytes is refused, and bound values aren't counted.
+- **Evidence:**
+  - `pnpm lint` and `pnpm typecheck` clean.
+  - `pnpm test:unit`: 2638 passed, 1 skipped (177 files).
+  - Guard removal: the version guard, the active-tables guard, both tenant filters and the archive's placement delete each make a test fail. The malformed-floor test throws a `TypeError` without its fix.
+  - Real D1: the largest layout saved, and a stale save and an archived table were refused by D1's batch.
+  - Full `pnpm test:e2e` (68 files): 912 passed, 28 failed, all 30–40 s timeouts at a load average of 16–23 on 4 cores. The failures were in `option-sets`, `categories`, `two-factor`, `products` and `google-account`, none touched by this step. Rerun alone, each file passed: 27, 43, 19, 66 and 74 tests. `shop-layout-api`, `branches`, `manager-tools` and `shop-designer` passed in the full run.
+- **Not verified:** a save on staging's D1. The production D1 figures come from Cloudflare's page, which this session couldn't read.
+
 ### Shop designer step 1: the prototype (D273, 2026-11-10)
 
 - Built the client-only prototype on demo data: Design shop (library, SVG plan with snap/turn/pan/zoom, move pad, undo/redo, inspector), View in 3D (three.js 0.187.0 on demand: exterior, cutaway with floors pulled apart, inside a floor at worked-out viewpoints, table card, lists, loading and unavailable states, light/dark) and a furniture studio preview from the owner's three references. Dev and staging only (`shopDesignerPrototype`), owners (`branch: ['update']`), linked from Dining tables. [Plan → Step 1](plans/shop-designer.md#step-1-the-prototype-built-2026-11-10).
@@ -1618,6 +1641,8 @@ Business decisions the build still needs, with the step each blocks. Answered on
   - Pitfall: drizzle-kit **splits an index expression at its commas** (`coalesce(parent_id, '')` became broken SQL, in the migration and the snapshot). Write index expressions without commas (D55 uses two partial indexes).
   - Pitfall: schema changes add a migration (`pnpm nuxt db generate`, then rename it and its journal tag). Only a change `drizzle-kit` would ask about interactively (a rename) was handled by **regenerating** `0000_initial` while nothing is deployed (steps 1.2 and 1.5, D50); after such a regeneration a local `.data/db` must be deleted (dev server stopped). From step 2.1 on, never regenerate.
   - Pitfall (2026-10-29, Linux container, NuxtHub 0.10.8): `pnpm nuxt db generate` can fail with `Could not resolve '#auth/schema'` (its schema build doesn't see that alias), even after `pnpm nuxt prepare`. `nuxt prepare` still writes the full schema to `.nuxt/hub/db/schema.mjs`; generate from it with `pnpm exec drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts`, rename the file and its journal tag, and run the same command again: it must say "No schema changes". Used for `0050_khqr_check_until`.
+  - Pitfall (2026-11-10, `0058_shop_layout`): a table-level `check()` added to an existing table makes drizzle-kit **rebuild the table** (copy into `__new_…`, drop, rename, under `PRAGMA foreign_keys=OFF`, which D1 ignores), and a new column's copy can select a column the old table doesn't have. Read the SQL; write `ALTER TABLE … ADD <column> … CONSTRAINT "<name>" CHECK (…)` instead, then generate again: it must say "No schema changes".
+  - Pitfall (2026-11-10): `interleaved(db, meanwhile)` fires on the first `db.batch`. A service whose checks read with a batch (`saveLayout`'s `layoutRows`) needs `interleaved(db, meanwhile, 1)`, or the "meanwhile" write lands before the checks and the in-batch guard is never tested (removing it still passes).
   - Pitfall: **D1 allows at most 100 bound parameters per statement** (checked on staging: 100 works, 101 fails with "too many SQL variables"); libsql allows 32,766. The test database now refuses more than 100 too (`server/tests/support/db.ts`), so a test at the largest allowed size catches it: add one to `server/tests/d1-limits.test.ts` for every list a statement takes (D62).
   - Pitfall: SQLite's `unixepoch('subsecond')` default can round 1 ms ahead of a JavaScript `Date` taken right after the insert, so "due now" comparisons against a row created a moment ago can miss. In tests, pass an explicit later `now` (the outbox tests do).
   - Account emails locally: without `NUXT_MAIL_RESEND_API_KEY` the dev server prints them (with the link) within a minute; `curl http://localhost:3000/_nitro/tasks/platform:deliver-outbox` sends at once.

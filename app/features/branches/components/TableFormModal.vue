@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * Add a table or change its name and area (D91). Full screen on phones; stays open on an error
- * with the input kept, the server's field errors on their fields. A new table gets its QR code at
- * once. Open via `useOverlay().create(TableFormModal)`; emits `close(table)` with the table as saved.
+ * Add a table or change its name, area and seats (D91; D273: the shop designer draws its chairs).
+ * Full screen on phones; stays open on an error with the input kept, the server's field errors on
+ * their fields. A new table gets its QR code at once. Open via `useOverlay().create(TableFormModal)`; emits `close(table)` with the table as saved.
  */
 import type { DiningTable } from '#shared/contracts/branches'
-import { TABLE_AREA_MAX, TABLE_LABEL_MAX } from '#shared/contracts/branches'
+import { TABLE_AREA_MAX, TABLE_LABEL_MAX, TABLE_SEATS_DEFAULT, TABLE_SEATS_MAX, TABLE_SEATS_MIN } from '#shared/contracts/branches'
 import { useTableMutations } from '../composables/useBranches'
 import type { TablesSurface } from '../composables/useBranches'
 
@@ -18,7 +18,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ 'close': [saved?: DiningTable], 'update:open': [open: boolean] }>()
 
-const state = reactive({ label: props.table?.label ?? '', area: props.table?.area ?? '' })
+const state = reactive({ label: props.table?.label ?? '', area: props.table?.area ?? '', seats: props.table?.seats ?? TABLE_SEATS_DEFAULT })
 const saving = ref(false)
 const { isCompact: fullscreen } = useLayoutContext()
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
@@ -32,22 +32,29 @@ const labelIssue = computed(() => {
   return undefined
 })
 const areaIssue = computed(() => (state.area.trim().length > TABLE_AREA_MAX ? `Max ${TABLE_AREA_MAX} characters` : undefined))
+const seatsIssue = computed(() => {
+  const seats = state.seats
+  if (!Number.isInteger(seats) || seats < TABLE_SEATS_MIN || seats > TABLE_SEATS_MAX) return `${TABLE_SEATS_MIN} to ${TABLE_SEATS_MAX} people`
+  return undefined
+})
 /** The server's answer, until the field changes. */
-const serverIssues = ref<{ label?: string, area?: string }>({})
+const serverIssues = ref<{ label?: string, area?: string, seats?: string }>({})
 const serverError = ref<string>()
 watch(() => state.label, () => (serverIssues.value.label = undefined))
 watch(() => state.area, () => (serverIssues.value.area = undefined))
+watch(() => state.seats, () => (serverIssues.value.seats = undefined))
 
 async function save() {
   touched.value = true
-  if (labelIssue.value || areaIssue.value || saving.value) return
+  if (labelIssue.value || areaIssue.value || seatsIssue.value || saving.value) return
   saving.value = true
   serverError.value = undefined
   const label = state.label.trim()
   const area = state.area.trim() || null
+  const { seats } = state
   const result = props.table
-    ? await update.execute({ table: props.table, body: { label, area } })
-    : await create.execute({ branchId: props.branchId, label, area })
+    ? await update.execute({ table: props.table, body: { label, area, seats } })
+    : await create.execute({ branchId: props.branchId, label, area, seats })
   saving.value = false
   if (result.ok) {
     unsaved.markClean()
@@ -56,8 +63,8 @@ async function save() {
   }
   if (result.status !== 'error') return
   const fieldErrors = result.error.fieldErrors ?? {}
-  serverIssues.value = { label: fieldErrors.label?.[0], area: fieldErrors.area?.[0] }
-  if (!serverIssues.value.label && !serverIssues.value.area) serverError.value = result.error.message
+  serverIssues.value = { label: fieldErrors.label?.[0], area: fieldErrors.area?.[0], seats: fieldErrors.seats?.[0] }
+  if (!serverIssues.value.label && !serverIssues.value.area && !serverIssues.value.seats) serverError.value = result.error.message
 }
 
 useSubmitShortcut(save)
@@ -109,6 +116,19 @@ useSubmitShortcut(save)
             v-model="state.area"
             :disabled="saving"
             autocomplete="off"
+            class="w-full"
+          />
+        </UFormField>
+        <UFormField
+          label="Seats"
+          help="How many people sit here. The shop designer draws as many chairs."
+          :error="serverIssues.seats ?? seatsIssue"
+        >
+          <UInputNumber
+            v-model="state.seats"
+            :min="TABLE_SEATS_MIN"
+            :max="TABLE_SEATS_MAX"
+            :disabled="saving"
             class="w-full"
           />
         </UFormField>

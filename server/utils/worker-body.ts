@@ -1,10 +1,13 @@
 import { IMAGE_MAX_BYTES, PHOTO_UPLOAD_MAX_BYTES } from '#shared/contracts/media'
+import { LAYOUT_MAX_BODY_BYTES } from '#shared/contracts/shop-layout'
 
 /** Nitro 2's Cloudflare adapter buffers bodies before route handlers. Enforce the cap first. */
 export function workerBodyLimit(path: string): number | undefined {
   if (!path.startsWith('/api/')) return undefined
   if (/^\/api\/c\/[^/]+\/admin\/media\/photos\/?$/.test(path)) return PHOTO_UPLOAD_MAX_BYTES
   if (/^\/api\/c\/[^/]+\/admin\/media\/?$/.test(path)) return IMAGE_MAX_BYTES + 64 * 1024
+  // A shop layout is saved whole (D273).
+  if (/^\/api\/c\/[^/]+\/admin\/branches\/[^/]+\/layout\/?$/.test(path)) return LAYOUT_MAX_BODY_BYTES
   return 64 * 1024
 }
 

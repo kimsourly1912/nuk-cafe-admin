@@ -273,15 +273,15 @@ describe('dine-in (Q42)', () => {
   const tokenOf = (qrUrl: string | null) => qrUrl!.split('/').pop()!
 
   it('a table\'s QR token makes it dine-in at that table', async () => {
-    const table = await createTable(db, admin, branchId, { label: 'T12', area: null }, qr)
+    const table = await createTable(db, admin, branchId, { label: 'T12', area: null, seats: 2 }, qr)
     const order = await placed(sokha, { tableToken: tokenOf(table.qrUrl) })
     expect(order).toMatchObject({ orderType: 'dine_in', table: { label: 'T12' } })
   })
 
   it('refuses a token of another branch, an archived table or a made-up token: never pickup instead', async () => {
-    const elsewhere = await createTable(db, admin, otherBranch, { label: 'Z1', area: null }, qr)
+    const elsewhere = await createTable(db, admin, otherBranch, { label: 'Z1', area: null, seats: 2 }, qr)
     await expectApiError(() => place(sokha, { tableToken: tokenOf(elsewhere.qrUrl) }), 409, 'TABLE_UNAVAILABLE')
-    const table = await createTable(db, admin, branchId, { label: 'T3', area: null }, qr)
+    const table = await createTable(db, admin, branchId, { label: 'T3', area: null, seats: 2 }, qr)
     await archiveTable(db, admin, branchId, table.id, { version: table.version }, qr)
     await expectApiError(() => place(sokha, { tableToken: tokenOf(table.qrUrl) }), 409, 'TABLE_UNAVAILABLE')
     await expectApiError(() => place(sokha, { tableToken: 'not-a-token' }), 409, 'TABLE_UNAVAILABLE')
@@ -365,7 +365,7 @@ describe('checkout state at commit', () => {
   })
 
   it('refuses a table archived after validation, preserving dine-in intent', async () => {
-    const table = await createTable(db, admin, branchId, { label: 'Race', area: null }, qr)
+    const table = await createTable(db, admin, branchId, { label: 'Race', area: null, seats: 2 }, qr)
     await rejectAfter(() => archiveTable(db, admin, branchId, table.id, { version: table.version }, qr), 'TABLE_UNAVAILABLE', { tableToken: table.qrUrl!.split('/').pop()! })
   })
 

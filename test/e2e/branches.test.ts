@@ -31,6 +31,7 @@ const tableOf = (id: string, label: string, overrides: Partial<DiningTable> = {}
   branchId: RIVERSIDE.id,
   label,
   area: 'Main floor',
+  seats: 2,
   status: 'active',
   qrUrl: `http://localhost/table/${id.padEnd(22, 'x')}`,
   qrRotatedAt: STAMP,
@@ -355,7 +356,7 @@ describe('dining tables', () => {
     expect(download.suggestedFilename()).toBe('table-01-qr.svg')
   })
 
-  it('adds a table with an area, and refuses a name another table has on its field', async () => {
+  it('adds a table with an area and its seats, and refuses a name another table has on its field', async () => {
     let tries = 0
     const bodies: unknown[] = []
     const { page } = await openTables({
@@ -369,12 +370,15 @@ describe('dining tables', () => {
     const form = page.getByRole('dialog', { name: 'New table' })
     await form.getByLabel('Name').fill('Table 01')
     await form.getByLabel('Area').fill('Main floor')
+    // Two seats unless changed (D273).
+    expect(await form.getByLabel('Seats').inputValue()).toBe('2')
+    await form.getByLabel('Seats').fill('4')
     await form.getByRole('button', { name: 'Add table' }).click()
     await form.getByText('Already used by another table').waitFor()
     await form.getByLabel('Name').fill('Table 02')
     await form.getByRole('button', { name: 'Add table' }).click()
     await toast(page, 'Table "Table 02" added').waitFor()
-    expect(bodies).toEqual([{ label: 'Table 01', area: 'Main floor' }, { label: 'Table 02', area: 'Main floor' }])
+    expect(bodies).toEqual([{ label: 'Table 01', area: 'Main floor', seats: 4 }, { label: 'Table 02', area: 'Main floor', seats: 4 }])
   })
 
   it('a new QR code asks first, then shows the new one to print', async () => {

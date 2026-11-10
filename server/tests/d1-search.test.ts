@@ -14,6 +14,10 @@ import type { Db } from '#server/utils/batch'
 import { deleteOldest, insertAll, requireCount, requireOneChange, runBatch, updateAtVersion, tryGuardedBatch } from '#server/utils/batch'
 import { byId, byName, firstRow, hasAny, inTenant, nextPosition, readPage } from '#server/utils/query'
 import { menuItemVariations, menuOptionSets, menuOptionValues, menuPromotions } from '#server/features/menu/menu.schema'
+import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
+import { getLayout, saveLayout } from '#server/features/branches'
+import { diningTables } from '#server/features/branches/branches.schema'
+import { jsonBytes, largestLayout } from '#server/tests/support/layouts'
 import { migrationFiles, addBranchStaff, createUser, ensureTenant, insertBranch, insertSoldLine } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
 import { branches, user } from '#server/db/tables'
@@ -435,3 +439,24 @@ it('maps media/support snapshots and typed expiry/quota guards on real D1 (D194 
   expect(page.total).toBeGreaterThan(0)
   expect(page.rows).toMatchObject([{ action: 'tenant.create', at: expect.any(Date) }])
 }, 60_000)
+
+describe('the shop layout on real D1 (D273)', { timeout: 60_000, tags: ['slow'] }, () => {
+  it('saves the largest layout: one statement per full floor, every table placed, the guards in D1\'s batch', async () => {
+    const branchId = newId()
+    await insertBranch(db, { id: branchId, name: 'Shophouse', timezone: 'Asia/Phnom_Penh', tenantId: ours })
+    const owner: Actor = { ...ourOwner, userId: (await createUser(db)).id }
+    const tables = Array.from({ length: MAX_BRANCH_TABLES }, (_, n) => ({ id: newId(), tenantId: ours, branchId, label: `T${n}`, qrTokenHash: newId() }))
+    await db.batch(insertAll(db, diningTables, tables) as [never])
+    const input = largestLayout(tables.map(table => table.id))
+    expect(jsonBytes(input.layout.floors[0]!)).toBeGreaterThan(60_000)
+    const saved = await saveLayout(db, owner, branchId, input)
+    expect(saved.floors).toEqual(input.layout.floors)
+    expect(saved.placements).toHaveLength(MAX_BRANCH_TABLES)
+    expect(await getLayout(db, ours, branchId)).toEqual(saved)
+    // A stale save and a table archived meanwhile are refused by D1's batch, writing nothing.
+    await expectApiError(() => saveLayout(db, owner, branchId, input), 409, 'VERSION_CONFLICT')
+    await db.update(diningTables).set({ status: 'archived' }).where(eq(diningTables.id, tables[7]!.id))
+    await expectApiError(() => saveLayout(db, owner, branchId, { ...input, version: 1 }), 409, 'LAYOUT_TABLE_UNAVAILABLE', ['layout.placements.7.tableId'])
+    expect((await getLayout(db, ours, branchId)).version).toBe(1)
+  })
+})

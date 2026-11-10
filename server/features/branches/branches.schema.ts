@@ -2,6 +2,8 @@ import { sql } from 'drizzle-orm'
 import { check, foreignKey, index, integer, primaryKey, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { DINING_TABLE_STATUSES } from '#shared/contracts/branches'
+import { BUILT_IN_LOOK_IDS } from '#shared/contracts/shop-layout'
+import type { FloorGeometry } from '#shared/contracts/shop-layout'
 import { BRANCH_ROLES } from '#shared/contracts/staff'
 import { newId } from '#server/utils/ids'
 
@@ -97,6 +99,8 @@ export const diningTables = sqliteTable('dining_tables', {
   branchId: text().notNull(),
   label: text().notNull(),
   area: text(),
+  // How many people sit at it (D273): the 3D view draws as many chairs. Between 1 and 20.
+  seats: integer().notNull().default(2),
   status: text({ enum: DINING_TABLE_STATUSES }).notNull().default('active'),
   qrVersion: integer().notNull().default(1),
   qrTokenHash: text().notNull(),
@@ -111,4 +115,70 @@ export const diningTables = sqliteTable('dining_tables', {
   // Labels are unique among a branch's active tables, ignoring case ("Table 1" and "table 1").
   uniqueIndex('dining_tables_active_label_idx').on(t.branchId, sql`lower(${t.label})`).where(sql`${t.status} = 'active'`),
   index('dining_tables_branch_idx').on(t.branchId),
+  check('dining_tables_seats_check', sql`${t.seats} between 1 and 20`),
+  // The target of a placement's foreign key: a table placed in its own cafe and branch only (D273).
+  uniqueIndex('dining_tables_branch_id_idx').on(t.tenantId, t.branchId, t.id),
+])
+
+/**
+ * A branch's shop layout (D273, docs/plans/shop-designer.md): one row per branch that has saved
+ * one, holding the lock for the whole layout (D41): every save names `version`, so two owners
+ * editing at once can't overwrite each other unseen. No row: an empty layout at version 0.
+ */
+export const branchLayouts = sqliteTable('branch_layouts', {
+  tenantId: tenantId(),
+  branchId: text().notNull(),
+  version: integer().notNull().default(1),
+  updatedAt: instant().notNull().default(nowMs),
+  updatedBy: text().references(() => authSchema!.user.id, { onDelete: 'set null' }),
+}, t => [
+  primaryKey({ columns: [t.tenantId, t.branchId] }),
+  foreignKey({ name: 'branch_layouts_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),
+])
+
+/**
+ * A floor of the layout, bottom first (`position` 0 is the ground floor). Its drawing (outline,
+ * edges with doors and windows, inside walls, furniture) is one JSON value, checked by the shared
+ * `floorSchema` and at most `LAYOUT_MAX_FLOOR_BYTES`. Its id is the editor's, unique in its layout
+ * only, so the key names the branch. Replaced whole on every save.
+ */
+export const branchLayoutFloors = sqliteTable('branch_layout_floors', {
+  tenantId: tenantId(),
+  branchId: text().notNull(),
+  id: text().notNull(),
+  position: integer().notNull(),
+  name: text().notNull(),
+  heightCm: integer().notNull(),
+  hasRoof: integer({ mode: 'boolean' }).notNull(),
+  geometry: text({ mode: 'json' }).$type<FloorGeometry>().notNull(),
+}, t => [
+  primaryKey({ columns: [t.tenantId, t.branchId, t.id] }),
+  foreignKey({ name: 'branch_layout_floors_layout_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branchLayouts.tenantId, branchLayouts.branchId] }).onDelete('cascade'),
+  uniqueIndex('branch_layout_floors_position_idx').on(t.tenantId, t.branchId, t.position),
+  check('branch_layout_floors_check', sql`${t.position} between 0 and 9 and ${t.heightCm} between 200 and 800`),
+])
+
+/**
+ * Where a real dining table stands (D273). The table's label, seats and QR stay on
+ * `dining_tables`; moving it here never changes its QR. A table is placed at most once (the key),
+ * only in its own cafe and branch (the composite foreign key), and leaves the plan when it is
+ * deleted, its floor is removed (cascade) or it is archived (the archive's batch).
+ */
+export const branchLayoutPlacements = sqliteTable('branch_layout_placements', {
+  tableId: text().primaryKey(),
+  tenantId: tenantId(),
+  branchId: text().notNull(),
+  floorId: text().notNull(),
+  xCm: integer().notNull(),
+  yCm: integer().notNull(),
+  rotation: integer().notNull(),
+  widthCm: integer().notNull(),
+  depthCm: integer().notNull(),
+  /** A built-in look's key, checked by the shared contract; custom looks come in step 3a. */
+  look: text({ enum: BUILT_IN_LOOK_IDS }).notNull(),
+}, t => [
+  foreignKey({ name: 'branch_layout_placements_table_fk', columns: [t.tenantId, t.branchId, t.tableId], foreignColumns: [diningTables.tenantId, diningTables.branchId, diningTables.id] }).onDelete('cascade'),
+  foreignKey({ name: 'branch_layout_placements_floor_fk', columns: [t.tenantId, t.branchId, t.floorId], foreignColumns: [branchLayoutFloors.tenantId, branchLayoutFloors.branchId, branchLayoutFloors.id] }).onDelete('cascade'),
+  index('branch_layout_placements_floor_idx').on(t.tenantId, t.branchId, t.floorId),
+  check('branch_layout_placements_check', sql`${t.rotation} between 0 and 359 and ${t.widthCm} between 40 and 600 and ${t.depthCm} between 40 and 600`),
 ])

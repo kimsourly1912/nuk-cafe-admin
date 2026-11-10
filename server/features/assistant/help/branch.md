@@ -37,7 +37,7 @@ Orders close 15 minutes before closing time ("last orders"). The business day ru
 
 Each table has a QR code. A customer who scans it orders for that table (dine-in); without it, orders are for pickup.
 
-- **New table**: a **Name** (for example "T1", unique in the branch) and an optional **Area** (for example "Terrace"), then **Add table**. Its QR code is ready at once.
+- **New table**: a **Name** (for example "T1", unique in the branch), an optional **Area** (for example "Terrace") and its **Seats** (how many people sit there, 1 to 20; 2 unless you change it), then **Add table**. Its QR code is ready at once. Changing a table's name, area or seats keeps its QR code.
 - **View QR**: shows the code and its link. **Download SVG** (best for printing at any size) or **Download PNG**, print it and put it on the table.
 - **Edit**: change the name or area; the QR code stays the same.
 - **New QR**: makes a new code and **stops the old one at once**. Use it if a code was copied or misused, then print the new one and replace it on the table.

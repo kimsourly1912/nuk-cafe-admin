@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { MAX_BRANCH_TABLES } from './branches'
 
 /**
  * A branch's shop layout (D273, docs/plans/shop-designer.md): floors drawn as outlines with walls,
@@ -9,8 +10,9 @@ import * as v from 'valibot'
  * Units: lengths are whole centimetres, angles whole degrees clockwise in the top-down view (y
  * points down, like the editor's SVG). Ids are client-made strings, unique in their layout.
  *
- * Step 1 (the prototype) validates its demo data with these schemas; step 2a's save route uses the
- * same ones, so every rule here is also a server rule.
+ * Step 1 (the prototype) validates its demo data with these schemas; the save route
+ * (`PUT /api/c/<slug>/admin/branches/{branchId}/layout`, step 2a) uses the same ones, so every rule
+ * here is also a server rule.
  */
 
 export const LAYOUT_MAX_FLOORS = 10
@@ -22,6 +24,14 @@ export const LAYOUT_MAX_EXTENT_CM = 10_000
 export const FLOOR_HEIGHT_MIN_CM = 200
 export const FLOOR_HEIGHT_MAX_CM = 800
 export const FLOOR_NAME_MAX = 30
+/**
+ * A floor's drawing as JSON, at most (D273). One floor is one database value written by its own
+ * statement, so this bounds every value and statement a save writes, whatever the mix of corners,
+ * doors and furniture. A café floor is a few kilobytes.
+ */
+export const LAYOUT_MAX_FLOOR_BYTES = 64 * 1024
+/** The save's body, at most: every floor full, every table placed, with room for the JSON around them. */
+export const LAYOUT_MAX_BODY_BYTES = 768 * 1024
 
 /** The fixed finish palette (D273): looks store keys, never free colors. */
 export const FINISHES = [
@@ -112,15 +122,24 @@ export const floorSchema = v.pipe(
     walls: v.pipe(v.array(innerWallSchema), v.maxLength(LAYOUT_MAX_WALLS_PER_FLOOR)),
     items: v.pipe(v.array(itemSchema), v.maxLength(LAYOUT_MAX_ITEMS_PER_FLOOR)),
   }),
+  // Valibot runs every check of a pipe, even after one failed: a check that reads both lists runs
+  // only when they match, so a malformed floor is a 400, never a thrown error.
   v.check(floor => floor.edges.length === floor.outline.length, 'Every outline edge needs its kind'),
-  v.check(floor => floor.edges.every((edge, index) => openingsFit(edge, edgeLength(floor.outline, index))), 'A door or window does not fit its edge'),
+  v.check(floor => floor.edges.length !== floor.outline.length || floor.edges.every((edge, index) => openingsFit(edge, edgeLength(floor.outline, index))), 'A door or window does not fit its edge'),
   v.check(floor => floor.edges.every(edge => edge.kind !== 'open' || edge.openings.length === 0), 'An open edge has no doors or windows'),
   v.check(floor => floor.edges.every(edge => edge.kind !== 'railing' || edge.openings.every(opening => opening.kind === 'door')), 'A window needs a wall'),
   v.check(floor => Math.abs(signedArea(floor.outline)) >= 10_000, 'The outline has no area'),
+  v.check(floor => jsonBytes(floor) <= LAYOUT_MAX_FLOOR_BYTES, 'This floor holds too much: move some furniture to another floor'),
 )
 export type Floor = v.InferOutput<typeof floorSchema>
+/** What a floor stores as its drawing: everything but its id, name, height and roof. */
+export type FloorGeometry = Pick<Floor, 'outline' | 'edges' | 'walls' | 'items'>
 
-/** Where a real dining table stands. Its look is a built-in key or a custom look's id. */
+/** The built-in table looks (D273); the app's catalog describes each. Custom looks come in step 3a. */
+export const BUILT_IN_LOOK_IDS = ['round-cafe', 'square-bistro', 'oak-rectangle', 'communal', 'green-booth'] as const
+export type BuiltInLookId = typeof BUILT_IN_LOOK_IDS[number]
+
+/** Where a real dining table stands, and how it looks (a built-in look; custom looks in step 3a). */
 export const placementSchema = v.strictObject({
   tableId: idSchema,
   floorId: idSchema,
@@ -129,14 +148,14 @@ export const placementSchema = v.strictObject({
   rotation: rotationSchema,
   width: sizeSchema(40, 600),
   depth: sizeSchema(40, 600),
-  lookId: idSchema,
+  lookId: v.picklist(BUILT_IN_LOOK_IDS, 'Choose a look from the list'),
 })
 export type Placement = v.InferOutput<typeof placementSchema>
 
 export const layoutSchema = v.pipe(
   v.strictObject({
     floors: v.pipe(v.array(floorSchema), v.minLength(1, 'A layout needs a floor'), v.maxLength(LAYOUT_MAX_FLOORS)),
-    placements: v.array(placementSchema),
+    placements: v.pipe(v.array(placementSchema), v.maxLength(MAX_BRANCH_TABLES)),
   }),
   v.check(layout => unique(layout.floors.map(floor => floor.id)), 'Floor ids repeat'),
   v.check(layout => unique(layout.placements.map(placement => placement.tableId)), 'A table is placed twice'),
@@ -145,9 +164,32 @@ export const layoutSchema = v.pipe(
 )
 export type ShopLayout = v.InferOutput<typeof layoutSchema>
 
+/**
+ * `PUT …/layout`: the whole layout and the version read (0 when the branch has none yet). A stale
+ * version is 409 `VERSION_CONFLICT` and nothing is saved; a placed table that is no longer active
+ * in this branch is 409 `LAYOUT_TABLE_UNAVAILABLE` on `layout.placements.<i>.tableId`.
+ */
+export const saveLayoutSchema = v.strictObject({
+  version: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  layout: layoutSchema,
+})
+export type SaveLayoutInput = v.InferOutput<typeof saveLayoutSchema>
+
+/** `GET …/layout`: the saved layout and the branch's active tables, placed or not. */
+export interface BranchLayout {
+  /** 0 until the first save. */
+  version: number
+  updatedAt: string | null
+  floors: Floor[]
+  placements: Placement[]
+  /** The branch's active tables by label; the unplaced ones are the editor's Unplaced list. */
+  tables: LayoutTable[]
+}
+
 /** A table look (built in, or a cafe's custom look from step 3a). Shared by the tables using it. */
 export interface TableLook {
-  id: string
+  /** A built-in look's key; step 3a's custom looks widen it. */
+  id: BuiltInLookId
   name: string
   shape: TableShape
   base: TableBase
@@ -191,6 +233,10 @@ function openingsFit(edge: Edge, length: number): boolean {
     cursor = opening.offset + opening.width
   }
   return cursor <= length + 0.5
+}
+
+function jsonBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length
 }
 
 function unique(values: readonly string[]): boolean {

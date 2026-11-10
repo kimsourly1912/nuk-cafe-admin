@@ -95,7 +95,7 @@ describe('checkout on local workerd/D1 with every migration', { tags: ['slow'] }
     const on = beforeCommit(async () => {
       await setSoldOut(db, b.staff, { variationIds: [b.input.lines[0]!.variationId], soldOut: true })
       await updateBranchSettings(db, b.owner, b.input.branchId, { version: 2, hours: [] })
-      await createTable(db, b.owner, b.input.branchId, { label: 'Other cafe', area: null }, { secret: 'long-enough-test-secret', baseUrl: 'https://example.com' })
+      await createTable(db, b.owner, b.input.branchId, { label: 'Other cafe', area: null, seats: 2 }, { secret: 'long-enough-test-secret', baseUrl: 'https://example.com' })
       await createCategory(db, b.owner, { name: 'Other category', description: '', parentId: null, availabilityRuleIds: [] })
     })
     const placing = placeOrder(on, a.customer, a.input, crypto.randomUUID(), noon)
