@@ -64,22 +64,6 @@ beforeEach(async () => {
   menu = await ourMenu()
 })
 
-describe('moving a category\'s items into a new sub-category (D270)', () => {
-  it('moves only this cafe\'s items, and can\'t take another cafe\'s category as the parent', async () => {
-    const item = (actor: Actor, categoryId: string): CreateItemInput & { categoryId: string } => ({ categoryId, name: 'Croissant', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 100, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
-    const bakery = await createCategory(db, ours, { name: 'Bakery', description: '', parentId: null, availabilityRuleIds: [] })
-    await createItem(db, ours, item(ours, bakery.id))
-    const theirBakery = await createCategory(db, theirs, { name: 'Bakery', description: '', parentId: null, availabilityRuleIds: [] })
-    const theirItem = await createItem(db, theirs, item(theirs, theirBakery.id))
-
-    await expectApiError(() => createCategory(db, theirs, { name: 'Pastry', description: '', parentId: bakery.id, availabilityRuleIds: [], moveItems: 1 }), 422, 'PARENT_NOT_AVAILABLE')
-    await createCategory(db, ours, { name: 'Pastry', description: '', parentId: bakery.id, availabilityRuleIds: [], moveItems: 1 })
-
-    expect(await getCategory(db, OTHER, theirBakery.id)).toMatchObject({ itemCount: 1, childCount: 0 })
-    expect(await getItem(db, OTHER, theirItem.id)).toMatchObject({ categoryId: theirBakery.id, version: theirItem.version })
-  })
-})
-
 describe('menu tenants', () => {
   it('lists none of another tenant\'s records, and reads none of them by id', async () => {
     expect(await listCategories(db, OTHER, { status: 'all' })).toEqual([])

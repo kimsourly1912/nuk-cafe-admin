@@ -8,7 +8,7 @@
  * account (`HomeAccount`) is read in the browser. It brings its own header and footer, like the
  * customer site's pages (the `shop` layout is only the page).
  */
-import storefront from '~/assets/img/cafe-storefront.webp'
+import storefront from '~/assets/img/cafe-storefront.png'
 import HomeAccount from './HomeAccount.vue'
 
 const steps = [

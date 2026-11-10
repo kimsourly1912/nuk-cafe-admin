@@ -400,17 +400,6 @@ export function touchItemStatement(db: Db, tenantId: string, id: string, version
 }
 
 /**
- * Moves every item of a category, whatever its status, into another (D270): an archived one left
- * behind could never be restored, its category no longer a leaf. Positions stay, being per category,
- * and each version goes up, so an edit opened before the move is refused rather than moving it back.
- */
-export function moveCategoryItemsStatement(db: Db, tenantId: string, fromId: string, toId: string, now: Date): Statement {
-  return db.update(menuItems)
-    .set({ categoryId: toId, version: sql`${menuItems.version} + 1`, updatedAt: now })
-    .where(inTenant(menuItems, tenantId, eq(menuItems.categoryId, fromId)))
-}
-
-/**
  * Deletes a draft or archived item still at `version` that no order line sold and no promotion
  * names (D200), checked in the statement itself: follow it with `requireOneChange`. Its option
  * sets, versions (with their sold-out switches), add-on groups and prices, and availability links

@@ -39,8 +39,6 @@ const props = defineProps<{
   currentLabel?: string
   /** Also offer archived categories: for filters, where no new relationship is made. */
   includeArchived?: boolean
-  /** `main`: also offer ones holding menu items, for a new subcategory that takes them (D270). */
-  allowItems?: boolean
 }>()
 
 const model = defineModel<string | undefined>()
@@ -54,8 +52,8 @@ const byId = computed(() => new Map(categories.value.map(c => [c.id, c])))
 /** Categories that have a sub-category, archived or not: never a leaf. */
 const parents = computed(() => new Set(categories.value.flatMap(c => (c.parentId ? [c.parentId] : []))))
 
-/** `main`: top-level and, unless `allowItems`, free of menu items (a category holds subcategories or items, never both). */
-const fitsLevel = (c: MenuCategory) => props.level === 'main' ? c.parentId === null && (props.allowItems || !c.itemCount) : props.level === 'leaf' ? !parents.value.has(c.id) : true
+/** `main`: top-level and free of menu items (a category holds subcategories or items, never both). */
+const fitsLevel = (c: MenuCategory) => props.level === 'main' ? c.parentId === null && !c.itemCount : props.level === 'leaf' ? !parents.value.has(c.id) : true
 
 /** "Coffee › Espresso" for a sub-category, so equal names under different mains stay apart. */
 const labelOf = (c: MenuCategory) => {

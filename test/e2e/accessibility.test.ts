@@ -7,7 +7,7 @@ import type { Promotion } from '#shared/contracts/menu-promotions'
 import type { CheckoutQuote, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import { asNewVisitor, clientHeaders } from './support/client-address'
-import { ADMIN, menuCategoryOf, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, setupE2e, staffOf } from './support/mock-api'
+import { ADMIN, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, setupE2e, staffOf } from './support/mock-api'
 
 // An accessibility check (D152): axe-core's WCAG 2.1 A and AA rules on the main pages, at a
 // desktop and a phone width. Admin pages on mocked data; the customer menu and the counter on the
@@ -108,18 +108,6 @@ describe('accessibility (axe, WCAG 2.1 AA)', () => {
         expect(await findings(page)).toEqual([])
       })
     }
-
-    it(`a category holding items, and the alert when a subcategory will take them (D270) at ${width}px`, async () => {
-      const page = await createPage()
-      await page.setViewportSize({ width, height: 900 })
-      await mockApi(page, { ...ADMIN_MOCKS, 'GET /admin/menu/categories': () => [menuCategoryOf('cat-1', 'Bakery', { itemCount: 5, description: 'Baked every morning.' })] })
-      await page.goto(url('/c/nuk/admin/categories?category=cat-1'), { waitUntil: 'hydration' })
-      await page.getByText('Menu items in Bakery').waitFor()
-      expect(await findings(page)).toEqual([])
-      await page.getByRole('button', { name: 'Add subcategory to Bakery' }).click()
-      await page.getByText('5 menu items will move into this subcategory').waitFor()
-      expect(await findings(page)).toEqual([])
-    })
 
     it(`Payments' Record return dialog (D266) at ${width}px`, async () => {
       const page = await createPage()

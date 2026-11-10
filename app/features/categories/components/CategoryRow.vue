@@ -1,23 +1,23 @@
 <script setup lang="ts">
 /**
- * One subcategory beside its main category (D270, the row layout from D72 and D85). Laid out by its
- * list's `@container`: narrow, a stacked row (name, a meta line, ⋮); from `@xl`, its position, name,
- * contents, availability and ⋮ in line. The name block is the row's one target (page-patterns §2), a
- * Nuxt UI button. What the leading controls show depends on the mode:
- * - browse: the position; the name opens the edit form (active categories);
+ * One category in the tree (D72, D85). Laid out by the tree's container (`@container` on the page):
+ * narrow, a stacked row (name, a meta line, ⋮); from `@2xl`, columns lined up with the page's
+ * headings (category · contains · availability · ⋮, token widths). The name block is the row's one
+ * target (page-patterns §2), a Nuxt UI button. What the leading controls show depends on the mode:
+ * - browse: the expand toggle (parents); the name opens the edit form (active categories);
  * - select: a checkbox, and the name toggles it too (a larger touch target);
- * - reorder: the move controls and the position.
+ * - reorder: Move up / Move down buttons, and from `md` a drag handle (↑/↓ on it also moves).
  * The row itself isn't clickable, so its controls never fight over a click.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
-import { availabilityLabel, contentsLabel, statusBadge } from '../schemas/category-display'
-import CategoryMoveControls from './CategoryMoveControls.vue'
+import { availabilityLabel, contentsLabel } from '../schemas/category-display'
 
 export type CategoryPageMode = 'browse' | 'select' | 'reorder'
 
 const props = defineProps<{
   category: MenuCategory
+  level: 'main' | 'sub'
   mode: CategoryPageMode
   actions: DropdownMenuItem[]
   /** Status badges (All and Archived views; the Active view doesn't repeat "Active"). */
@@ -26,11 +26,16 @@ const props = defineProps<{
   /** Select mode: this row can be selected (its status matches the view). */
   selectable?: boolean
   busy?: boolean
-  /** Its place among its siblings, 1-based, where that means something. */
-  position?: number
+  /** Shown only as the parent of matching subcategories. */
+  contextOnly?: boolean
+  /** Parents: subcategories shown under it, and whether they're expanded. */
+  subCount?: number
+  expanded?: boolean
   /** Reorder mode: whether it can move up / down among its siblings. */
   canMoveUp?: boolean
   canMoveDown?: boolean
+  /** Subcategories: the last row of its group (the connector line stops here). */
+  last?: boolean
   /** Each availability rule's times in words, by rule id (for the tooltip), when loaded. */
   ruleTimes?: ReadonlyMap<string, string>
 }>()
@@ -38,24 +43,29 @@ const props = defineProps<{
 const emit = defineEmits<{
   'open': []
   'select': [value: boolean]
+  'toggle': []
   'move': [by: -1 | 1]
   'handle-keydown': [event: KeyboardEvent]
 }>()
 
 const name = computed(() => props.category.name)
 const archived = computed(() => props.category.status === 'archived')
+const isMain = computed(() => props.level === 'main')
 const availability = computed(() => availabilityLabel(props.category, props.ruleTimes))
-/** "12 items" or "Empty". */
+/** "2 subcategories", "12 items" or "Empty". */
 const contents = computed(() => contentsLabel(props.category))
-/** Narrow meta line: "12 items · Inherits parent". */
+/** Mobile meta line: "2 subcategories · Always". */
 const meta = computed(() => `${contents.value} · ${availability.value.label}`)
-/** Muted text is under AA on the selected row's tint. */
-const supporting = computed(() => props.selected ? 'text-default' : 'text-muted')
+
+/** Status (All and Archived views), next to the name. */
+const statusBadge = computed(() => archived.value
+  ? { label: 'Archived', icon: 'i-lucide-archive', color: 'neutral' as const, variant: 'subtle' as const }
+  : { label: 'Active', icon: 'i-lucide-circle-check', color: 'success' as const, variant: 'subtle' as const })
 
 /** The name is a button when it does something: open (browse, active) or select (select mode). */
 const nameAction = computed<'open' | 'select' | undefined>(() => {
   if (props.mode === 'select') return props.selectable ? 'select' : undefined
-  if (props.mode === 'browse' && !archived.value) return 'open'
+  if (props.mode === 'browse' && !archived.value && !props.contextOnly) return 'open'
   return undefined
 })
 
@@ -67,24 +77,76 @@ function onName() {
 
 <template>
   <div
-    class="flex min-h-14 items-center gap-2 rounded-lg border border-default bg-default px-3 py-2 transition-colors @xl:gap-4"
+    class="relative flex items-center gap-2 px-3 py-2 transition-colors @2xl:gap-4 @2xl:px-4"
     :class="[
+      isMain ? 'min-h-16 bg-elevated/40' : 'min-h-14',
       selected && 'bg-primary/10',
       busy && 'pointer-events-none opacity-50',
     ]"
     :aria-busy="busy || undefined"
   >
-    <div class="flex min-w-0 flex-1 items-center gap-2">
-      <CategoryMoveControls
-        v-if="mode === 'reorder'"
-        :id="category.id"
-        :name="name"
-        level="sub"
-        :can-move-up="canMoveUp"
-        :can-move-down="canMoveDown"
-        @move="by => emit('move', by)"
-        @handle-keydown="emit('handle-keydown', $event)"
-      />
+    <!-- Category: [connector] [reorder | toggle | checkbox] name, description -->
+    <div
+      class="flex min-w-0 flex-1 items-center gap-1 @2xl:gap-2"
+      :class="!isMain && 'pl-8 @2xl:pl-10'"
+    >
+      <template v-if="!isMain">
+        <span
+          aria-hidden="true"
+          class="absolute left-7 top-0 border-l border-dashed border-accented @2xl:left-8"
+          :class="last ? 'h-1/2' : 'h-full'"
+        />
+        <span
+          aria-hidden="true"
+          class="absolute left-7 top-1/2 w-4 border-t border-dashed border-accented @2xl:left-8"
+        />
+      </template>
+
+      <template v-if="mode === 'reorder'">
+        <UButton
+          icon="i-lucide-grip-vertical"
+          color="neutral"
+          variant="ghost"
+          class="hidden cursor-grab @2xl:inline-flex"
+          v-bind="{ [isMain ? 'data-main-handle' : 'data-sub-handle']: category.id }"
+          :aria-label="`Reorder ${name} (drag, or press up or down)`"
+          @keydown="emit('handle-keydown', $event)"
+        />
+        <UButton
+          icon="i-lucide-chevron-up"
+          color="neutral"
+          variant="ghost"
+          :disabled="!canMoveUp"
+          data-move="up"
+          :aria-label="`Move ${name} up`"
+          @click="emit('move', -1)"
+        />
+        <UButton
+          icon="i-lucide-chevron-down"
+          color="neutral"
+          variant="ghost"
+          :disabled="!canMoveDown"
+          data-move="down"
+          :aria-label="`Move ${name} down`"
+          @click="emit('move', 1)"
+        />
+      </template>
+
+      <template v-else-if="isMain">
+        <UButton
+          v-if="subCount"
+          :icon="expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          color="neutral"
+          variant="ghost"
+          :aria-label="`${expanded ? 'Collapse' : 'Expand'} ${name}`"
+          :aria-expanded="expanded"
+          @click="emit('toggle')"
+        />
+        <span
+          v-else
+          class="w-8 shrink-0"
+        />
+      </template>
 
       <div
         v-if="mode === 'select'"
@@ -97,14 +159,6 @@ function onName() {
           @update:model-value="value => emit('select', !!value)"
         />
       </div>
-      <UBadge
-        v-else-if="position"
-        :label="String(position).padStart(2, '0')"
-        color="neutral"
-        variant="subtle"
-        class="shrink-0 tabular-nums"
-        :aria-label="`Position ${position}`"
-      />
 
       <!-- The record target: a button when the name does something, plain text otherwise -->
       <!-- The name is the button, stretched over the block (D152): its name is the text on it -->
@@ -117,78 +171,71 @@ function onName() {
             color="neutral"
             variant="link"
             :tabindex="nameAction === 'select' ? -1 : undefined"
-            class="min-h-6 p-0 text-left font-semibold text-highlighted after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
+            class="min-h-6 p-0 text-left after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
+            :class="isMain ? 'text-base font-semibold text-highlighted' : 'font-normal text-default'"
             @click="onName"
           >
             <span class="line-clamp-2 break-words">{{ name }}</span>
           </UButton>
           <UBadge
             v-if="showStatus"
-            v-bind="statusBadge(category.status)"
+            v-bind="statusBadge"
           />
         </span>
         <span
           v-if="category.description"
-          class="line-clamp-2 max-w-full @xl:line-clamp-1"
-          :class="supporting"
+          class="line-clamp-2 max-w-full text-muted @2xl:line-clamp-1"
         >{{ category.description }}</span>
-        <span
-          class="max-w-full @xl:hidden"
-          :class="supporting"
-        >{{ meta }}</span>
+        <span class="max-w-full truncate text-muted @2xl:hidden">{{ meta }}</span>
       </div>
       <!-- px-2.5: lined up with the names that are buttons (Nuxt UI's button padding) -->
       <div
         v-else
         class="min-w-0 flex-1 px-2.5 py-1"
       >
-        <p class="flex flex-wrap items-center gap-x-2 text-sm">
+        <p class="flex flex-wrap items-center gap-x-2">
           <span
-            class="line-clamp-2 font-semibold break-words"
-            :class="archived ? 'text-muted' : 'text-highlighted'"
+            class="line-clamp-2 break-words text-muted"
+            :class="isMain && 'text-base font-semibold'"
           >{{ name }}</span>
           <UBadge
             v-if="showStatus"
-            v-bind="statusBadge(category.status)"
+            v-bind="statusBadge"
           />
         </p>
         <p
           v-if="category.description"
-          class="line-clamp-2 text-sm text-muted @xl:line-clamp-1"
+          class="line-clamp-2 text-sm text-muted @2xl:line-clamp-1"
         >
           {{ category.description }}
         </p>
-        <p class="text-sm text-muted @xl:hidden">
+        <p class="truncate text-sm text-muted @2xl:hidden">
           {{ meta }}
         </p>
       </div>
     </div>
 
-    <!-- Wide columns -->
-    <span
-      class="hidden w-20 shrink-0 text-sm @xl:block"
-      :class="supporting"
-    >{{ contents }}</span>
+    <!-- Desktop columns -->
+    <span class="hidden w-36 shrink-0 text-sm text-muted @2xl:block">{{ contents }}</span>
     <UTooltip
       :text="availability.full"
       :content="{ side: 'top' }"
     >
       <span
-        class="hidden w-32 min-w-0 shrink-0 items-center gap-1.5 text-sm @xl:flex"
-        :class="availability.unrestricted ? supporting : 'text-default'"
+        class="hidden w-44 min-w-0 shrink-0 items-center gap-1.5 text-sm @2xl:flex"
+        :class="availability.unrestricted ? 'text-muted' : 'text-default'"
       >
         <UIcon
           v-if="!availability.unrestricted"
           name="i-lucide-clock"
-          class="size-4 shrink-0"
-          :class="supporting"
+          class="size-4 shrink-0 text-muted"
         />
         <span class="truncate">{{ availability.label }}</span>
         <span class="sr-only">{{ availability.full }}</span>
       </span>
     </UTooltip>
 
-    <div class="flex w-8 shrink-0 justify-end">
+    <div class="flex w-12 shrink-0 justify-end">
       <UIcon
         v-if="busy"
         name="i-lucide-loader-circle"

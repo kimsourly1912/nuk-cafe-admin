@@ -7,15 +7,12 @@ const route = useRoute()
 const id = computed(() => String(route.params.id))
 // Duplicate on phones: /products/new?copy=<id> (D154).
 const copyOf = computed(() => (typeof route.query.copy === 'string' ? route.query.copy : undefined))
-// Add menu item on the Categories page: /products/new?categoryId=<id> (D270).
-const categoryId = computed(() => (typeof route.query.categoryId === 'string' ? route.query.categoryId : undefined))
 </script>
 
 <template>
   <ProductEditorPage
     :id="id"
-    :key="`${id}:${copyOf ?? ''}:${categoryId ?? ''}`"
+    :key="`${id}:${copyOf ?? ''}`"
     :copy-of="copyOf"
-    :category-id="categoryId"
   />
 </template>

@@ -45,7 +45,7 @@ Body:     Intro sentence (muted)
 | `UTable` | Comparing values across columns, sorting | `/staff`, `/products` (List view) |
 | Card grid (`UCard`, 2 columns from `lg`) | Pictures or a short preview per record | `/products` (Grid), `/options`, `/add-ons` |
 | Full-width agenda cards | Each record has a structured summary read left to right | `/availability` |
-| Two panels | Parent/child data: parents on the left, the chosen one's banner and children beside them (D270) | `/categories` |
+| Tree | Parent/child data | `/categories` |
 
 Opening a record: the record's name/content as a link, or an explicit **Manage/Edit/View** button. The open target and the `⋮` actions trigger are **siblings**; an interactive element is never nested inside another (no button inside a link, no link inside a clickable card). Other actions sit in the `⋮` menu. Archive/Restore follow [ui.md → action hierarchy](./ui.md#9-action-hierarchy-owner-directed).
 
@@ -75,7 +75,7 @@ All 12 · Active 10 · Archived 2
 
 A compact record row has **two sibling targets**, never nested:
 
-1. **The record target:** the record's **name** as a `ULink` (or `NuxtLink`) to its route, or, when the record opens in an overlay, a `UButton` (`color="neutral" variant="link"`), **stretched over the block** that holds the name, the status badge and the meta line (`relative` on the block, `after:absolute after:inset-0` on the link or button, the focus ring on `after:`). The block fills the row (`flex min-w-0 flex-1`) and is tall because of its content (two or three lines: 44px or more), so the whole block is the target ([ui §6](./ui.md#6-density-and-touch-targets)). The link or button holds **only the name**: its accessible name is the text on it (WCAG 2.5.3; a button named "Tea" that also holds the description fails `accessibility.test.ts`, D152). Staff rows, the Categories cards and rows, Menu items cards and the counter's order cards follow it.
+1. **The record target:** the record's **name** as a `ULink` (or `NuxtLink`) to its route, or, when the record opens in an overlay, a `UButton` (`color="neutral" variant="link"`), **stretched over the block** that holds the name, the status badge and the meta line (`relative` on the block, `after:absolute after:inset-0` on the link or button, the focus ring on `after:`). The block fills the row (`flex min-w-0 flex-1`) and is tall because of its content (two or three lines: 44px or more), so the whole block is the target ([ui §6](./ui.md#6-density-and-touch-targets)). The link or button holds **only the name**: its accessible name is the text on it (WCAG 2.5.3; a button named "Tea" that also holds the description fails `accessibility.test.ts`, D152). Staff rows, the Categories tree, Menu items cards and the counter's order cards follow it.
 2. **The actions trigger:** a `UDropdownMenu` (or an `AppDrawer` bottom sheet, by the layout-context rule in [responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)) whose trigger is an icon-only `UButton` (`icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost"`, `aria-label="Actions for <name>"`), at Nuxt UI's default size.
 
 ```vue
@@ -100,7 +100,7 @@ A compact record row has **two sibling targets**, never nested:
 **Examples:**
 - `/staff` (**the reference, D79**): the table becomes rows (name, email, access as one line of text, the Temporary password badge); the name is the record's button on the table too. Copy it for the table→rows rule.
 - `/products`: the grid stays one column; the List view becomes rows.
-- `/categories`: the main categories' cards, then the chosen one pushed over them (D270). A card's name shows that category in every mode, Select too: it's the only way to reach the subcategories. Select and Reorder are one level at a time there too, starting from the cards.
+- `/categories`: already grouped cards per parent on compact (D72).
 - `/availability`: agenda cards stack (D76).
 
 ## 3. Settings

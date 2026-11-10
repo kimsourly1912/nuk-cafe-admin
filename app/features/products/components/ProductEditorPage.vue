@@ -24,15 +24,12 @@ const props = defineProps<{
   id: string
   /** With `new`: Duplicate (D154), a new item filled from this one (`?copy=<id>`). */
   copyOf?: string
-  /** With `new`: the category it starts in (`?categoryId=<id>`, D270). */
-  categoryId?: string
 }>()
 
 const overlay = useOverlay()
 const editor = useItemEditor({
   itemId: props.id === 'new' ? undefined : props.id,
   copyOf: props.id === 'new' ? props.copyOf : undefined,
-  categoryId: props.id === 'new' ? props.categoryId : undefined,
   onLoaded: () => unsaved.markClean(),
   onReloaded: saved => unsaved.markClean(saved),
   // The page may be gone by then: reopen the input in the slide-over, which works on any page.
