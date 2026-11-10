@@ -187,6 +187,15 @@ describe('Reports: Summary', () => {
     await page.getByRole('button', { name: /Try again|Retry/ }).click()
     await page.getByText('No paid orders in this period.').waitFor()
     await page.getByText('Nothing sold in this period.').waitFor()
+
+    // An empty day has no link or button in the scrolling body (no Sales by item): the report itself
+    // is in the tab order, and focused, the keyboard scrolls the body (axe `scrollable-region-focusable`).
+    await page.setViewportSize({ width: 390, height: 700 })
+    const report = page.getByRole('region', { name: 'Summary report' })
+    expect(await report.getAttribute('tabindex')).toBe('0')
+    await report.focus()
+    await page.keyboard.press('End')
+    await expect.poll(() => report.evaluate(el => el.closest('[data-slot="body"]')!.scrollTop)).toBeGreaterThan(0)
   })
 
   it('Download CSV saves the server\'s file with its byte-order mark and the page\'s period', async () => {
