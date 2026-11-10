@@ -1,4 +1,4 @@
-import type { BuiltInLookId, ItemKind } from '#shared/contracts/shop-layout'
+import type { ItemKind } from '#shared/contracts/shop-layout'
 
 /**
  * What the floor plan's editor talks about (D273): what's selected, the plan's tool, and a piece on
@@ -23,7 +23,7 @@ export type PlanMode = 'select' | 'outline' | 'wall'
  * furniture.
  */
 export type PlanGhost
-  = | { kind: 'table', tableId: string | null, lookId: BuiltInLookId, x: number, y: number }
+  = | { kind: 'table', tableId: string | null, lookId: string, x: number, y: number }
     | { kind: 'item', itemKind: ItemKind, x: number, y: number }
 
 /** Whether a selection can be moved and turned (the move pad, arrow keys, R). */

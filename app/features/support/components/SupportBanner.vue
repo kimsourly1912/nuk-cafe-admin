@@ -4,6 +4,7 @@
  * are looking at this cafe as platform support, read-only, until when, with Leave (back to the
  * console). For the cafe's owners while support is allowed: until when, with a link to end it.
  */
+import { ofetch } from 'ofetch'
 import { useAuth } from '~/features/auth'
 
 const { user } = useAuth()
@@ -15,7 +16,8 @@ async function leave() {
   const support = user.value?.support
   if (!support || leaving.value) return
   leaving.value = true
-  await $fetch(`/api/platform/tenants/${support.tenantId}/support/close`, { method: 'POST' }).catch(() => {})
+  // `ofetch`, like the API plugin: `$fetch` types an address against every route of ours.
+  await ofetch(`/api/platform/tenants/${support.tenantId}/support/close`, { method: 'POST' }).catch(() => {})
   window.location.assign(`/platform/cafes/${support.tenantId}`)
 }
 </script>

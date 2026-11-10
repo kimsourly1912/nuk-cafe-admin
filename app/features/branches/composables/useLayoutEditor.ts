@@ -1,8 +1,9 @@
 import * as v from 'valibot'
 import { layoutSchema } from '#shared/contracts/shop-layout'
-import type { BranchLayout, LayoutTable, Placement, ShopLayout } from '#shared/contracts/shop-layout'
+import type { BranchLayout, LayoutTable, Placement, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { BUILT_IN_LOOKS, NEW_TABLE_LOOK } from '../designer/catalog'
 import type { PlanSelection } from '../designer/plan'
-import { fetchBranchLayout, useBranchLayout, useLayoutMutations } from './useBranches'
+import { fetchBranchLayout, useBranchLayout, useLayoutMutations, useLooks } from './useBranches'
 import { useLayoutDraft } from './useLayoutDraft'
 import type { LayoutDraft } from './useLayoutDraft'
 
@@ -11,7 +12,8 @@ import type { LayoutDraft } from './useLayoutDraft'
  * on top of it, and the version the draft started from.
  *
  * - **Saved vs draft.** With nothing unsaved, the draft follows the server (a refetch after a table
- *   change, or another device's save seen on return). With unsaved changes it is kept, and its
+ *   change, or another device's save seen on return). A refetch that brings the same drawing
+ *   keeps the selection and the undo history. With unsaved changes it is kept, and its
  *   save names the version it started from.
  * - **A stale save (409 `VERSION_CONFLICT`)** keeps the draft and offers the choice (frame 6A):
  *   `loadLatest` puts the latest layout in place as one undo step, so undo brings the draft back
@@ -19,6 +21,10 @@ import type { LayoutDraft } from './useLayoutDraft'
  * - **A placed table that is no longer active** (archived or deleted elsewhere) is listed in
  *   `unavailable`; the server refuses the save while it is placed (409
  *   `LAYOUT_TABLE_UNAVAILABLE`), and `removeUnavailable` takes it off the map.
+ * - **Looks** are the built-in ones and the cafe's own (step 3a), loaded with the layout. A placed
+ *   table whose look is neither (deleted elsewhere while this draft used it) is listed in
+ *   `unknownLooks`; the server refuses the save (409 `LAYOUT_LOOK_UNAVAILABLE`), and
+ *   `resetUnknownLooks` gives those tables the default look.
  * - **Leaving with unsaved changes asks first** (`useUnsavedChanges`, the app's guard); Discard
  *   puts the saved layout back.
  *
@@ -34,6 +40,7 @@ export interface LayoutConflict {
 
 export function useLayoutEditor(branchId: string) {
   const query = useBranchLayout(branchId, { immediate: false })
+  const looksQuery = useLooks({ immediate: false })
   const { save: saveMutation } = useLayoutMutations()
   const confirm = useConfirm()
   const draft: LayoutDraft = useLayoutDraft({ floors: [], placements: [] })
@@ -60,6 +67,17 @@ export function useLayoutEditor(branchId: string) {
     return draft.layout.value.placements.filter(placement => !active.has(placement.tableId))
   })
 
+  /** The built-in looks, then the cafe's own by name. */
+  const looks = computed<readonly TableLook[]>(() => [...BUILT_IN_LOOKS, ...(looksQuery.data.value ?? [])])
+  const unknownLooks = computed<Placement[]>(() => {
+    if (!looksQuery.data.value) return []
+    const known = new Set(looks.value.map(look => look.id))
+    return draft.layout.value.placements.filter(placement => !known.has(placement.lookId))
+  })
+  /** The layout and the looks are both here: the editor and the 3D view draw only then. */
+  const ready = computed(() => !!query.data.value && !!looksQuery.data.value)
+  const error = computed(() => (query.data.value ? null : query.error.value) ?? (looksQuery.data.value ? null : looksQuery.error.value))
+
   function start(layout: BranchLayout) {
     applied = layout
     version.value = layout.version
@@ -73,6 +91,13 @@ export function useLayoutEditor(branchId: string) {
 
   watch(query.data, (layout) => {
     if (!layout || layout === applied || unsaved.isDirty.value) return
+    // The same drawing again (a refetch after a table or a look changed): the selection and the
+    // undo history stay. Only its tables are news, and those are read from the query.
+    if (applied && isSameFormValue(layout.floors, draft.layout.value.floors) && isSameFormValue(layout.placements, draft.layout.value.placements)) {
+      applied = layout
+      version.value = layout.version
+      return
+    }
     start(layout)
   }, { immediate: true })
 
@@ -96,6 +121,8 @@ export function useLayoutEditor(branchId: string) {
       // What was sent is saved; anything changed while it was on its way is still unsaved.
       unsaved.markClean(sent)
       query.data.value = result.data
+      // Which looks the saved tables use changed with it (a look in use can't be deleted).
+      if (looksQuery.data.value?.length) void looksQuery.refresh()
       return true
     }
     if (result.status !== 'error') return false
@@ -106,12 +133,21 @@ export function useLayoutEditor(branchId: string) {
     }
     // A placed table left the branch: refetch its tables, so the editor names it.
     if (result.error.code === 'LAYOUT_TABLE_UNAVAILABLE') void query.refresh()
+    // A look was deleted: refetch the looks, so the editor names the tables that used it.
+    if (result.error.code === 'LAYOUT_LOOK_UNAVAILABLE') void looksQuery.refresh()
     return false
   }
 
-  /** Loads the layout the first time it's needed. */
+  /** Loads the layout and the looks the first time they're needed. */
   function load() {
     if (query.status.value === 'idle') void query.execute()
+    if (looksQuery.status.value === 'idle') void looksQuery.execute()
+  }
+
+  /** Loads again whichever of the two failed. */
+  function retry() {
+    if (!query.data.value) void query.refresh()
+    if (!looksQuery.data.value) void looksQuery.refresh()
   }
 
   function save() {
@@ -162,6 +198,17 @@ export function useLayoutEditor(branchId: string) {
     })
   }
 
+  /** Gives the tables whose look is gone the default look, at their own size. */
+  function resetUnknownLooks() {
+    const gone = new Set(unknownLooks.value.map(placement => placement.tableId))
+    if (!gone.size) return
+    draft.change((layout) => {
+      for (const placement of layout.placements) {
+        if (gone.has(placement.tableId)) placement.lookId = NEW_TABLE_LOOK
+      }
+    })
+  }
+
   /** Shows a floor in Design shop, and clears the selection when it's another floor's. */
   function showFloor(id: string) {
     if (floorId.value === id) return
@@ -184,7 +231,13 @@ export function useLayoutEditor(branchId: string) {
     draft,
     version: readonly(version),
     tables,
+    looks,
+    ready,
+    error,
+    retry,
     unavailable,
+    unknownLooks,
+    resetUnknownLooks,
     conflict: readonly(conflict),
     problem: readonly(problem),
     dismissProblem: () => void (problem.value = null),

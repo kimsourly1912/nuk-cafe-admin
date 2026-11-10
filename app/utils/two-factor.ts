@@ -1,3 +1,4 @@
+import { ofetch } from 'ofetch'
 import { ApiError } from './api-error'
 
 /**
@@ -33,7 +34,9 @@ export async function verifyTwoFactorCode(method: TwoFactorMethod, code: string,
   try {
     const body = { code: code.replace(/\s+/g, '') }
     if (send) await send(path, body)
-    else await $fetch(`/api/auth${path}`, { method: 'POST', body, retry: 0, timeout: 30_000 })
+    // `ofetch`, like `useAuthRequest`: `$fetch` types a built address against every route of ours,
+    // and with enough routes the type check gives up on it.
+    else await ofetch(`/api/auth${path}`, { method: 'POST', body, retry: 0, timeout: 30_000 })
   }
   catch (error) {
     const apiError = ApiError.from(error)

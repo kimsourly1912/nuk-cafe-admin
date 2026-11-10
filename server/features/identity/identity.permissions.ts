@@ -76,6 +76,8 @@ export const tenantStatements = {
   support: ['grant'],
   // KHQR payments the order couldn't take (D266): owners only, never a support visit.
   payment: ['review'],
+  // The cafe's own table looks for the shop designer (D273): cafe-wide, owners only.
+  furniture: ['manage'],
 } as const
 
 export const tenantAc = createAccessControl(tenantStatements)
@@ -94,6 +96,7 @@ export const tenantRoles = {
     assistant: ['use'],
     support: ['grant'],
     payment: ['review'],
+    furniture: ['manage'],
   }),
   // Works at some branches (branch_staff); nothing tenant-wide.
   member: tenantAc.newRole({}),

@@ -75,12 +75,15 @@ describe('sample data', () => {
     const backend = menuBackend({ steps: 4 })
     const { page } = await open(backend.handlers)
     await menuCard(page).getByText('Current state: menu is empty.').waitFor()
+    // Large, not the default (Standard): a page that ignored the choice would send `standard`.
+    // Large shows as chosen before Load reads it.
     await menuCard(page).getByRole('radio', { name: /Large/ }).click()
-    await menuCard(page).getByRole('radio', { name: /Standard/ }).click()
+    await menuCard(page).getByRole('radio', { name: /Large/, checked: true }).waitFor()
     await menuCard(page).getByRole('button', { name: 'Load sample menu' }).click()
     await menuCard(page).getByText('Sample menu loaded').waitFor()
     expect(backend.calls()).toBe(4)
-    expect(backend.bodies).toEqual(Array.from({ length: 4 }, () => ({ size: 'standard' })))
+    // Every step at the size chosen, even though the server's answers name its own run's size.
+    expect(backend.bodies).toEqual(Array.from({ length: 4 }, () => ({ size: 'large' })))
     await menuCard(page).getByText('8 categories, 3 option sets, 4 add-on groups, 2 rules, 40 items (35 published, 3 drafts, 2 archived)').waitFor()
     await menuCard(page).getByText('The menu already has data. Reset it to load again.').waitFor()
     expect(await menuCard(page).getByRole('button', { name: /Load/ }).count()).toBe(0)

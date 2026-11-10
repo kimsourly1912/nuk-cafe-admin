@@ -2,8 +2,8 @@ import { sql } from 'drizzle-orm'
 import { check, foreignKey, index, integer, primaryKey, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { DINING_TABLE_STATUSES } from '#shared/contracts/branches'
-import { BUILT_IN_LOOK_IDS } from '#shared/contracts/shop-layout'
-import type { FloorGeometry } from '#shared/contracts/shop-layout'
+import { BUILT_IN_LOOK_IDS, LOOK_CHAIRS, TABLE_BASES, TABLE_SHAPES } from '#shared/contracts/shop-layout'
+import type { FloorGeometry, LookFinishes } from '#shared/contracts/shop-layout'
 import { BRANCH_ROLES } from '#shared/contracts/staff'
 import { newId } from '#server/utils/ids'
 
@@ -159,6 +159,32 @@ export const branchLayoutFloors = sqliteTable('branch_layout_floors', {
 ])
 
 /**
+ * A cafe's own table look (D273, step 3a): cafe-wide, shared by every table placed with it in any
+ * branch. Its shape, chairs and finishes are the look's; a placement keeps its own size and turn.
+ * Edited at a `version`. A look in use can't be deleted (the placements' foreign key restricts).
+ */
+export const customFurnitureLooks = sqliteTable('custom_furniture_looks', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  tenantId: tenantId(),
+  name: text().notNull(),
+  shape: text({ enum: TABLE_SHAPES }).notNull(),
+  base: text({ enum: TABLE_BASES }).notNull(),
+  chair: text({ enum: LOOK_CHAIRS }).notNull(),
+  /** Palette keys by part, checked by the shared `lookFinishesSchema`. */
+  finishes: text({ mode: 'json' }).$type<LookFinishes>().notNull(),
+  defaultWidthCm: integer().notNull(),
+  defaultDepthCm: integer().notNull(),
+  version: integer().notNull().default(1),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  // The target of a placement's foreign key: a table looks like one of its own cafe's looks only.
+  uniqueIndex('custom_furniture_looks_tenant_id_idx').on(t.tenantId, t.id),
+  uniqueIndex('custom_furniture_looks_name_idx').on(t.tenantId, sql`lower(${t.name})`),
+  check('custom_furniture_looks_check', sql`${t.defaultWidthCm} between 40 and 600 and ${t.defaultDepthCm} between 40 and 600`),
+])
+
+/**
  * Where a real dining table stands (D273). The table's label, seats and QR stay on
  * `dining_tables`; moving it here never changes its QR. A table is placed at most once (the key),
  * only in its own cafe and branch (the composite foreign key), and leaves the plan when it is
@@ -174,11 +200,16 @@ export const branchLayoutPlacements = sqliteTable('branch_layout_placements', {
   rotation: integer().notNull(),
   widthCm: integer().notNull(),
   depthCm: integer().notNull(),
-  /** A built-in look's key, checked by the shared contract; custom looks come in step 3a. */
-  look: text({ enum: BUILT_IN_LOOK_IDS }).notNull(),
+  /** A built-in look's key, or `customLookId`: exactly one of the two (the check below). */
+  look: text({ enum: BUILT_IN_LOOK_IDS }),
+  customLookId: text(),
 }, t => [
   foreignKey({ name: 'branch_layout_placements_table_fk', columns: [t.tenantId, t.branchId, t.tableId], foreignColumns: [diningTables.tenantId, diningTables.branchId, diningTables.id] }).onDelete('cascade'),
   foreignKey({ name: 'branch_layout_placements_floor_fk', columns: [t.tenantId, t.branchId, t.floorId], foreignColumns: [branchLayoutFloors.tenantId, branchLayoutFloors.branchId, branchLayoutFloors.id] }).onDelete('cascade'),
+  foreignKey({ name: 'branch_layout_placements_look_fk', columns: [t.tenantId, t.customLookId], foreignColumns: [customFurnitureLooks.tenantId, customFurnitureLooks.id] }).onDelete('restrict'),
   index('branch_layout_placements_floor_idx').on(t.tenantId, t.branchId, t.floorId),
+  // Which tables use a look: its usage count, and the restrict check when it is deleted.
+  index('branch_layout_placements_look_idx').on(t.tenantId, t.customLookId),
   check('branch_layout_placements_check', sql`${t.rotation} between 0 and 359 and ${t.widthCm} between 40 and 600 and ${t.depthCm} between 40 and 600`),
+  check('branch_layout_placements_look_check', sql`(${t.look} is null) <> (${t.customLookId} is null)`),
 ])

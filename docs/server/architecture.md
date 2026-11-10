@@ -193,7 +193,7 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
-The return value is the response body. Nuxt infers its type, so `$fetch('/api/admin/menu/items/…', { method: 'PATCH' })` is typed in the app without a hand-written response type.
+The return value is the response body. The app reads it through `apiFetch<T>` with the shared contract's type. **Don't call Nitro's `$fetch` in app or server code** (D273, step 3a): it types an address against every route, and with this many routes TypeScript gives up on the first call it checks (TS2589, "excessively deep"). Use `apiFetch` for our API and `ofetch` for anything else (an outside address, Better Auth's routes).
 
 ## Conventions
 

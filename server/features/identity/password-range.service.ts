@@ -1,3 +1,4 @@
+import { ofetch } from 'ofetch'
 import type { PasswordRange } from '#shared/contracts/identity'
 import { passwordCheckUnavailable } from './identity.errors'
 
@@ -6,7 +7,9 @@ export type FetchText = (url: string, options: { headers: Record<string, string>
 
 const RANGE_URL = 'https://api.pwnedpasswords.com/range/'
 
-const fetchText: FetchText = (url, options) => $fetch<string>(url, { ...options, responseType: 'text', retry: 0 })
+// `ofetch`, not Nitro's `$fetch`: that one types a URL against every route of ours, which this
+// outside address isn't (and with enough routes the type check gives up on a plain string).
+const fetchText: FetchText = (url, options) => ofetch<string, 'text'>(url, { ...options, responseType: 'text', retry: 0 })
 
 /**
  * The leaked passwords whose SHA-1 starts with `prefix` (5 upper-case hex characters), from Have I

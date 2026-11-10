@@ -523,3 +523,43 @@ describe('0030_platform_console', () => {
     for (const file of files.slice(at + 1)) await applyMigration(client, file)
   })
 })
+
+describe('0059_custom_looks', () => {
+  it('keeps every placed table with its built-in look through the rebuild, then enforces the look rules', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0059_custom_looks.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    await client.batch([
+      `insert into organization (id, name, slug, created_at) values ('t1', 'NUK Cafe', 'nuk', 1), ('t2', 'Brown Bean', 'brown-bean', 1)`,
+      `insert into branches (id, tenant_id, name, timezone) values ('b1', 't1', 'Riverside', 'Asia/Phnom_Penh')`,
+      `insert into dining_tables (id, tenant_id, branch_id, label, qr_token_hash) values ('d1', 't1', 'b1', 'T1', 'h1'), ('d2', 't1', 'b1', 'T2', 'h2'), ('d3', 't1', 'b1', 'T3', 'h3')`,
+      `insert into branch_layouts (tenant_id, branch_id) values ('t1', 'b1')`,
+      `insert into branch_layout_floors (tenant_id, branch_id, id, position, name, height_cm, has_roof, geometry) values ('t1', 'b1', 'ground', 0, 'Ground', 300, 1, '{}')`,
+      `insert into branch_layout_placements (table_id, tenant_id, branch_id, floor_id, x_cm, y_cm, rotation, width_cm, depth_cm, look) values ('d1', 't1', 'b1', 'ground', 100, 200, 90, 80, 80, 'round-cafe'), ('d2', 't1', 'b1', 'ground', 300, 200, 0, 140, 75, 'green-booth')`,
+    ])
+    await applyMigration(client, files[at]!)
+    const rows = (await client.execute('select table_id, floor_id, x_cm, y_cm, rotation, width_cm, depth_cm, look, custom_look_id from branch_layout_placements order by table_id')).rows.map(row => ({ ...row }))
+    expect(rows).toEqual([
+      { table_id: 'd1', floor_id: 'ground', x_cm: 100, y_cm: 200, rotation: 90, width_cm: 80, depth_cm: 80, look: 'round-cafe', custom_look_id: null },
+      { table_id: 'd2', floor_id: 'ground', x_cm: 300, y_cm: 200, rotation: 0, width_cm: 140, depth_cm: 75, look: 'green-booth', custom_look_id: null },
+    ])
+
+    const look = (id: string, tenant: string) => `insert into custom_furniture_looks (id, tenant_id, name, shape, base, chair, finishes, default_width_cm, default_depth_cm) values ('${id}', '${tenant}', 'Walnut long', 'rect', 'legs', 'none', '{}', 160, 80)`
+    await client.batch([look('ours', 't1'), look('theirs', 't2')])
+    const place = (looks: string) => client.execute(`insert into branch_layout_placements (table_id, tenant_id, branch_id, floor_id, x_cm, y_cm, rotation, width_cm, depth_cm, look, custom_look_id) values ('d3', 't1', 'b1', 'ground', 0, 0, 0, 80, 80, ${looks})`)
+    // Exactly one of the two; a custom look of the same cafe only; a look in use stays.
+    await expect(place(`'round-cafe', 'ours'`)).rejects.toThrow(/CHECK/)
+    await expect(place(`null, null`)).rejects.toThrow(/CHECK/)
+    await expect(place(`null, 'theirs'`)).rejects.toThrow(/FOREIGN KEY/)
+    await place(`null, 'ours'`)
+    await expect(client.execute(`delete from custom_furniture_looks where id = 'ours'`)).rejects.toThrow(/FOREIGN KEY/)
+    // The rebuilt table kept its other rules: a table once, and its floor's cascade.
+    await expect(client.execute(`insert into branch_layout_placements (table_id, tenant_id, branch_id, floor_id, x_cm, y_cm, rotation, width_cm, depth_cm, look) values ('d1', 't1', 'b1', 'ground', 0, 0, 0, 80, 80, 'communal')`)).rejects.toThrow(/UNIQUE|PRIMARY/)
+    await client.execute(`delete from branch_layout_floors where id = 'ground'`)
+    expect((await client.execute('select count(*) as n from branch_layout_placements')).rows[0]!.n).toBe(0)
+    await client.execute(`delete from custom_furniture_looks where id = 'ours'`)
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+})

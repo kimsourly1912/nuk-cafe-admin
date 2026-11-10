@@ -181,7 +181,7 @@ describe('placed tables', () => {
     const t1 = await table('T1')
     const other = await addBranch()
     await save({ version: 0, layout: { floors: [floor('ground')], placements: [] } }, db, actor, other)
-    await expect(db.batch(replaceLayoutStatements(db, TEST_TENANT, other, [], [{ tableId: t1.id, floorId: 'ground', xCm: 0, yCm: 0, rotation: 0, widthCm: 80, depthCm: 80, look: 'round-cafe' }]) as Batch)).rejects.toThrow(/foreign key/i)
+    await expect(db.batch(replaceLayoutStatements(db, TEST_TENANT, other, [], [{ tableId: t1.id, floorId: 'ground', xCm: 0, yCm: 0, rotation: 0, widthCm: 80, depthCm: 80, look: 'round-cafe', customLookId: null }]) as Batch)).rejects.toThrow(/foreign key/i)
   })
 
   it('archiving a placed table takes it off the plan; restoring doesn\'t put it back; the layout keeps its version', async () => {
@@ -251,7 +251,7 @@ describe('tenants', () => {
 
   it('the repository reads and writes none of their rows with our cafe\'s id', async () => {
     const ours = await layoutRows(db, TEST_TENANT, theirBranch)
-    expect(ours).toEqual({ layout: undefined, floors: [], placements: [], tables: [] })
+    expect(ours).toEqual({ layout: undefined, floors: [], placements: [], tables: [], lookIds: [] })
     const found = await layoutRows(db, OTHER, theirBranch)
     expect(found.floors).toHaveLength(1)
     expect(found.placements).toHaveLength(1)

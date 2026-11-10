@@ -4,9 +4,10 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { DiningTable } from '#shared/contracts/branches'
-import type { BranchLayout, Point } from '#shared/contracts/shop-layout'
+import type { BranchLayout, CustomLook, Point } from '#shared/contracts/shop-layout'
 import { setupE2e } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
+import { allowBrowserProblems } from './support/browser-problems'
 
 await setupE2e()
 
@@ -291,16 +292,87 @@ describe('the shop designer on saved layouts', () => {
     expect(layout.floors[0]!.edges.every(edge => edge.kind === 'wall')).toBe(true)
   })
 
-  it('finds a placed table on its floor in 3D and goes back to it on the plan', { timeout: 60_000 }, async () => {
+  it('finds a placed table on its floor in 3D, shows its QR code, and goes back to it on the plan', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page, lab.branchId, '3d')
     await drawn(page)
     const lists = page.getByRole('complementary', { name: 'Navigate the building' })
     await lists.getByTestId('list-table-L1').click()
-    await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('Ground floor')
+    const card = page.getByTestId('table-card')
+    await expect.poll(() => card.textContent()).toContain('Ground floor')
     await shot(page, '3d-L1')
-    await page.getByTestId('table-card').getByRole('button', { name: 'Show on plan' }).click()
+
+    // The table's own QR code: the one the Table list shows.
+    const l1 = (await branchTables(page)).find(table => table.label === 'L1')!
+    await card.getByRole('button', { name: 'View QR' }).click()
+    const dialog = page.getByRole('dialog', { name: 'QR code: L1' })
+    expect(await dialog.getByLabel('QR link').inputValue()).toBe(l1.qrUrl)
+    await page.keyboard.press('Escape')
+    await expect.poll(() => dialog.count()).toBe(0)
+
+    await card.getByRole('button', { name: 'Show on plan' }).click()
     await expect.poll(() => page.getByTestId('selected-table').textContent()).toContain('L1')
+
+    // The same table stays picked on the way back, and a change not saved yet is drawn and named.
+    expect(await page.getByTestId('building-unsaved').count()).toBe(0)
+    await page.getByRole('button', { name: 'Move up 25 cm' }).click()
+    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await drawn(page)
+    await page.getByTestId('building-unsaved').waitFor()
+    await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('L1')
+    expect(await saveButton(page).isEnabled()).toBe(true)
+  })
+
+  it('without 3D graphics: a calm message, the lists and the table card still work, Try again draws it', { timeout: 60_000 }, async () => {
+    // three.js reports the missing context itself before the view shows its message.
+    allowBrowserProblems(/THREE\.WebGLRenderer: Error creating WebGL context/, /THREE\.WebGLRenderer: A WebGL context could not be created/)
+    const page = await signedIn()
+    await page.addInitScript(() => {
+      const original = HTMLCanvasElement.prototype.getContext
+      Object.assign(window, { webglOff: true })
+      HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...rest: unknown[]) {
+        if ((window as { webglOff?: boolean }).webglOff && kind.startsWith('webgl')) return null
+        return Reflect.apply(original, this, [kind, ...rest])
+      } as typeof original
+    })
+    await openDesign(page, lab.branchId, '3d')
+    const view = page.getByRole('main', { name: '3D view' })
+    await view.getByText('3D view is not available here').waitFor()
+    await shot(page, '3d-unavailable')
+
+    const lists = page.getByRole('complementary', { name: 'Navigate the building' })
+    await lists.getByTestId('list-table-L1').click()
+    const card = page.getByTestId('table-card')
+    await expect.poll(() => card.textContent()).toContain('Ground floor')
+    await card.getByRole('button', { name: 'View QR' }).click()
+    await page.getByRole('dialog', { name: 'QR code: L1' }).waitFor()
+    await page.keyboard.press('Escape')
+
+    await view.getByRole('button', { name: 'Try again' }).click()
+    await view.getByText('3D view is not available here').waitFor()
+    await page.evaluate(() => Object.assign(window, { webglOff: false }))
+    await view.getByRole('button', { name: 'Try again' }).click()
+    await drawn(page)
+    expect(await view.getByText('3D view is not available here').count()).toBe(0)
+    await expect.poll(() => card.textContent()).toContain('L1')
+  })
+
+  it('3D on a phone: the lists in a drawer, the table card above the controls, no sideways scrolling', { timeout: 60_000 }, async () => {
+    const page = await signedIn(390, 844)
+    await openDesign(page, lab.branchId, '3d')
+    await drawn(page)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.getByRole('button', { name: 'Floors and tables' }).click()
+    await page.getByRole('dialog').getByTestId('list-table-L1').click()
+    const card = page.getByTestId('table-card')
+    await expect.poll(() => card.textContent()).toContain('Ground floor')
+    await expect.poll(() => page.getByRole('dialog').count()).toBe(0)
+    const box = (await card.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(390)
+    await shot(page, 'phone-3d')
+    await card.getByRole('button', { name: 'Show on plan' }).click()
+    await plan(page).getByTestId('plan-table-L1').waitFor()
   })
 
   it('works on a phone: the library in a slide-over, no sideways scrolling', async () => {
@@ -311,5 +383,89 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Library' }).click()
     await page.getByRole('dialog').getByText('Unplaced tables').waitFor()
     await shot(page, 'phone-library')
+  })
+
+  it('custom looks: a new look from the library goes on a table, is edited, and deletes once no table uses it', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').waitFor()
+    const library = page.getByRole('complementary', { name: 'Library' })
+    const form = () => page.getByRole('dialog', { name: /look$/i })
+
+    // New look: a name is required; a rectangle on four legs in walnut.
+    await library.getByRole('button', { name: 'New look' }).click()
+    await form().getByRole('button', { name: 'Save look' }).click()
+    await form().getByText('Name is required').waitFor()
+    await form().getByLabel('Name').fill('Walnut window')
+    await form().getByRole('group', { name: 'Shape' }).getByRole('button', { name: 'Rectangle' }).click()
+    await form().getByRole('group', { name: 'Base' }).getByRole('button', { name: 'Four legs' }).click()
+    await form().getByRole('group', { name: 'Tabletop' }).getByRole('button', { name: 'Walnut' }).click()
+    await form().getByLabel('Width (cm)').fill('150')
+    await shot(page, 'look-form')
+    await form().getByRole('button', { name: 'Save look' }).click()
+    await page.getByText('Look "Walnut window" saved').first().waitFor()
+    await library.getByTestId('look-custom-Walnut window').waitFor()
+
+    // The same name again is refused on its field.
+    await library.getByRole('button', { name: 'New look' }).click()
+    await form().getByLabel('Name').fill('walnut WINDOW')
+    await form().getByRole('button', { name: 'Save look' }).click()
+    await form().getByText('Already used by another look').waitFor()
+    await form().getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('button', { name: 'Discard', exact: true }).click()
+    await expect.poll(() => form().count()).toBe(0)
+
+    // L1 takes it from its panel, and the layout saves with it.
+    await plan(page).getByTestId('plan-table-L1').click()
+    await page.getByRole('combobox', { name: 'Look' }).click()
+    await page.getByRole('option', { name: 'Walnut window' }).click()
+    await save(page)
+    const looks = () => page.evaluate(path => fetch(path).then(response => response.json()), `/api/c/${lab.slug}/admin/furniture-looks`) as Promise<CustomLook[]>
+    const [look] = await looks()
+    expect(look).toMatchObject({ name: 'Walnut window', shape: 'rect', base: 'legs', defaultWidth: 150, tables: 1, finishes: { top: 'walnut' } })
+    const l1 = (await branchTables(page)).find(table => table.label === 'L1')!
+    expect((await savedLayout(page)).placements.find(placement => placement.tableId === l1.id)).toMatchObject({ lookId: look!.id, width: 150 })
+
+    // Editing it says who uses it and can't delete it; the rename shows in the library.
+    await library.getByRole('button', { name: 'Edit the look Walnut window' }).click()
+    await form().getByTestId('look-used').getByText('Used by 1 table').waitFor()
+    expect(await form().getByRole('button', { name: 'Delete' }).isDisabled()).toBe(true)
+    await form().getByLabel('Name').fill('Walnut bar')
+    await form().getByRole('button', { name: 'Save', exact: true }).click()
+    await library.getByTestId('look-custom-Walnut bar').waitFor()
+
+    // Back on a built-in look and saved, the look deletes after a confirmation.
+    await page.getByRole('combobox', { name: 'Look' }).click()
+    await page.getByRole('option', { name: 'Round café table' }).click()
+    await save(page)
+    await library.getByRole('button', { name: 'Edit the look Walnut bar' }).click()
+    await form().getByRole('button', { name: 'Delete' }).click()
+    await page.getByRole('dialog', { name: 'Delete the look "Walnut bar"?' }).getByRole('button', { name: 'Delete look' }).click()
+    await page.getByText('Look "Walnut bar" deleted').first().waitFor()
+    await expect.poll(() => library.getByTestId('look-custom-Walnut bar').count()).toBe(0)
+    expect(await looks()).toEqual([])
+  })
+
+  it('a look deleted elsewhere while a draft uses it is named, and the standard look lets the layout save', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    const created = await page.evaluate(path => fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Short lived', shape: 'round', base: 'pedestal', chair: 'bar-stool', finishes: { top: 'white-marble', base: 'brass' }, defaultWidth: 70, defaultDepth: 70 }) }).then(response => response.json()), `/api/c/${lab.slug}/admin/furniture-looks`) as CustomLook
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').click()
+    await page.getByRole('combobox', { name: 'Look' }).click()
+    await page.getByRole('option', { name: 'Short lived' }).click()
+    // Deleted on another device: no saved layout uses it yet.
+    const deleted = await page.evaluate(path => fetch(path, { method: 'DELETE' }).then(response => response.status), `/api/c/${lab.slug}/admin/furniture-looks/${created.id}?version=1`)
+    expect(deleted).toBe(204)
+
+    const before = (await savedLayout(page)).version
+    await saveButton(page).click()
+    const warning = page.getByTestId('layout-unknown-looks')
+    await warning.getByText('The look of L1 was deleted.').waitFor()
+    expect((await savedLayout(page)).version).toBe(before)
+    await warning.getByRole('button', { name: 'Use Round café table' }).click()
+    await expect.poll(() => warning.count()).toBe(0)
+    await save(page)
+    const l1 = (await branchTables(page)).find(table => table.label === 'L1')!
+    expect((await savedLayout(page)).placements.find(placement => placement.tableId === l1.id)).toMatchObject({ lookId: 'round-cafe' })
   })
 })

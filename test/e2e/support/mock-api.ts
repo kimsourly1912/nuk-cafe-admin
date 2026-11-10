@@ -73,7 +73,7 @@ export const ADMIN: AdminSession = {
     'menu:read', 'menu:write', 'menu:publish', 'media:upload', 'branch:create', 'branch:read', 'branch:update',
     'staff:read', 'staff:create', 'staff:update', 'staff:disable', 'staff:reset-password', 'voucherTemplate:manage',
     'loyalty:adjust', 'settings:manage', 'report:read', 'report:export', 'audit:read', 'assistant:use', 'support:grant',
-    'payment:review',
+    'payment:review', 'furniture:manage',
   ],
   mustChangePassword: false,
   twoFactorEnabled: false,
@@ -169,6 +169,8 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /admin/branches/{id}': ({ url: request }) => ({ id: request.pathname.split('/').pop(), name: 'Branch', timezone: 'Asia/Phnom_Penh', address: null, phone: null, status: 'active', hours: [], openNow: false, today: 1, version: 1 }),
   // No shop layout yet (D273): Design shop shows the starters.
   'GET /admin/branches/{id}/layout': () => ({ version: 0, updatedAt: null, floors: [], placements: [], tables: [] }),
+  // No custom table looks (D273, step 3a): the built-in ones only.
+  'GET /admin/furniture-looks': () => [],
   'GET /admin/menu/items': () => pageOf([]),
   'GET /admin/exchange-rates': () => ({ current: null, history: [] }),
   'GET /admin/khqr': () => ({ version: 1, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: ['USD'], updatedAt: null, updatedBy: null, automaticCheck: false, token: null, tokenStorage: false }),

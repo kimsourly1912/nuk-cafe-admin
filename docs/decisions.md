@@ -3077,3 +3077,17 @@ Verification: migrated SQLite forced interleavings, populated local workerd/D1 r
   - **The layout loads when a designer view first opens**, not with the table list.
 
   [Plan → Step 2b](plans/shop-designer.md#step-2b-the-editor-built-2026-11-10).
+- **Step 2c (2026-11-10):** the viewer on real tables: the 3D table card's **View QR** and **Show on plan**, one selected table for Design shop and View in 3D, a picked table brought into view (the cutaway when the exterior hides it), and **Try again** when 3D is unavailable or its graphics context was lost. Decided:
+  - **View in 3D shows the editor's layout, unsaved changes included, and says so** ("Unsaved changes shown"). Owners open it from the editor's page, so a saved-only copy would be a second state with no reader. A later view without a draft (the counter) shows the saved layout.
+  - **No ambient occlusion**: it needs a post-processing pipeline on every frame for a look the owner approved without it. Quality levels stay pixel ratio, shadows and lamps, chosen from the measured frame time.
+  - **The floor and table lists and the table card work without 3D.**
+
+  [Plan → Step 2c](plans/shop-designer.md#step-2c-the-viewer-built-2026-11-10).
+- **Step 3a (2026-11-10):** a cafe's own table looks (`custom_furniture_looks`, cafe-wide, at most 50, edited at a version), behind the new tenant permission `furniture: ['manage']`. Decided:
+  - **A look stores what the 3D builders draw** (shape, base, chairs, finishes by part), not the first draft's main and accent finish: step 1 built looks by part and the owner approved that.
+  - **A placement names a built-in look or a custom one, exactly one** (a `CHECK`), and the custom one by a composite foreign key with **restrict**: the database refuses another cafe's look and the delete of a look in use. `branch_layout_placements` is rebuilt for it (migration `0059_custom_looks`).
+  - **Looks are their own list**, not part of a layout's answer. A look deleted under an unsaved draft is refused on save (409 `LAYOUT_LOOK_UNAVAILABLE`) and the editor offers the standard look.
+  - **A refetch that brings the same drawing keeps the editor's selection and undo history** (amends step 2b's "the draft follows the server").
+  - **Raw `$fetch` is gone from the app and server code** (4 calls, now `ofetch`): with these routes added, TypeScript gave up (TS2589) on whichever `$fetch` call it checked first, because Nitro types an address against every route. `apiFetch` was already built on `ofetch` for this reason.
+
+  [Plan → Step 3a](plans/shop-designer.md#step-3a-custom-looks-built-2026-11-10).

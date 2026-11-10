@@ -1,4 +1,5 @@
 import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
+import { MAX_CUSTOM_LOOKS } from '#shared/contracts/shop-layout'
 import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const BranchErrorCodes = {
@@ -12,6 +13,10 @@ export const BranchErrorCodes = {
   QR_NOT_CONFIGURED: 'QR_NOT_CONFIGURED',
   TABLE_HAS_ORDERS: 'TABLE_HAS_ORDERS',
   LAYOUT_TABLE_UNAVAILABLE: 'LAYOUT_TABLE_UNAVAILABLE',
+  LAYOUT_LOOK_UNAVAILABLE: 'LAYOUT_LOOK_UNAVAILABLE',
+  LOOK_NAME_TAKEN: 'LOOK_NAME_TAKEN',
+  LOOK_LIMIT: 'LOOK_LIMIT',
+  LOOK_IN_USE: 'LOOK_IN_USE',
 } as const
 
 export const branchNotFound = () => notFound('This branch')
@@ -77,6 +82,36 @@ export const layoutTablesUnavailable = (positions: number[]) =>
     : `${positions.length} tables on this plan were archived or removed meanwhile. Take them off the plan and save again.`, {
     fieldErrors: Object.fromEntries(positions.map(index => [`layout.placements.${index}.tableId`, ['Archived or removed meanwhile']])),
   })
+
+/**
+ * A save gives tables a look that isn't a built-in one or one of this cafe's custom looks (deleted
+ * meanwhile, or another cafe's). Named by their place in the save, like the tables above.
+ */
+export const layoutLooksUnavailable = (positions: number[]) =>
+  apiError(409, BranchErrorCodes.LAYOUT_LOOK_UNAVAILABLE, positions.length === 1
+    ? 'A table on this plan uses a look that was deleted. Choose another look for it and save again.'
+    : `${positions.length} tables on this plan use a look that was deleted. Choose another look for them and save again.`, {
+    fieldErrors: Object.fromEntries(positions.map(index => [`layout.placements.${index}.lookId`, ['This look was deleted']])),
+  })
+
+export const lookNotFound = () => notFound('This look')
+
+export const lookChanged = () => versionConflict('This look')
+
+export const lookNameTaken = (name: string) =>
+  apiError(409, BranchErrorCodes.LOOK_NAME_TAKEN, `There is already a look named "${name}".`, {
+    fieldErrors: { name: ['Already used by another look'] },
+  })
+
+export const lookLimit = () =>
+  apiError(409, BranchErrorCodes.LOOK_LIMIT, `A cafe can have at most ${MAX_CUSTOM_LOOKS} custom looks. Delete one you don't use first.`)
+
+/** A delete of a look placed tables still use: `tables` are some of them, `total` all. */
+export function lookInUse(tables: { label: string, branch: string }[], total: number) {
+  const names = tables.map(table => `${table.label} (${table.branch})`).join(', ')
+  const more = total - tables.length
+  return apiError(409, BranchErrorCodes.LOOK_IN_USE, `This look is used by ${names}${more > 0 ? ` and ${more} more` : ''}. Give ${total === 1 ? 'that table' : 'those tables'} another look first.`)
+}
 
 /** A deployed server without `NUXT_QR_SECRET` (docs/server/operations.md → Configuration). */
 export const qrNotConfigured = () =>

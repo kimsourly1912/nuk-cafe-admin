@@ -5,7 +5,7 @@ import type { StageOptions } from './stage'
 import { createStage, tween } from './stage'
 
 /**
- * The furniture studio's preview (the owner's references, 2026-11-10): one piece on a turntable,
+ * The look form's preview (the owner's furniture studio references, 2026-11-10): one piece on a turntable,
  * in 3D or seen from above as the plan draws it.
  */
 
