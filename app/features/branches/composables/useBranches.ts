@@ -1,5 +1,5 @@
 import type { BranchPause, BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
-import type { BranchLayout, SaveLayoutInput } from '#shared/contracts/shop-layout'
+import type { BranchLayout, CreateLookInput, CustomLook, SaveLayoutInput } from '#shared/contracts/shop-layout'
 
 const base = (branchId: string) => `/admin/branches/${branchId}`
 
@@ -212,4 +212,60 @@ export function useLayoutMutations() {
     },
   )
   return { save }
+}
+
+/**
+ * The cafe's own table looks (D273, step 3a), for every branch: `branches:looks`. A look's change
+ * invalidates `branches`, so open layouts and this list follow.
+ */
+export function useLooks(options: { immediate?: boolean } = {}) {
+  return useApiQuery('branches:looks', () => apiFetch<CustomLook[]>('/admin/furniture-looks'), options)
+}
+
+const lookLock = (input: { look: CustomLook }) => `furniture-look:${input.look.id}`
+
+export function useLookMutations() {
+  const create = useMutation(
+    (input: CreateLookInput) => apiFetch<CustomLook>('/admin/furniture-looks', { method: 'POST', body: input }),
+    {
+      id: 'branches:look-create',
+      key: input => input.name.toLowerCase(),
+      successMessage: look => `Look "${look.name}" saved`,
+      errorMessage: input => `Could not save "${input.name}"`,
+      invalidate: ['branches'],
+    },
+  )
+
+  const update = useMutation(
+    (input: { look: CustomLook, body: CreateLookInput }) => apiFetch<CustomLook>(`/admin/furniture-looks/${input.look.id}`, { method: 'PATCH', body: { version: input.look.version, ...input.body } }),
+    {
+      id: 'branches:look-update',
+      key: lookLock,
+      lock: lookLock,
+      successMessage: look => `Look "${look.name}" saved`,
+      errorMessage: input => `Could not save "${input.look.name}"`,
+      invalidate: ['branches'],
+    },
+  )
+
+  /** Deletes a look no placed table uses; the server refuses one in use and names its tables (409 `LOOK_IN_USE`). */
+  const remove = useMutation(
+    (input: { look: CustomLook }) => apiFetch<null>(`/admin/furniture-looks/${input.look.id}`, { method: 'DELETE', query: { version: input.look.version } }),
+    {
+      id: 'branches:look-delete',
+      key: lookLock,
+      lock: lookLock,
+      confirm: input => ({
+        title: `Delete the look "${input.look.name}"?`,
+        description: 'No table uses it. It can\'t be restored.',
+        confirmLabel: 'Delete look',
+        danger: true,
+      }),
+      successMessage: (_, input) => `Look "${input.look.name}" deleted`,
+      errorMessage: input => `Could not delete "${input.look.name}"`,
+      invalidate: ['branches'],
+    },
+  )
+
+  return { create, update, remove }
 }

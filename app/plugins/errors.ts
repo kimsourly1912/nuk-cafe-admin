@@ -1,3 +1,5 @@
+import { ofetch } from 'ofetch'
+
 /**
  * Safety net for errors nobody caught (e.g. an event handler without try/catch).
  * Handled errors never reach this. Prefer explicit `useNotify().error(...)` at the call site.
@@ -12,7 +14,8 @@ export default defineNuxtPlugin({
     const notify = useNotify()
     const reporter = import.meta.client
       ? createClientErrorReporter({
-          send: report => void $fetch('/api/client-errors', { method: 'POST', body: report, keepalive: true }).catch(() => {}),
+          // `ofetch`, like the API plugin: `$fetch` types an address against every route of ours.
+          send: report => void ofetch('/api/client-errors', { method: 'POST', body: report, keepalive: true }).catch(() => {}),
           page: () => window.location.pathname,
           build: useRuntimeConfig().app.buildId,
         })

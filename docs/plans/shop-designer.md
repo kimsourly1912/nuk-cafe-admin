@@ -1,6 +1,6 @@
 # Shop designer plan
 
-Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) reviewed by the owner on staging** (2026-11-10: "everything is so perfect"; their Android phone draws the 3D view in 23–30 ms a frame). **Step 2a (server) merged** (2026-11-10, [below](#step-2a-the-server-built-2026-11-10)). **Step 2b (the editor on saved layouts) merged** (2026-11-10, [below](#step-2b-the-editor-built-2026-11-10)). **Step 2c (the viewer) built, in review** (2026-11-10, [below](#step-2c-the-viewer-built-2026-11-10)). Next: step 3a (looks).
+Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) reviewed by the owner on staging** (2026-11-10: "everything is so perfect"; their Android phone draws the 3D view in 23–30 ms a frame). **Step 2a (server) merged** (2026-11-10, [below](#step-2a-the-server-built-2026-11-10)). **Step 2b (the editor on saved layouts) merged** (2026-11-10, [below](#step-2b-the-editor-built-2026-11-10)). **Step 2c (the viewer) built, in review** (2026-11-10, [below](#step-2c-the-viewer-built-2026-11-10)). **Step 3a (looks) built, in review** (2026-11-10, [below](#step-3a-custom-looks-built-2026-11-10)). Next: step 3b (photos).
 
 Design references:
 
@@ -44,7 +44,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 | `branch_layouts` | `tenant_id`, `branch_id` (PK), `version`, `updated_at`, `updated_by` (→ user, set null) | FK `(tenant_id, branch_id)` → `branches` restrict. The save lock (D41): every save names `version`. No row: version 0 |
 | `branch_layout_floors` | `tenant_id`, `branch_id`, `id` (PK: the editor's id, unique in its layout), `position`, `name`, `height_cm`, `has_roof`, `geometry` (JSON: outline polygon, edges with kind and openings, inside walls, furniture) | FK `(tenant_id, branch_id)` → `branch_layouts` cascade. `unique (tenant_id, branch_id, position)`. `CHECK position between 0 and 9`, `height_cm between 200 and 800` (owner, 2026-11-10) |
 | `branch_layout_placements` | `table_id` (PK), `tenant_id`, `branch_id`, `floor_id`, `x_cm`, `y_cm`, `rotation`, `width_cm`, `depth_cm`, `look` (built-in key) | **PK `table_id`**: a table appears once. FK `(tenant_id, branch_id, table_id)` → `dining_tables` cascade (same cafe and branch, enforced by the database). FK `(tenant_id, branch_id, floor_id)` → floors cascade. `CHECK rotation 0–359, width and depth 40–600`. Step 3a adds `custom_look_id` → custom looks **restrict** and `CHECK` exactly one of `look` / `custom_look_id` (a rebuild: nothing references this table) |
-| `custom_furniture_looks` | `id`, `tenant_id`, `name`, `base_shape`, `default_width_cm`, `default_depth_cm`, `height_cm`, `main_finish`, `accent_finish`, `photo_id`, `version` | Cafe-wide (every branch). `photo_id` → `media_assets` via the media attach/release statements |
+| `custom_furniture_looks` (migration `0059_custom_looks`) | `id`, `tenant_id`, `name`, `shape`, `base`, `chair`, `finishes` (JSON by part), `default_width_cm`, `default_depth_cm`, `version` | Cafe-wide (every branch). Unique name per cafe; unique `(tenant_id, id)` as the placements' FK target. As built in step 3a ([why it differs from the first draft](#step-3a-custom-looks-built-2026-11-10)). Step 3b adds `photo_id` → `media_assets` |
 
 - Geometry JSON is validated by one Valibot schema in `shared/contracts/shop-layout.ts` used by the editor and the server: whole numbers in bounds, at most 10 floors, 64 outline corners, 200 objects and 100 inside walls per floor, openings inside their edge and not overlapping, and **at most 64 KB of JSON per floor** (`LAYOUT_MAX_FLOOR_BYTES`). Each floor is written by its own statement as one bound value, so no statement carries more than one floor. The save route takes up to 768 KB (`LAYOUT_MAX_BODY_BYTES`: ten full floors and 200 placements); other routes keep 64 KB.
 - **D1 limits (2026-11-10):** Cloudflare's limits page couldn't be read from the build session. Measured on local D1 (workerd, wrangler's platform proxy): SQL text over 100,000 bytes is refused (`SQLITE_TOOBIG`); bound values aren't counted (2.1 MB passed). The largest layout saves on local D1 (`server/tests/d1-search.test.ts`). **To verify on staging:** the first real save (a few KB) and, once, a large one.
@@ -101,7 +101,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 | 2a. Server (**built**) | Migration, `seats`, repository, service, layout GET/PUT, version conflict, two-cafe isolation test, size limits | Server tests incl. guard removal; real-server check |
 | 2b. Editor (**built**) | Floors, outline, edges and openings, Draw wall, placing real tables, save and reopen, the 409 flow, floor menu, outside-outline flags | Recreate an L-shaped café with a patio and a three-floor shophouse; move a staging table and scan its original QR |
 | 2c. Viewer (**built**) | Saved layouts in 3D, table card with View QR and Show on plan, quality levels | Find each table from the lists and in 3D on phone, tablet, desktop |
-| 3a. Looks | Starter catalog and custom looks | Edit a look used by three tables; delete refused while used |
+| 3a. Looks (**built**) | Starter catalog and custom looks | Edit a look used by three tables; delete refused while used |
 | 3b. Photos | Look photos via `media_assets` attach/release | Photo shows in the picker and table details |
 | 3c. Pilot | Pilot with a real café; prioritize more furniture from what the owner reaches for | The owner recreates part of their café and explores it without help |
 
@@ -254,3 +254,40 @@ A branch's **Dining tables** tab has three views: **Table list**, **Design shop*
   - a 390 px phone: the lists in a drawer, the table card inside the screen, Show on plan, no sideways scrolling.
 - **Not verified:** real devices. The e2e browser draws with a software renderer (about 1 s a frame, quality low), so it proves the flow, not the speed or the look on a GPU. A lost graphics context is exercised only through Try again after a failed start, not by a real phone dropping it.
 - **Review on staging:** on a phone, a tablet and a desktop, open a branch → Dining tables → View in 3D. Find each table from **Floors and tables** and by tapping it; open its QR code and scan it; press Show on plan. Note the quality line on each device. On the phone, leave the tab in the background for a few minutes and come back: the building is still there, or the message offers Try again.
+
+## Step 3a: custom looks (built 2026-11-10)
+
+A cafe can save its own table looks and use them in every branch. A look is shared: editing it changes every table placed with it; a look in use can't be deleted.
+
+- **Where:**
+  - server: migration `0059_custom_looks`; `branches.schema.ts` (`customFurnitureLooks`, the placements' `customLookId`); `branches.looks.repository.ts`, `branches.looks.service.ts` (`listLooks`, `createLook`, `updateLook`, `deleteLook`); the layout save in `branches.layout.service.ts`; routes `server/api/c/[slug]/admin/furniture-looks/`; the tenant permission `furniture: ['manage']` (owners);
+  - contract: `shared/contracts/shop-layout.ts` (`createLookSchema`, `updateLookSchema`, `CustomLook`, `isBuiltInLook`, `MAX_CUSTOM_LOOKS`; a placement's `lookId` is a built-in key or a custom look's id);
+  - app: `LookFormModal.vue` (the prototype's furniture studio as a form), `useLooks` and `useLookMutations` (`useBranches.ts`), `useLayoutEditor` (looks, `unknownLooks`), `DesignShopEditor` (New look, the pencil, Edit look, Save as new look).
+- **API** (`furniture: ['manage']`, owners):
+
+  | Route | Notes |
+  |---|---|
+  | `GET …/admin/furniture-looks` | The cafe's looks by name, each with `tables`: how many placed tables use it, in every branch |
+  | `POST …/admin/furniture-looks` | `createLookSchema`. 409 `LOOK_NAME_TAKEN` (on `name`), 409 `LOOK_LIMIT` past 50 |
+  | `PATCH …/admin/furniture-looks/{id}` | The whole look again with `version`. 409 `VERSION_CONFLICT`, `LOOK_NAME_TAKEN` |
+  | `DELETE …/admin/furniture-looks/{id}?version=` | 409 `LOOK_IN_USE` while a saved layout uses it; the message names up to 5 tables with their branch |
+  | `PUT …/layout` | + 409 `LAYOUT_LOOK_UNAVAILABLE` on `layout.placements.<i>.lookId` for a look that is neither built in nor this cafe's |
+- **What the owner can do:** **New look** under Table looks (name, Round / Rectangle / Booth, size, Pedestal / Four legs, chairs, a finish per part, a live 3D or top-view preview); the pencil on a custom look or **Edit look** in a table's panel; **Save as new look** in a table's panel (starts from that table's look and gives the new one to that table); **Delete** in the form, enabled only when no saved layout uses the look.
+- **Decided while building:**
+  - **A look stores what the builders draw**: `shape`, `base`, `chair` and finishes by part (`top`, `base`, `frame`, `seat`). The first draft of the data model listed `base_shape`, a main and an accent finish and a height. Step 1 built looks by part, the owner approved that studio, and tables have one height, so the table matches the code instead.
+  - **A placement has `look` or `custom_look_id`, exactly one** (a `CHECK`), with a composite foreign key `(tenant_id, custom_look_id)` → the look, **restrict**. The database itself refuses another cafe's look and the delete of a look in use. `branch_layout_placements` was rebuilt for it (copy, drop, rename): SQLite can't add a composite foreign key in place, and nothing references the table. The old Worker still works on the new table during a deploy (it writes `look` only).
+  - **Custom looks are their own list** (`branches:looks`), not part of the layout's answer: they are cafe-wide and change on their own. The editor loads both before it draws.
+  - **A look deleted while an unsaved draft uses it** is refused on save, the looks are read again, and the editor names the tables ("The look of L1 was deleted") with **Use Round café table**.
+  - **A refetch that brings the same drawing keeps the selection and the undo history.** Before, any refetch with nothing unsaved started the draft over; editing a look refetches the layout, which dropped the selected table.
+  - **Editing a look keeps each table's size.** The look's size is what a newly placed table starts with.
+  - **`furniture: ['manage']`** as the plan named it, although only owners hold it today like `branch: ['update']`: looks are cafe-wide, so a later counter role for layouts would not get it by accident.
+- **Not in 3a:** the look's photo (3b); custom chairs or fixtures (the prototype's studio previewed them; nothing saves them); a looks page outside the editor; more starter looks (3c, from what the owner reaches for).
+- **Tests:**
+  - `server/features/branches/tests/branches.looks.service.test.ts` (19): create, list with use counts, audit; the name in any capitals; the limit and its race; the size `CHECK`; edit at a version and its race; delete unused, in use (named with branches), in use meanwhile (the foreign key), stale; a look free again after its tables leave; custom and built-in looks on a save; an unknown look by position; a look deleted meanwhile; the exactly-one `CHECK`; two cafes through the service, the database and the repository.
+  - `server/tests/migrations.test.ts` (`0059_custom_looks`): placed tables survive the rebuild with their look; the new and the kept rules hold.
+  - `server/tests/d1-search.test.ts`: on real local D1, a name clash, a look deleted under a save and a look placed under a delete are refused by D1's batch.
+  - `test/e2e/shop-layout-api.test.ts`: the routes over HTTP, a manager and another cafe's owner refused.
+  - `test/e2e/shop-designer.test.ts` (11 in the file): a new look from the library, the name clash on its field, on a table and saved, edited (used by 1 table, Delete disabled), deleted after its table left; a look deleted elsewhere under a draft.
+- **Guards checked by removing them:** the create's limit guard, the edit's and the delete's version guards, the delete's foreign-key answer, the repository's tenant filters (read, list, update), and the save's answer for a look deleted meanwhile: each removed makes a test fail. The save's own check for unknown looks can be removed with no test failing, because the foreign key refuses the same save; it stays for the plain case (no failed batch).
+- **Review on staging:** Design shop → New look; give it to three tables in two branches and save. Edit the look: all three change in the plan and in 3D. Try to delete it: refused, with the tables named. Give them another look, save, delete it.
+

@@ -3,6 +3,25 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 3a: custom table looks (D273, 2026-11-10)
+
+- **Built:**
+  - server: `custom_furniture_looks` (cafe-wide, at most 50, a version), list / create / edit / delete under the new `furniture: ['manage']`, a placement that names a built-in look or a custom one (migration `0059_custom_looks` rebuilds `branch_layout_placements`), the layout save's `LAYOUT_LOOK_UNAVAILABLE`;
+  - editor: **New look** (the prototype's furniture studio as a form with a live preview), the pencil and **Edit look**, **Save as new look**, **Delete** when unused, and "The look of … was deleted" with **Use Round café table**.
+
+  [Plan → Step 3a](plans/shop-designer.md#step-3a-custom-looks-built-2026-11-10).
+- **Found while building:**
+  - Four new routes pushed Nitro's typed `$fetch` past TypeScript's limit: TS2589 on whichever raw `$fetch` call was checked first (fixing one moved the error to the next). The four raw calls (password range, two-factor verify, client error report, support Leave) now use `ofetch`, like `apiFetch` already did. Server architecture names the rule.
+  - Saving a layout didn't refresh the looks' use counts, so a look just placed still offered Delete. The editor reads the looks again after a save.
+  - Editing a look refetched the layout, which reset the selected table and the undo history. A refetch that brings the same drawing now keeps both.
+- **Evidence:**
+  - `pnpm lint`, `pnpm typecheck` clean; `pnpm audit --audit-level high`: none high.
+  - `pnpm test:unit`: 2690 passed, 1 skipped (179 files), with `branches.looks.service.test.ts` (19), the `0059_custom_looks` migration test over existing rows, and the looks test on real local D1.
+  - Guards removed one at a time (the limit guard, both version guards, the delete's foreign-key answer, three tenant filters, the save's answer for a look deleted meanwhile): each made a test fail. The save's own unknown-look check is backed by the foreign key, so removing it fails nothing.
+  - Full `pnpm test:e2e` (3 workers): 68 files, 946 passed, with `shop-designer.test.ts` (11) and `shop-layout-api.test.ts` (4) on the built server.
+- **Not verified:** the migration on staging's D1 (local D1 and the row-preserving test only); real devices.
+- How to verify: on staging, Design shop → New look, give it to tables in two branches, save both; edit the look (both change); delete is refused with the tables named until they take another look. A migration that rebuilds a table: write it by hand without the foreign-key pragmas and add a test in `server/tests/migrations.test.ts` with rows in the table.
+
 ### Shop designer step 2c: the viewer (D273, 2026-11-10)
 
 - Step 2b merged (PR #280). **Built:**

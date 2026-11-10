@@ -4,7 +4,7 @@ import type { Db, Statement } from '#server/utils/batch'
 import { chunk, insertAll, requireCount } from '#server/utils/batch'
 import { inTenant } from '#server/utils/query'
 import { activeTable } from './branches.repository'
-import { branchLayoutFloors, branchLayoutPlacements, branchLayouts, diningTables } from './branches.schema'
+import { branchLayoutFloors, branchLayoutPlacements, branchLayouts, customFurnitureLooks, diningTables } from './branches.schema'
 
 // --- Row types ---
 
@@ -25,7 +25,9 @@ export interface PlacementRow {
   rotation: number
   widthCm: number
   depthCm: number
-  look: BuiltInLookId
+  /** A built-in look's key, or `customLookId`: exactly one of the two. */
+  look: BuiltInLookId | null
+  customLookId: string | null
 }
 
 export interface LayoutRows {
@@ -35,6 +37,8 @@ export interface LayoutRows {
   placements: PlacementRow[]
   /** The branch's active tables; the service sorts them by label. */
   tables: LayoutTable[]
+  /** The cafe's custom look ids: what a placement may name besides a built-in look. */
+  lookIds: string[]
 }
 
 // --- Column lists and conditions ---
@@ -60,17 +64,18 @@ const placementColumns = {
   widthCm: branchLayoutPlacements.widthCm,
   depthCm: branchLayoutPlacements.depthCm,
   look: branchLayoutPlacements.look,
+  customLookId: branchLayoutPlacements.customLookId,
 }
 
 // --- Reads ---
 
 /**
  * The branch's layout, its floors bottom first, its placements and its active tables, in one batch
- * (one snapshot). Uses the layout's and floors' keys, branch_layout_placements_floor_idx and
- * dining_tables_branch_idx.
+ * (one snapshot), with the cafe's custom look ids. Uses the layout's and floors' keys,
+ * branch_layout_placements_floor_idx and dining_tables_branch_idx.
  */
 export async function layoutRows(db: Db, tenantId: string, branchId: string): Promise<LayoutRows> {
-  const [layouts, floors, placements, tables] = await db.batch([
+  const [layouts, floors, placements, tables, looks] = await db.batch([
     db.select({ version: branchLayouts.version, updatedAt: branchLayouts.updatedAt }).from(branchLayouts)
       .where(ofBranch(branchLayouts, tenantId, branchId)).limit(1),
     db.select(floorColumns).from(branchLayoutFloors)
@@ -81,8 +86,9 @@ export async function layoutRows(db: Db, tenantId: string, branchId: string): Pr
       .orderBy(asc(branchLayoutPlacements.tableId)),
     db.select({ id: diningTables.id, label: diningTables.label, seats: diningTables.seats }).from(diningTables)
       .where(inTenant(diningTables, tenantId, eq(diningTables.branchId, branchId), activeTable)),
+    db.select({ id: customFurnitureLooks.id }).from(customFurnitureLooks).where(inTenant(customFurnitureLooks, tenantId)),
   ])
-  return { layout: layouts[0], floors, placements, tables }
+  return { layout: layouts[0], floors, placements, tables, lookIds: looks.map(look => look.id) }
 }
 
 // --- Guards ---

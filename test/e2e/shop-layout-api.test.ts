@@ -1,6 +1,6 @@
 import { url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
-import type { BranchLayout, SaveLayoutInput } from '#shared/contracts/shop-layout'
+import type { BranchLayout, CustomLook, SaveLayoutInput } from '#shared/contracts/shop-layout'
 import { LAYOUT_MAX_BODY_BYTES } from '#shared/contracts/shop-layout'
 import { jsonBytes, largestLayout } from '../../server/tests/support/layouts'
 import { setupE2e } from './support/mock-api'
@@ -81,5 +81,54 @@ describe('the shop layout over HTTP', () => {
     expect((await read(layoutOf('nuk', seed.openBranchId), owner)).status).toBe(403)
     // Their own cafe's address with our branch's id: not found.
     expect((await read(layoutOf(bean.slug, seed.openBranchId), owner)).status).toBe(404)
+  })
+
+  it('custom looks: an owner adds, edits and deletes one; a look in use stays; it is the cafe\'s own', async () => {
+    const owner = await signIn(seed.customers.beanOwner)
+    const looks = url(`/api/c/${bean.slug}/admin/furniture-looks`)
+    const send = (method: string, path: string, cookie: string, body?: unknown) =>
+      fetch(path, { method, headers: { 'content-type': 'application/json', origin, cookie }, ...(body !== undefined && { body: JSON.stringify(body) }) })
+    const input = { name: 'HTTP walnut', shape: 'rect', base: 'legs', chair: 'cafe-chair', finishes: { top: 'walnut', base: 'graphite', frame: 'walnut', seat: 'navy' }, defaultWidth: 160, defaultDepth: 80 }
+
+    const created = await send('POST', looks, owner, input)
+    expect(created.status).toBe(200)
+    const look = await created.json() as CustomLook
+    expect(look).toMatchObject({ ...input, version: 1, tables: 0 })
+    expect((await send('POST', looks, owner, { ...input, name: 'http WALNUT' })).status).toBe(409)
+    // A finish outside the palette, or a size out of range, never reaches the service.
+    expect((await send('POST', looks, owner, { ...input, name: 'Bad', finishes: { top: 'gold', base: 'graphite' } })).status).toBe(400)
+    expect((await send('POST', looks, owner, { ...input, name: 'Bad', defaultWidth: 601 })).status).toBe(400)
+
+    // Placed on the plan, it can't be deleted; the answer names the table.
+    const path = layoutOf(bean.slug, bean.branchId)
+    const layout = await (await read(path, owner)).json() as BranchLayout
+    const b1 = layout.tables.find(table => table.label === 'B1')!
+    const place = (version: number, lookId: string) => put(path, owner, { version, layout: { floors: [room('ground')], placements: [{ tableId: b1.id, floorId: 'ground', x: 200, y: 200, rotation: 0, width: 80, depth: 80, lookId }] } })
+    expect((await place(layout.version, look.id)).status).toBe(200)
+    expect(await (await read(looks, owner)).json()).toMatchObject([{ id: look.id, tables: 1 }])
+    const refused = await send('DELETE', `${looks}/${look.id}?version=1`, owner)
+    expect(refused.status).toBe(409)
+    expect((await refused.json()).data).toMatchObject({ code: 'LOOK_IN_USE', message: expect.stringContaining('B1') })
+
+    const renamed = await send('PATCH', `${looks}/${look.id}`, owner, { version: 1, ...input, name: 'HTTP oak' })
+    expect(await renamed.json()).toMatchObject({ name: 'HTTP oak', version: 2, tables: 1 })
+    expect((await send('PATCH', `${looks}/${look.id}`, owner, { version: 1, ...input })).status).toBe(409)
+
+    // Another cafe's owner: refused at our address, not found at theirs, and can't place it.
+    const lina = await signIn(seed.customers.layoutOwner)
+    expect((await read(looks, lina)).status).toBe(403)
+    const theirs = url(`/api/c/${seed.layoutLab.slug}/admin/furniture-looks`)
+    expect((await send('PATCH', `${theirs}/${look.id}`, lina, { version: 2, ...input })).status).toBe(404)
+    expect((await send('DELETE', `${theirs}/${look.id}?version=2`, lina)).status).toBe(404)
+    expect((await read(theirs, lina)).status).toBe(200)
+    // A branch manager isn't an owner.
+    const manager = await signIn(seed.customers.manager)
+    expect((await read(url('/api/c/nuk/admin/furniture-looks'), manager)).status).toBe(403)
+    expect((await send('POST', url('/api/c/nuk/admin/furniture-looks'), manager, input)).status).toBe(403)
+
+    // Off the plan again, it deletes.
+    expect((await place(layout.version + 1, 'round-cafe')).status).toBe(200)
+    expect((await send('DELETE', `${looks}/${look.id}?version=2`, owner)).status).toBe(204)
+    expect(await (await read(looks, owner)).json()).toEqual([])
   })
 })

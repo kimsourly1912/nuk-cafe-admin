@@ -9,7 +9,7 @@
  */
 import { createReusableTemplate } from '@vueuse/core'
 import type { DiningTable } from '#shared/contracts/branches'
-import type { BuiltInLookId, Finish, Floor, InnerWall, ItemKind, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
+import type { CustomLook, Finish, Floor, InnerWall, ItemKind, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory } from '../designer/catalog'
 import { FINISH_SWATCHES, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK } from '../designer/catalog'
@@ -23,6 +23,7 @@ import type { Starter } from '../designer/starters'
 import EdgePanel from './EdgePanel.vue'
 import FloorPlanCanvas from './FloorPlanCanvas.vue'
 import LayoutStarterPicker from './LayoutStarterPicker.vue'
+import LookFormModal from './LookFormModal.vue'
 import PickTableModal from './PickTableModal.vue'
 import TableFormModal from './TableFormModal.vue'
 import TableQrModal from './TableQrModal.vue'
@@ -133,7 +134,7 @@ function changeFloor(apply: (floor: Floor) => void) {
   })
 }
 
-function placeTable(tableId: string, at: Point, lookId: BuiltInLookId = NEW_TABLE_LOOK) {
+function placeTable(tableId: string, at: Point, lookId: string = NEW_TABLE_LOOK) {
   const look = findLook(props.looks, lookId)
   const floorId = floor.value?.id
   if (!floorId) return
@@ -150,7 +151,7 @@ function placeItem(kind: ItemKind, at: Point) {
   selection.value = { kind: 'item', id }
 }
 
-function updateTable(tableId: string, change: Partial<{ floorId: string, x: number, y: number, rotation: number, width: number, depth: number, lookId: BuiltInLookId }>) {
+function updateTable(tableId: string, change: Partial<{ floorId: string, x: number, y: number, rotation: number, width: number, depth: number, lookId: string }>) {
   draft.change((next) => {
     const placement = next.placements.find(candidate => candidate.tableId === tableId)
     if (placement) Object.assign(placement, change)
@@ -319,13 +320,32 @@ async function newTable(): Promise<LayoutTable | undefined> {
 }
 
 /** A look from the library: which real table is it? Then it's placed with that look. */
-async function placeLook(lookId: BuiltInLookId, at: Point) {
+async function placeLook(lookId: string, at: Point) {
   const look = findLook(props.looks, lookId)
   const choice = await pickModal.open({ lookName: look.name, tables: unplaced.value }).result
   if (!choice) return
   const tableId = choice === 'new' ? (await newTable())?.id : choice
   if (tableId && !placedIds.value.has(tableId)) placeTable(tableId, at, lookId)
 }
+
+// --- The cafe's own looks (step 3a) ---
+
+const lookModal = overlay.create(LookFormModal)
+const isCustom = (look: TableLook): look is CustomLook => 'version' in look
+
+/** A new look, starting from `from`; with `forTable`, that table gets it at once. */
+async function newLook(from?: TableLook, forTable?: string) {
+  const saved = await lookModal.open({ from }).result
+  if (!saved || !forTable) return
+  // The look's own size is for new tables: this one keeps the size it has.
+  updateTable(forTable, { lookId: saved.id, ...(saved.shape === 'round' && { depth: layout.value.placements.find(placement => placement.tableId === forTable)?.width }) })
+}
+
+function editLook(look: CustomLook) {
+  lookModal.open({ look })
+}
+
+const unknownLookLabels = computed(() => props.editor.unknownLooks.value.map(placement => tableLabel(placement.tableId) ?? 'A table'))
 
 function editTable() {
   const table = selectedDiningTable.value
@@ -337,7 +357,7 @@ function viewQr() {
   if (table?.qrUrl) qrModal.open({ table: { ...table, qrUrl: table.qrUrl } })
 }
 
-type LibraryPiece = { kind: 'table', tableId: string } | { kind: 'look', lookId: BuiltInLookId } | { kind: 'item', itemKind: ItemKind }
+type LibraryPiece = { kind: 'table', tableId: string } | { kind: 'look', lookId: string } | { kind: 'item', itemKind: ItemKind }
 
 function place(piece: LibraryPiece, at: Point) {
   if (piece.kind === 'table') placeTable(piece.tableId, at)
@@ -491,23 +511,46 @@ function chooseStarter(starter: Starter) {
           Table looks · chairs follow the table’s seats
         </h2>
         <div class="grid grid-cols-2 gap-2">
-          <button
+          <div
             v-for="look in looks"
             :key="look.id"
-            type="button"
-            class="flex touch-none flex-col items-start gap-1 rounded-md border border-default p-2 text-left text-sm text-highlighted hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
-            :data-testid="`look-${look.id}`"
-            @pointerdown="startLibraryDrag($event, { kind: 'look', lookId: look.id })"
-            @click="placeInMiddle({ kind: 'look', lookId: look.id })"
+            class="relative"
           >
-            <UIcon
-              :name="LOOK_ICONS[look.shape]"
-              class="size-5 text-primary"
+            <button
+              type="button"
+              class="flex size-full touch-none flex-col items-start gap-1 rounded-md border border-default p-2 text-left text-sm text-highlighted hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
+              :data-testid="isCustom(look) ? `look-custom-${look.name}` : `look-${look.id}`"
+              @pointerdown="startLibraryDrag($event, { kind: 'look', lookId: look.id })"
+              @click="placeInMiddle({ kind: 'look', lookId: look.id })"
+            >
+              <UIcon
+                :name="LOOK_ICONS[look.shape]"
+                class="size-5 text-primary"
+              />
+              <span class="break-words">{{ look.name }}</span>
+              <span class="text-xs text-muted">{{ look.shape === 'round' ? `Ø ${look.defaultWidth} cm` : `${look.defaultWidth} × ${look.defaultDepth}` }}</span>
+            </button>
+            <UButton
+              v-if="isCustom(look)"
+              icon="i-lucide-pencil"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              class="absolute top-1 right-1"
+              :aria-label="`Edit the look ${look.name}`"
+              @click="editLook(look)"
             />
-            <span>{{ look.name }}</span>
-            <span class="text-xs text-muted">{{ look.shape === 'round' ? `Ø ${look.defaultWidth} cm` : `${look.defaultWidth} × ${look.defaultDepth}` }}</span>
-          </button>
+          </div>
         </div>
+        <UButton
+          label="New look"
+          icon="i-lucide-plus"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          class="self-start"
+          @click="newLook()"
+        />
       </section>
 
       <section
@@ -661,6 +704,25 @@ function chooseStarter(starter: Starter) {
           @update:model-value="value => { const look = findLook(looks, String(value)); updateTable(selectedPlacement!.tableId, { lookId: look.id, width: look.defaultWidth, depth: look.defaultDepth }) }"
         />
       </UFormField>
+      <div class="flex flex-wrap gap-2">
+        <UButton
+          v-if="isCustom(selectedLook)"
+          label="Edit look"
+          icon="i-lucide-pencil"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          @click="editLook(selectedLook)"
+        />
+        <UButton
+          label="Save as new look"
+          icon="i-lucide-copy-plus"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          @click="newLook(selectedLook, selectedPlacement.tableId)"
+        />
+      </div>
       <div class="mt-auto flex flex-col gap-2">
         <UButton
           label="View QR"
@@ -837,17 +899,17 @@ function chooseStarter(starter: Starter) {
   </DefineDetails>
 
   <div
-    v-if="editor.query.error.value && !editor.query.data.value"
+    v-if="editor.error.value"
     class="p-4"
   >
     <ApiErrorAlert
-      :error="editor.query.error.value"
+      :error="editor.error.value"
       title="Could not load the shop layout"
-      @retry="editor.query.refresh()"
+      @retry="editor.retry()"
     />
   </div>
   <div
-    v-else-if="!editor.query.data.value"
+    v-else-if="!editor.ready.value"
     class="p-4"
   >
     <ListSkeleton
@@ -1181,6 +1243,17 @@ function chooseStarter(starter: Starter) {
           description="Archived or deleted since this layout was opened. Remove it from the map to save."
           :actions="[{ label: 'Remove from map', color: 'neutral', variant: 'outline', onClick: () => editor.removeUnavailable() }]"
           data-testid="layout-unavailable"
+        />
+        <UAlert
+          v-if="unknownLookLabels.length"
+          color="warning"
+          variant="subtle"
+          icon="i-lucide-triangle-alert"
+          class="pointer-events-auto max-w-xl"
+          :title="`The look of ${listLabels(unknownLookLabels)} was deleted.`"
+          description="Deleted since this layout was opened. Give it the standard look to save, then choose another."
+          :actions="[{ label: 'Use Round café table', color: 'neutral', variant: 'outline', onClick: () => editor.resetUnknownLooks() }]"
+          data-testid="layout-unknown-looks"
         />
         <UAlert
           v-if="outsideLabels.length && mode === 'select'"

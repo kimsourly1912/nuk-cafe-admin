@@ -58,6 +58,13 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - Click a table to select it: drag it, turn it with the round handle (15° steps) or **R**, and set its floor, size, rotation and look in the panel on the right. **Edit table** opens the table's own form (name, area, seats: it saves at once). **View QR** shows its code. **Remove from map** puts it back in Unplaced tables.
 - A table's chairs come from its **Seats**.
 
+**Your own table looks:** under **Table looks**, **New look** opens a form with a live preview: a name, the shape (**Round**, **Rectangle** or **Booth**), the size new tables start with, the base (**Pedestal** or **Four legs**), the chairs, and a finish for each part (tabletop, base, seating). **Save look** adds it to Table looks for every branch of the cafe (up to 50).
+
+- Give a table a look in its panel (**Look**), or drop the look on the plan. **Save as new look** in a table's panel starts a new look from that table's look and gives it to that table.
+- The pencil on a look (or **Edit look** in a table's panel) changes it. A look is shared: **every table that uses it changes**, in every branch. Each table keeps its own size and turn. The form says how many tables use it.
+- **Delete** (in the look's form) works only when no saved layout uses the look. Give its tables another look and save the layout first.
+- The built-in looks (Round café table, Square bistro table, Oak rectangle, Communal table, Green velvet booth) can't be changed or deleted; use **Save as new look** to start from one.
+
 **Floors:** the tabs above the plan. **Add floor** puts a floor on top with the same outline. The **⋯** menu next to the tabs renames the floor, sets its **height** (200–800 cm, the wall height in 3D), turns its **roof** on or off (off: an open patio), or **Remove floor…**: it names the tables that go back to Unplaced tables. Up to 10 floors. **Floor below** shows the floor underneath faintly, so stairs and walls line up.
 
 **Walls, doors and windows:**
@@ -75,6 +82,9 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - **"This layout was changed somewhere else"**: someone saved the layout on another device after you opened it. Your plan is kept. **Load latest** shows theirs instead (Undo brings yours back on top of it, then save); **Overwrite with mine** saves yours over theirs after asking. QR codes are not affected either way.
 - **"… is no longer an active table here"**: a table on your plan was archived or deleted since you opened it. Press **Remove from map**, then save.
 - **"3D view is not available here"**: this browser or device can't draw 3D right now (an old device, or a phone that put the page to sleep). Press **Try again**. The floor and table lists, **View QR** and **Design shop** work without it; the layout itself is fine.
+- **"The look of … was deleted"**: a look this plan used was deleted on another device before you saved. Press **Use Round café table**, save, then choose another look.
+- **"This look is used by …"**: a look can't be deleted while tables use it. The message names them; give them another look, save the layout, then delete.
+- **"There is already a look named …"**: another look has that name (in any capitals). Choose another name.
 - **"… is outside the … floor"**: after the outline changed, a table or piece of furniture sits outside it. Saving still works; move it back in or remove it.
 - **"Draw the … floor's outline first"**: a floor has no outline yet (Blank). Use **Draw outline**, then save.
 - **"Closed every day"**: no day is switched on, so nobody can order. Switch on the days it opens.

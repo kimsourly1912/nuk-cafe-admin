@@ -8,7 +8,6 @@
  * and view are kept in the URL (`?tab=tables&view=design`, `useUrlTab`) without a route change, so
  * switching never asks about unsaved changes.
  */
-import { BUILT_IN_LOOKS } from '../designer/catalog'
 import { useAddBranch } from '../composables/useAddBranch'
 import { useBranchOptions } from '../composables/useBranchOptions'
 import { useBranchSettings, useBranchTables } from '../composables/useBranches'
@@ -52,7 +51,7 @@ watch(designing, value => value && editor.load(), { immediate: true })
 const layout = computed(() => editor.draft.layout.value)
 const summary = computed(() => {
   const count = editor.tables.value.length
-  if (!editor.query.data.value || !layout.value.floors.length) return ''
+  if (!editor.ready.value || !layout.value.floors.length) return ''
   const placed = layout.value.placements.length
   const floors = layout.value.floors.length
   return `${placed} of ${count} ${count === 1 ? 'table' : 'tables'} on the map · ${floors} ${floors === 1 ? 'floor' : 'floors'}`
@@ -224,22 +223,22 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           :editor="editor"
           :branch-id="id"
           :dining-tables="tables ?? []"
-          :looks="BUILT_IN_LOOKS"
+          :looks="editor.looks.value"
           @view3d="view = '3d'"
         />
         <template v-else-if="tab === 'tables' && view === '3d'">
           <div
-            v-if="editor.query.error.value && !editor.query.data.value"
+            v-if="editor.error.value"
             class="p-4"
           >
             <ApiErrorAlert
-              :error="editor.query.error.value"
+              :error="editor.error.value"
               title="Could not load the shop layout"
-              @retry="editor.query.refresh()"
+              @retry="editor.retry()"
             />
           </div>
           <div
-            v-else-if="!editor.query.data.value"
+            v-else-if="!editor.ready.value"
             class="p-4"
           >
             <ListSkeleton
@@ -272,7 +271,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
             v-model:selected-table="selectedTable"
             :layout="layout"
             :tables="editor.tables.value"
-            :looks="BUILT_IN_LOOKS"
+            :looks="editor.looks.value"
             :dining-tables="tables ?? []"
             :unsaved="editor.isDirty.value"
             @show-on-plan="showOnPlan"

@@ -15,7 +15,7 @@ import { deleteOldest, insertAll, requireCount, requireOneChange, runBatch, upda
 import { byId, byName, firstRow, hasAny, inTenant, nextPosition, readPage } from '#server/utils/query'
 import { menuItemVariations, menuOptionSets, menuOptionValues, menuPromotions } from '#server/features/menu/menu.schema'
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
-import { getLayout, saveLayout } from '#server/features/branches'
+import { createLook, deleteLook, getLayout, listLooks, saveLayout, updateLook } from '#server/features/branches'
 import { diningTables } from '#server/features/branches/branches.schema'
 import { jsonBytes, largestLayout } from '#server/tests/support/layouts'
 import { migrationFiles, addBranchStaff, createUser, ensureTenant, insertBranch, insertSoldLine } from '#server/tests/support/db'
@@ -458,5 +458,30 @@ describe('the shop layout on real D1 (D273)', { timeout: 60_000, tags: ['slow'] 
     await db.update(diningTables).set({ status: 'archived' }).where(eq(diningTables.id, tables[7]!.id))
     await expectApiError(() => saveLayout(db, owner, branchId, { ...input, version: 1 }), 409, 'LAYOUT_TABLE_UNAVAILABLE', ['layout.placements.7.tableId'])
     expect((await getLayout(db, ours, branchId)).version).toBe(1)
+  })
+
+  it('custom looks (step 3a): D1 refuses a name clash, a look deleted under a save, and a look in use', async () => {
+    const branchId = newId()
+    await insertBranch(db, { id: branchId, name: 'Look lab', timezone: 'Asia/Phnom_Penh', tenantId: ours })
+    const owner: Actor = { ...ourOwner, userId: (await createUser(db)).id }
+    const tableId = newId()
+    await db.insert(diningTables).values({ id: tableId, tenantId: ours, branchId, label: 'L1', qrTokenHash: newId() })
+    const input = { name: 'D1 walnut', shape: 'rect', base: 'legs', chair: 'cafe-chair', finishes: { top: 'walnut', base: 'graphite' }, defaultWidth: 160, defaultDepth: 80 } as const
+    const look = await createLook(db, owner, input)
+    await expectApiError(() => createLook(db, owner, { ...input, name: 'd1 WALNUT' }), 409, 'LOOK_NAME_TAKEN', ['name'])
+    const floor = largestLayout([]).layout.floors[0]!
+    const save = (on: Db, version: number, lookId: string) => saveLayout(on, owner, branchId, { version, layout: { floors: [floor], placements: [{ tableId, floorId: floor.id, x: 100, y: 100, rotation: 0, width: 120, depth: 80, lookId }] } })
+
+    // Deleted between the save's checks and its write: D1's foreign key stops the batch.
+    const gone = await createLook(db, owner, { ...input, name: 'D1 gone' })
+    await expectApiError(() => save(interleaved(db, () => deleteLook(db, owner, gone.id, { version: 1 }), 1), 0, gone.id), 409, 'LAYOUT_LOOK_UNAVAILABLE', ['layout.placements.0.lookId'])
+    expect((await getLayout(db, ours, branchId)).version).toBe(0)
+
+    // Placed between the delete's check and its write: the same key refuses the delete.
+    await expectApiError(() => deleteLook(interleaved(db, () => save(db, 0, look.id), 1), owner, look.id, { version: 1 }), 409, 'LOOK_IN_USE')
+    expect((await listLooks(db, ours)).find(row => row.id === look.id)).toMatchObject({ tables: 1 })
+    expect((await updateLook(db, owner, look.id, { version: 1, ...input, name: 'D1 oak' })).version).toBe(2)
+    await save(db, 1, 'round-cafe')
+    await deleteLook(db, owner, look.id, { version: 2 })
   })
 })

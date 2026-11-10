@@ -135,20 +135,30 @@ export type Floor = v.InferOutput<typeof floorSchema>
 /** What a floor stores as its drawing: everything but its id, name, height and roof. */
 export type FloorGeometry = Pick<Floor, 'outline' | 'edges' | 'walls' | 'items'>
 
-/** The built-in table looks (D273); the app's catalog describes each. Custom looks come in step 3a. */
+/** The built-in table looks (D273); the app's catalog describes each. */
 export const BUILT_IN_LOOK_IDS = ['round-cafe', 'square-bistro', 'oak-rectangle', 'communal', 'green-booth'] as const
 export type BuiltInLookId = typeof BUILT_IN_LOOK_IDS[number]
+export const isBuiltInLook = (id: string): id is BuiltInLookId => (BUILT_IN_LOOK_IDS as readonly string[]).includes(id)
 
-/** Where a real dining table stands, and how it looks (a built-in look; custom looks in step 3a). */
+/** A cafe's own table looks (step 3a), at most. */
+export const MAX_CUSTOM_LOOKS = 50
+export const LOOK_NAME_MAX = 40
+export const TABLE_SIZE_MIN_CM = 40
+export const TABLE_SIZE_MAX_CM = 600
+
+/**
+ * Where a real dining table stands, and how it looks: `lookId` is a built-in look's key or the id
+ * of one of the cafe's custom looks (the save answers 409 `LAYOUT_LOOK_UNAVAILABLE` for any other).
+ */
 export const placementSchema = v.strictObject({
   tableId: idSchema,
   floorId: idSchema,
   x: cmSchema,
   y: cmSchema,
   rotation: rotationSchema,
-  width: sizeSchema(40, 600),
-  depth: sizeSchema(40, 600),
-  lookId: v.picklist(BUILT_IN_LOOK_IDS, 'Choose a look from the list'),
+  width: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
+  depth: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
+  lookId: idSchema,
 })
 export type Placement = v.InferOutput<typeof placementSchema>
 
@@ -186,10 +196,10 @@ export interface BranchLayout {
   tables: LayoutTable[]
 }
 
-/** A table look (built in, or a cafe's custom look from step 3a). Shared by the tables using it. */
+/** A table look (built in, or one of the cafe's custom looks). Shared by the tables using it. */
 export interface TableLook {
-  /** A built-in look's key; step 3a's custom looks widen it. */
-  id: BuiltInLookId
+  /** A built-in look's key, or a custom look's id. */
+  id: string
   name: string
   shape: TableShape
   base: TableBase
@@ -199,6 +209,46 @@ export interface TableLook {
   /** The size a newly placed table starts with; each placement keeps its own. */
   defaultWidth: number
   defaultDepth: number
+}
+
+/** A look's finishes by part: the table's top and base, and its chairs' frame and upholstery. */
+export const lookFinishesSchema = v.strictObject({
+  top: finishSchema,
+  base: finishSchema,
+  frame: v.optional(finishSchema),
+  seat: v.optional(finishSchema),
+})
+export type LookFinishes = v.InferOutput<typeof lookFinishesSchema>
+
+const lookFields = {
+  name: v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(LOOK_NAME_MAX)),
+  shape: v.picklist(TABLE_SHAPES),
+  base: v.picklist(TABLE_BASES),
+  chair: v.picklist(LOOK_CHAIRS),
+  finishes: lookFinishesSchema,
+  defaultWidth: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
+  defaultDepth: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
+}
+
+/** `POST …/admin/furniture-looks`: a new custom look for the whole cafe (every branch). */
+export const createLookSchema = v.strictObject(lookFields)
+export type CreateLookInput = v.InferOutput<typeof createLookSchema>
+
+/**
+ * `PATCH …/admin/furniture-looks/{id}`: the whole look again, at the version read. Every table
+ * using the look changes with it; their own width, depth and rotation stay.
+ */
+export const updateLookSchema = v.strictObject({
+  version: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  ...lookFields,
+})
+export type UpdateLookInput = v.InferOutput<typeof updateLookSchema>
+
+/** One of the cafe's custom looks, as `GET …/admin/furniture-looks` lists them by name. */
+export interface CustomLook extends TableLook {
+  version: number
+  /** How many placed tables use it, in every branch's saved layout. It can't be deleted while any does. */
+  tables: number
 }
 
 /** What the layout needs to know about a dining table: the record stays the branches feature's. */
