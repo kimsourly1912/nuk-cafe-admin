@@ -146,7 +146,7 @@ const WORKER_OBSERVABILITY = { enabled: true, redact_query_string: true }
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
   $development: {
-    runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' }, shopDesignerPrototype: true } },
+    runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' } } },
   },
   $env: {
     // Named `prod`, not `production`: without `--envName`, c12 uses NODE_ENV, so a block named
@@ -194,7 +194,7 @@ export default defineNuxtConfig({
       },
     },
     staging: {
-      runtimeConfig: { humanCheck: { enabled: true }, public: { googleAuth: { enabled: true }, humanCheck: { enabled: true, siteKey: '0x4AAAAAAFm5caeAd9ORYnJa' }, shopDesignerPrototype: true } },
+      runtimeConfig: { humanCheck: { enabled: true }, public: { googleAuth: { enabled: true }, humanCheck: { enabled: true, siteKey: '0x4AAAAAAFm5caeAd9ORYnJa' } } },
       // `--envName staging` replaces `$production` (one environment block applies), so the security
       // headers are repeated here.
       routeRules: deployedSecurityRules(),
@@ -314,9 +314,6 @@ export default defineNuxtConfig({
       // NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT names the environment on the page). Off everywhere else:
       // production never gets it, and its routes answer 404.
       sampleData: { enabled: false, environment: '' },
-      // The shop designer's step 1 prototype (D273, demo data, nothing saved): on for the dev server
-      // and staging (NUXT_PUBLIC_SHOP_DESIGNER_PROTOTYPE), never in production. Step 2 removes it.
-      shopDesignerPrototype: false,
     },
   },
   routeRules: {

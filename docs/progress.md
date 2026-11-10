@@ -3,6 +3,27 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 2b: the editor on saved layouts (D273, 2026-11-10)
+
+- Step 2a merged (PR #279). **Built:**
+  - Dining tables → **Table list / Design shop / View in 3D**, on the branch's saved layout and real tables, with **Save layout** in the navbar;
+  - the starters (6C), floors and the floor menu (9B, 6B), Draw outline (3A), edge kinds with doors, gates and windows (3B), and Draw wall (9A);
+  - New table, Edit table, View QR, and table looks that ask which table;
+  - the stale-save flow (6A: Load latest with undo, Overwrite with mine after a confirmation) and tables archived elsewhere.
+
+  The prototype page and its flag are removed. [Plan → Step 2b](plans/shop-designer.md#step-2b-the-editor-built-2026-11-10).
+- **Found while building:**
+  - A point from a deep `ref` (the wall being drawn) put a reactive proxy into the layout. The next undo snapshot (`structuredClone`) then threw a `DataCloneError`. The drawing state is now `shallowRef`.
+  - Removing the one change from a refused save leaves nothing to save, so Save layout correctly stays disabled. The e2e test now saves a second change.
+- **Evidence:**
+  - `pnpm lint` and `pnpm typecheck` clean.
+  - `pnpm test:unit`: 2656 passed, 1 skipped (178 files). It includes `designer-outline.test.ts` (18).
+  - `test/e2e/shop-designer.test.ts`: 7 passed on the built server, with the look-picker step and the review fixes (a second Save while one runs is skipped; Cancel compares content).
+  - `branches`, `manager-tools`, `accessibility`, `request-budget`, `shop-layout-api` and `cafes`: 92 passed.
+  - Full `pnpm test:e2e` (3 workers): 68 files, 941 tests passed. That was before the three review fixes, which touch only the designer, and its file passed again after them.
+- **Not verified:** a real phone or tablet with touch; a save on staging's D1.
+- How to verify: on staging, open a branch → Dining tables → Design shop. Pick Wide café, place a table, save, then reload: it is still there. Open the same layout in a second tab and save there; save in the first: **Load latest** / **Overwrite with mine** appear.
+
 ### Shop designer step 2a: the server (D273, 2026-11-10)
 
 - The owner approved step 1 on staging (PR #277 merged). Their Android phone draws the 3D view in 23–30 ms a frame. They chose the limits: seats 1–20, floors 2–8 m, at most 10 floors, 64 corners and 200 objects a floor.

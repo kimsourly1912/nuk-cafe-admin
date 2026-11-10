@@ -45,8 +45,35 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - **⋮ → Delete permanently** (on an archived table, owners only): removes it for good; its QR code never works again. It asks first, and it can't be restored. Only a table **no order was ever placed at** can be deleted; otherwise the action is greyed out ("it has orders") and it stays archived for your order history. Managers archive and restore from the counter, but can't delete.
 - Up to 200 tables per branch, archived ones included.
 
+## Design shop (the shop layout)
+
+**Dining tables** has three views at the top right: **Table list** (the tables and their QR codes), **Design shop** (a plan of the shop) and **View in 3D** (the same shop as a small building). The plan never changes a table's name, seats or QR code: a printed QR code keeps working wherever the table stands.
+
+**Start:** a branch without a layout offers a starting shape: **Blank** (draw your own outline), **Narrow shophouse**, **Wide café** or **Rooftop café** (two floors, an open patio on top). A starter draws only walls, doors and windows; your tables wait in **Unplaced tables**.
+
+**Tables:**
+
+- **Unplaced tables** lists the branch's tables that aren't on the plan. Drag one onto the plan, or press **Place on map** (it goes in the middle; move it with the arrow pad or the arrow keys, Shift for 5 cm).
+- A **table look** (Round café table, Oak rectangle, booth…) dropped on the plan asks **Which table is this?**: pick an unplaced table, or **New table** to add one.
+- Click a table to select it: drag it, turn it with the round handle (15° steps) or **R**, and set its floor, size, rotation and look in the panel on the right. **Edit table** opens the table's own form (name, area, seats: it saves at once). **View QR** shows its code. **Remove from map** puts it back in Unplaced tables.
+- A table's chairs come from its **Seats**.
+
+**Floors:** the tabs above the plan. **Add floor** puts a floor on top with the same outline. The **⋯** menu next to the tabs renames the floor, sets its **height** (200–800 cm, the wall height in 3D), turns its **roof** on or off (off: an open patio), or **Remove floor…**: it names the tables that go back to Unplaced tables. Up to 10 floors. **Floor below** shows the floor underneath faintly, so stairs and walls line up.
+
+**Walls, doors and windows:**
+
+- **Draw outline:** with no outline yet, click on the grid to add corners; click the first corner, double-click or press Enter to close the shape. With an outline, drag a corner (it keeps right angles unless you hold Alt), click a round handle on an edge to add a corner, or click a corner and press Delete to remove it. **Cancel** puts the shape back as it was; **Done** finishes.
+- Click an **edge** of the outline to choose what it is: **Wall**, **Railing** or **Open**, and to set its length. **Door** and **Window** add one on that edge; set its width and how far it is from the corner. On a railing a door is a **gate**, and windows need a wall.
+- **Draw wall** adds walls inside the floor (a stair kiosk, a kitchen): click where it starts and where it ends; walls carry on from the last end until Escape. Click a wall to delete it.
+
+**Save:** every change can be undone (**Undo**, Ctrl/⌘ Z) until you press **Save layout** (top right; **Unsaved changes** shows next to it). The whole layout saves at once. Leaving the page with unsaved changes asks first.
+
 ## Common problems
 
+- **"This layout was changed somewhere else"**: someone saved the layout on another device after you opened it. Your plan is kept. **Load latest** shows theirs instead (Undo brings yours back on top of it, then save); **Overwrite with mine** saves yours over theirs after asking. QR codes are not affected either way.
+- **"… is no longer an active table here"**: a table on your plan was archived or deleted since you opened it. Press **Remove from map**, then save.
+- **"… is outside the … floor"**: after the outline changed, a table or piece of furniture sits outside it. Saving still works; move it back in or remove it.
+- **"Draw the … floor's outline first"**: a floor has no outline yet (Blank). Use **Draw outline**, then save.
 - **"Closed every day"**: no day is switched on, so nobody can order. Switch on the days it opens.
 - **Two times on one day overlap**: the error shows on that time; fix it and save again.
 - **"Someone else changed these settings"**: press **Reload**; your input stays. Check it and save again.

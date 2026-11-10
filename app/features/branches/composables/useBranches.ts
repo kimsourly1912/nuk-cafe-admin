@@ -1,4 +1,5 @@
 import type { BranchPause, BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
+import type { BranchLayout, SaveLayoutInput } from '#shared/contracts/shop-layout'
 
 const base = (branchId: string) => `/admin/branches/${branchId}`
 
@@ -180,4 +181,35 @@ export function useTableMutations(surface: TablesSurface = 'admin') {
   const isRemoved = (tableId: string) => remove.isRemoved(`dining-table:${tableId}`)
 
   return { create, update, archive, restore, rotate, remove, isBusy, isRemoved }
+}
+
+/**
+ * A branch's shop layout (D273) and its active tables, on the admin's API. Table changes invalidate
+ * `branches`, so an archived table leaves the layout's list here too.
+ */
+export function useBranchLayout(branchId: string, options: { immediate?: boolean } = {}) {
+  return useApiQuery(`branches:layout:${branchId}`, () => fetchBranchLayout(branchId), options)
+}
+
+/** The layout as saved now (the stale-save flow reads it without touching the editor's draft). */
+export const fetchBranchLayout = (branchId: string) => apiFetch<BranchLayout>(`${base(branchId)}/layout`)
+
+export interface LayoutSave {
+  branchId: string
+  body: SaveLayoutInput
+}
+
+/** Saves the whole layout as one versioned change; resolves to the layout as saved. */
+export function useLayoutMutations() {
+  const save = useMutation(
+    (input: LayoutSave) => apiFetch<BranchLayout>(`${base(input.branchId)}/layout`, { method: 'PUT', body: input.body }),
+    {
+      id: 'branches:layout-save',
+      key: input => input.branchId,
+      lock: input => `branch-layout:${input.branchId}`,
+      successMessage: 'Shop layout saved',
+      errorMessage: 'Could not save the shop layout',
+    },
+  )
+  return { save }
 }
