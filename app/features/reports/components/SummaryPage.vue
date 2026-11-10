@@ -100,10 +100,16 @@ const paymentsTotal = (report: ReportSummary) => ({
         <USkeleton class="col-span-full h-64" />
       </div>
 
-      <!-- One block: the body is a scrolling flex column, where cards (overflow hidden) would shrink -->
+      <!-- One block: the body is a scrolling flex column, where cards (overflow hidden) would shrink.
+           A named, focusable region: with no best sellers (an empty day) nothing in the scrolling
+           body is focusable, so a keyboard can't scroll it; focused, the arrow keys scroll the body
+           (WCAG 2.1.1, axe `scrollable-region-focusable`; Safari makes no scroller focusable itself). -->
       <div
         v-else
-        class="space-y-4 sm:space-y-6"
+        role="region"
+        aria-label="Summary report"
+        tabindex="0"
+        class="space-y-4 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:space-y-6"
       >
         <ReportPrintHeader
           title="Summary"
