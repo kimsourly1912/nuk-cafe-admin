@@ -31,6 +31,9 @@ const showRefreshing = useRefreshIndicator(refreshing)
 const { archive, restore, rotate, remove, isBusy, isRemoved } = useTableMutations(props.surface)
 /** Delete permanently is the owners' (D200): the counter's managers archive only. */
 const canDelete = computed(() => props.surface === 'admin')
+// The shop designer's step 1 prototype (D273): a way in for the owner's review, dev and staging only.
+const designerPrototype = props.surface === 'admin' && useRuntimeConfig().public.shopDesignerPrototype
+const tenantPath = useTenantPath()
 
 const status = ref<string>('active')
 const search = ref('')
@@ -107,6 +110,16 @@ defineExpose({ openNew, activeCount: computed(() => tables.value.filter(t => t.s
         Create and manage the QR code on each table. Customers scan it to order for that table.
       </p>
     </div>
+
+    <UAlert
+      v-if="designerPrototype"
+      color="info"
+      variant="subtle"
+      icon="i-lucide-box"
+      title="Try the shop designer prototype"
+      description="Draw a café, place tables and explore it in 3D. Demo data only: these tables are not changed."
+      :actions="[{ label: 'Open prototype', color: 'neutral', variant: 'outline', to: tenantPath('/admin/prototypes/shop-designer') }]"
+    />
 
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex w-full items-center gap-2 sm:w-auto">
