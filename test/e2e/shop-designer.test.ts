@@ -868,4 +868,28 @@ describe('the shop designer on saved layouts', () => {
     // Playback is this viewer's own: nothing to save.
     expect(await saveButton(page).isDisabled()).toBe(true)
   })
+
+  it('the Neighborhood lane (step 3h, internal): around the café, tables still found, Fit scene, and the benchmark panel', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await page.goto(url(`${branchPath(lab.branchId, '3d')}&bench=orbit`), { waitUntil: 'hydration' })
+    await drawn(page)
+    const lists = page.getByRole('complementary', { name: 'Navigate the building' })
+    await page.getByTestId('surroundings').click()
+    await page.getByRole('option', { name: 'Neighborhood lane' }).click()
+    await page.getByRole('button', { name: 'Fit scene' }).click()
+    await shot(page, '3d-neighborhood-lane')
+    // The street never gets between a person and their tables.
+    await lists.getByTestId('list-table-L1').click()
+    await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('L1')
+    await page.getByRole('button', { name: 'Cutaway' }).click()
+    await shot(page, '3d-neighborhood-lane-cutaway')
+    // The benchmark: a panel to run it and copy its report (its numbers come from a real device).
+    const bench = page.getByTestId('benchmark')
+    await bench.getByRole('button', { name: 'Run benchmark' }).waitFor()
+    expect(await bench.textContent()).toContain('three 20 s orbits')
+    // Back to no surroundings: the building alone, Fit building again.
+    await page.getByTestId('surroundings').click()
+    await page.getByRole('option', { name: 'No surroundings' }).click()
+    await page.getByRole('button', { name: 'Fit building' }).waitFor()
+  })
 })

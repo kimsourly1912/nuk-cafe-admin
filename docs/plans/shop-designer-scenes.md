@@ -1,6 +1,6 @@
 # Shop designer scenes plan: surroundings, people and pets
 
-Owner brief and answers 2026-11-11; decision [D274](../decisions.md#d274-shop-designer-scenes-generated-surroundings-cc0-models-and-a-saved-preset-per-branch-2026-11-11). Extends the [shop designer plan](shop-designer.md) (D273). Status: **step 3g built, waiting for review** (owner, 2026-11-11: 3g first, then 3h; 3e and 3f follow before the pilot; QS4 answered: `blob:` in `connect-src`; people and pets generated from code until the owner's CC0 models are ready).
+Owner brief and answers 2026-11-11; decision [D274](../decisions.md#d274-shop-designer-scenes-generated-surroundings-cc0-models-and-a-saved-preset-per-branch-2026-11-11). Extends the [shop designer plan](shop-designer.md) (D273). Status: **step 3g merged** (PR #289). **Step 3h built** (the Neighborhood lane as an internal test scene, with its benchmark): waiting for the owner's benchmark on Android and desktop. Owner's choices (2026-11-11): 3g first, then 3h; 3e and 3f follow before the pilot; QS4 answered (`blob:` in `connect-src`); people and pets generated from code until the owner's CC0 models are ready.
 
 ## Visual references (owner, 2026-11-11)
 
@@ -167,7 +167,7 @@ The first commit of step 3g loads one textured model **on the built server**, wh
 | Step | When | Deliverable | Review |
 |---|---|---|---|
 | 3g. People and pets (**built**) | Before the pilot (owner: before 3e and 3f) | The model pipeline: model list, loader, CSP fix (QS4). Figures in a **People and pets** library section (the owner's list: a person, a girl, a boy, an old man, someone lazing, a cat, a dog; plus a seated customer and a barista), generated from code until CC0 models arrive. Placed, turned and saved like furniture, fixed size, no look, no warnings for overlapping a chair. Shown in 3D with an idle loop; **Show people and pets** and **Animate** in View in 3D | Place a cat and a seated customer, save, reopen, see them in 3D on a phone and a desktop |
-| 3h. Neighborhood lane test scene | Before the pilot | Internal only (`NUXT_PUBLIC_SHOP_DESIGNER_SCENES`, on in dev and staging, off in production): `buildSurroundings` with the lane (neighbours, lane, drain, rear yard, parked moto, pedestrian, cat at its bowl), Fit, cutaway hiding, shadows kept on the café, animation rules, a **Scene** select in View in 3D, and the benchmark mode (below) | The benchmark on the owner's Android phone and a desktop, recorded in progress; full orbit behind the café on both |
+| 3h. Neighborhood lane test scene (**built**) | Before the pilot | Internal only (`NUXT_PUBLIC_SHOP_DESIGNER_SCENES`, on in dev and staging, off in production): `buildSurroundings` with the lane (neighbours, lane, drain, rear yard, parked moto, pedestrian, cat at its bowl), Fit, cutaway hiding, shadows kept on the café, animation rules, a **Scene** select in View in 3D, and the benchmark mode (below) | The benchmark on the owner's Android phone and a desktop, recorded in progress; full orbit behind the café on both |
 | 3c. Pilot (Riverside branch) | — | As planned in D273: the core workflow, with no scenes | As planned |
 | 4a. Ship Neighborhood lane | After the pilot, once 3h passes the targets | The saved scene (migration, contract, GET and PUT); the **Scene** panel (right sidebar on desktop, a slide-over on phones) with scene cards (pictures rendered from our own scenes by the pictures script), Show surroundings, Show people and pets, Animate; the storefront sign with the cafe's name; the flag removed | Choose Neighborhood lane on one device, save; another device opening the branch sees it. Playback changes on one don't reach the other |
 | 4b. Riverside | After 4a | Shophouses, a stone riverwalk and landing, a covered wooden passenger boat; water as its own performance case (simple water, a slow wake) | Benchmark rerun on the same devices |
@@ -263,3 +263,40 @@ The person running it records the device, OS, browser and network.
 - **Guards checked by removing them:** the hidden-tab stop, the Animate stop, the stale-scene drop, figures out of the warnings and the contract's figure size each make a test fail.
 - **Not verified:** a textured `.glb` through the CSP on the built server (no model file yet; the first CC0 model adds that e2e check); the look and the animation cost on a real phone.
 - **Review on staging:** Branches → a branch → Dining tables → Design shop. In **People and pets**, place a Seated customer on a chair, a Cat near the door and Someone lazing on a terrace; save. **View in 3D** → Cutaway: find them; **People and pets** → turn Animate on and off, then Show people and pets off. On a phone, check that Animate starts off if the quality line says low.
+
+## Step 3h: the Neighborhood lane test scene (built 2026-11-11)
+
+Internal: on for the dev server, staging and the e2e server (`NUXT_PUBLIC_SHOP_DESIGNER_SCENES`, `runtimeConfig.public.shopDesignerScenes`), off in production. The choice is the viewer's own until 4a saves it per branch.
+
+- **Where:**
+  - `designer/surroundings.ts`: `frontFrame`, `planLane`, `seededRandom` (pure: where everything goes, in the café's front frame);
+  - `scene/surroundings.ts`: `buildSurroundings` (the 3D lane, in its own build context, merged by material per shophouse);
+  - `scene/building-viewer.ts`: `setSurroundings`, `benchmark`; the cutaway hides shophouses on the camera's side;
+  - `scene/stage.ts`: `details()` (the renderer's draw calls, triangles, geometries, textures, pixel ratio and canvas size);
+  - `designer/benchmark.ts`: `summarizeFrames` (median, p95), `formatReport`;
+  - `scene/materials.ts`: the lane's surfaces and the pavers, stripes and roof-tile patterns;
+  - `BuildingView3D.vue`: the **Surroundings** select, **Fit scene**, the benchmark panel; `BranchPage.vue` passes the branch id as the seed;
+  - `nuxt.config.ts`, `test/e2e/support/global-setup.ts`: the flag.
+- **The lane:**
+  - the base with a crisp edge; yard paving under the café and the shophouses; a pavement, curb and drain; the lane; a low wall with trees and pots across it; the yard wall behind;
+  - one or two shophouses a side, 3.5–5.5 m wide, 2–4 floors: pastel plaster, a folding gate half open on a lit shop, a sign, a wall lamp, a corrugated awning, shuttered windows, lit windows at the back, a balcony grille with an AC unit, a clay-tile gable or a flat roof behind a parapet;
+  - a parked scooter, a street lamp, two concrete poles with sagging power lines, a water jar and crates in the yard, bougainvillea and pots by the shop fronts;
+  - a passer-by walking the lane and back, and a cat at its bowl beside the café's door (the 3g figures, hidden with **Show people and pets**, moving only while **Animate** plays).
+- **Decided while building:**
+  - **The front is the ground floor's first door** (the Entrance viewpoint's door); no door: the longest wall. The street turns with it, whatever the outline's angle.
+  - **Nothing stands in the café's box** (every floor's outline in the front frame); an L-shaped café's empty corner is paved yard.
+  - **Seeded by the branch id**, so 4a's saved choice shows everyone the same street.
+  - **Merged by material, one group per shophouse:** the lane adds about **93 draw calls and 30,000 triangles** to the demo shophouse's 1,132 calls and 271,000 triangles (Chromium, software renderer, 960 × 640; same counts on a GPU).
+  - **The shadow stays on the café**, the lane casts none; the base replaces the ground disc; Fit frames the lane; the zoom-out limit grows to reach it; the camera moves only on **Fit scene**.
+  - **Showing the lane measures the device again**: the quality chosen for the café alone may be too high for the scene.
+- **Found:** the café itself is most of the cost: about 1,130 draw calls for the demo shophouse, because each piece of furniture is drawn part by part. If the phone misses its target, merging the café's static furniture by material is the first thing to try (a change to the building, not the lane).
+- **The benchmark** (`?bench=orbit` on View in 3D, flag on): **Run benchmark** warms up for 5 s, then turns the camera a full circle around the café three times, 20 s each, timing every frame. The report gives each orbit's and all orbits' median and 95th-percentile frame interval, the quality level, pixel ratio and canvas size, the renderer's draw calls, triangles, geometries and textures, the time to the first frame and the browser; **Copy report** copies it. The view changing during the run stops it with no result.
+- **Tests:**
+  - `surroundings.test.ts` (15): the front from the door or the longest wall, and the frame both ways; around a narrow shophouse, a wide café, an L, a café turned 30°, an overhanging upper floor and the demo shophouse, nothing in the café, the lane in front, everything on the base; the same street for the same branch, varied between branches; in 3D, a few dozen draw calls and no sun shadow, one group per shophouse, around the café's building, the passer-by walking and turning, every geometry freed with its context.
+  - `designer-viewer.test.ts` (+7): the lane replaces the disc and keeps the shadow on the café, survives a building rebuild and goes with No surroundings; Fit reaches it; the cutaway hides the shophouse on the camera's side only; the old lane's geometries freed; the passer-by moves only while shown and animated; the benchmark's phases and three orbits; interrupted, no result.
+  - `benchmark.test.ts` (2): median and p95 by nearest rank; the report's lines.
+  - `test/e2e/shop-designer.test.ts` (19): the lane chosen in View in 3D, **Fit scene**, L1 found from the list with the lane shown, the cutaway, the benchmark panel, back to No surroundings.
+- **Guards checked by removing them:** the cutaway's hiding, freeing the old lane, the benchmark's stop when interrupted, Fit including the lane, the shadow kept on the café, and neighbours kept out of the café's box each make a test fail.
+- **Not verified:** the numbers on real hardware (the reason for this step), and how the lane looks on a phone.
+- **Run the benchmark (owner):** on staging, open a branch → Dining tables → View in 3D, and add `&bench=orbit` to the address. Choose **No surroundings**, press **Run benchmark**, keep the tab in front for about 65 s, **Copy report**. Then choose **Neighborhood lane** (Show people and pets and Animate on), run it again, copy. On the phone, do the same in Chrome. Send the four reports. The targets: the phone's p95 at or under 33.3 ms, the desktop's median near 16.7 ms (60 Hz).
+

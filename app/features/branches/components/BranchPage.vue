@@ -292,6 +292,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
             :item-looks="editor.itemLooks.value"
             :dining-tables="tables ?? []"
             :unsaved="editor.isDirty.value"
+            :branch-id="id"
             @show-on-plan="showOnPlan"
             @design-shop="view = 'design'"
           />
