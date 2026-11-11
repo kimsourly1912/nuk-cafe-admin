@@ -477,7 +477,6 @@ function editItemLook(look: ItemLook) {
   if (isCustomItem(look)) itemLookModal.open({ look })
 }
 
-
 // --- The cafe's own looks (step 3a) ---
 
 const lookModal = overlay.create(LookFormModal)
@@ -494,7 +493,6 @@ async function newLook(from?: TableLook, forTable?: string) {
 function editLook(look: CustomLook) {
   lookModal.open({ look })
 }
-
 
 function editTable() {
   const table = selectedDiningTable.value
