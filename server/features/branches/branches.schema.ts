@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, foreignKey, index, integer, primaryKey, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { DINING_TABLE_STATUSES } from '#shared/contracts/branches'
 import { BUILT_IN_LOOK_IDS, ITEM_LOOK_KINDS, LOOK_CHAIRS, TABLE_BASES, TABLE_SHAPES } from '#shared/contracts/shop-layout'
@@ -34,6 +34,8 @@ export const branches = sqliteTable('branches', {
   currency: text().notNull().default('USD'),
   address: text(),
   phone: text(),
+  latitude: real(),
+  longitude: real(),
   status: text({ enum: BRANCH_STATUSES }).notNull().default('active'),
   // The lock for the branch's settings and hours (D41, D91): every save names it.
   version: integer().notNull().default(1),
@@ -44,6 +46,7 @@ export const branches = sqliteTable('branches', {
   pauseReason: text(),
   createdAt: instant().notNull().default(nowMs),
 }, t => [
+  check('branches_pin_check', sql`(${t.latitude} is null and ${t.longitude} is null) or (${t.latitude} is not null and ${t.longitude} is not null and ${t.latitude} between -90 and 90 and ${t.longitude} between -180 and 180)`),
   check('branches_status_check', sql`${t.status} in ('active', 'archived')`),
   // The target of every `(tenant_id, branch_id)` foreign key.
   unique('branches_tenant_id_unique').on(t.tenantId, t.id),

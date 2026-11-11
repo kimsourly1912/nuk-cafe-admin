@@ -33,6 +33,8 @@ export interface BranchSettings {
   address: string | null
   /** E.164 (`+85512345678`, D127); a branch saved before D127 may hold free text until its next save. */
   phone: string | null
+  latitude: number | null
+  longitude: number | null
   status: 'active' | 'archived'
   /** By weekday, then start time. None: never open. */
   hours: WeeklyWindow[]
@@ -56,18 +58,31 @@ export type CreateBranchInput = v.InferOutput<typeof createBranchSchema>
 
 const optionalText = (max: number) => v.nullable(v.pipe(textSchema(max), v.transform(text => text || null)))
 
+export function branchPinIsPaired(latitude: number | null | undefined, longitude: number | null | undefined): boolean {
+  return (latitude === undefined) === (longitude === undefined)
+    && (latitude === null) === (longitude === null)
+}
+
+export const latitudeSchema = v.pipe(v.number(), v.finite(), v.minValue(-90), v.maxValue(90))
+export const longitudeSchema = v.pipe(v.number(), v.finite(), v.minValue(-180), v.maxValue(180))
+
 /** Only the fields to change: absent keeps, `null` (or blank) clears address and phone. `hours` replaces the week. */
-export const updateBranchSettingsSchema = v.strictObject({
+export const updateBranchSettingsSchema = v.pipe(v.strictObject({
   version: versionSchema,
   name: v.optional(nameSchema(BRANCH_NAME_MAX)),
   timezone: v.optional(timezoneSchema),
   address: v.optional(optionalText(BRANCH_ADDRESS_MAX)),
   phone: v.optional(phoneSchema),
+  latitude: v.optional(v.nullable(latitudeSchema)),
+  longitude: v.optional(v.nullable(longitudeSchema)),
   hours: v.optional(v.pipe(
     v.array(weeklyWindowSchema),
     v.maxLength(MAX_WEEKLY_WINDOWS, `At most ${MAX_WEEKLY_WINDOWS} opening windows`),
   )),
-})
+}), v.forward(
+  v.partialCheck([['latitude'], ['longitude']], ({ latitude, longitude }) => branchPinIsPaired(latitude, longitude), 'Provide both coordinates, or clear both.'),
+  ['latitude'],
+))
 export type UpdateBranchSettingsInput = v.InferOutput<typeof updateBranchSettingsSchema>
 
 // --- Dining tables ---
@@ -177,6 +192,13 @@ export interface PublicBranch {
    * why are staff-only (`BranchPause`).
    */
   pausedUntil: string | null
+}
+
+/** The public branch list also describes Explore availability. */
+export interface PublicBranchListEntry extends PublicBranch {
+  latitude: number | null
+  longitude: number | null
+  hasExplore: boolean
 }
 
 // --- Pausing online orders (D199) ---

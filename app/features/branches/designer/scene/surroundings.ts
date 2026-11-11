@@ -47,7 +47,7 @@ const AWNINGS: LaneSurface[] = ['awning-red', 'awning-green', 'awning-blue']
 /** Walking pace, metres a second. */
 const WALK_SPEED = 0.75
 
-export function buildSurroundings(materials: MaterialLibrary, layout: Pick<ShopLayout, 'floors'>, preset: ScenePreset, seed: string): BuiltSurroundings | null {
+export function buildSurroundings(materials: MaterialLibrary, layout: Pick<ShopLayout, 'floors' | 'scene'>, preset: ScenePreset, seed: string): BuiltSurroundings | null {
   if (preset !== 'neighborhood-lane') return null
   const plan = planLane(layout, seed)
   if (!plan) return null

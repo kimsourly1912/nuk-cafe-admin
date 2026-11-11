@@ -1,5 +1,5 @@
 import { captureSnapshotGuard } from '#server/utils/query'
-import type { BranchPause, BranchSettings, CreateBranchInput, PauseBranchInput, PauseChoice, CreateTableInput, DiningTable, PublicBranch, PublicTable, ScannedTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
+import type { BranchPause, BranchSettings, CreateBranchInput, PauseBranchInput, PauseChoice, CreateTableInput, DiningTable, PublicBranch, PublicBranchListEntry, PublicTable, ScannedTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
 import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
@@ -117,9 +117,15 @@ export async function activeTableLabels(db: Db, tenantId: string, branchId: stri
 }
 
 /** Every active branch for customers, by name (launch has one, D45). */
-export async function listPublicBranches(db: Db, tenantId: string, now = new Date()): Promise<PublicBranch[]> {
-  const options = await repo.listActiveBranches(db, tenantId)
-  return Promise.all(options.map(option => getPublicBranch(db, tenantId, option.id, now)))
+export async function listPublicBranches(db: Db, tenantId: string, now = new Date(), exploreEnabled = true): Promise<PublicBranchListEntry[]> {
+  const { options, hours } = await repo.publicBranchRows(db, tenantId)
+  const hoursByBranch = Map.groupBy(hours, window => window.branchId)
+  return options.map(branch => ({
+    ...toPublicBranch(branch, hoursByBranch.get(branch.id) ?? [], now),
+    latitude: branch.latitude,
+    longitude: branch.longitude,
+    hasExplore: exploreEnabled && branch.hasExplore,
+  }))
 }
 
 // --- Pausing online orders (D199) ---
@@ -203,6 +209,8 @@ export async function getBranchSettings(db: Db, tenantId: string, id: string, no
     timezone: branch.timezone,
     address: branch.address ?? null,
     phone: branch.phone ?? null,
+    latitude: branch.latitude,
+    longitude: branch.longitude,
     status: branch.status === 'archived' ? 'archived' : 'active',
     hours,
     openNow: hours.some(window => isInWindow(window, at)),
@@ -255,6 +263,7 @@ export async function updateBranchSettings(db: Db, actor: Actor, id: string, inp
     ...(input.timezone !== undefined && { timezone: input.timezone }),
     ...(input.address !== undefined && { address: input.address }),
     ...(input.phone !== undefined && { phone: input.phone }),
+    ...(input.latitude !== undefined && { latitude: input.latitude, longitude: input.longitude }),
   }
   const changed = Object.fromEntries(Object.entries(changes)
     .filter(([key, value]) => value !== branch[key as keyof BranchRow])

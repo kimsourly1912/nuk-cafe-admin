@@ -26,6 +26,7 @@ const tenantPath = useTenantPath()
 const props = defineProps<{ id: string }>()
 
 const { data: settings, error, refresh } = useBranchSettings(props.id)
+const hasPin = computed(() => settings.value?.latitude != null && settings.value?.longitude != null)
 const { data: tables } = useBranchTables(props.id)
 const { data: branches } = useBranchOptions()
 const editor = useLayoutEditor(props.id)
@@ -263,6 +264,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           v-if="tab === 'tables' && view === 'design'"
           :editor="editor"
           :branch-id="id"
+          :has-pin="hasPin"
           :dining-tables="tables ?? []"
           :looks="editor.looks.value"
           @view3d="view = '3d'"

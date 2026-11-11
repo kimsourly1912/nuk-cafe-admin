@@ -6,5 +6,5 @@ import { listPublicBranches } from '#server/features/branches'
  */
 export default defineEventHandler(async (event) => {
   const tenant = await requireTenant(event)
-  return listPublicBranches(useDb(), tenant.id)
+  return listPublicBranches(useDb(), tenant.id, undefined, useRuntimeConfig(event).public.explore)
 })

@@ -1,15 +1,15 @@
 import { eq } from 'drizzle-orm'
 import * as v from 'valibot'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
+import { MAX_BRANCH_TABLES, updateBranchSettingsSchema } from '#shared/contracts/branches'
 import type { Floor, Placement, SaveLayoutInput } from '#shared/contracts/shop-layout'
 import { FIGURE_SIZES, floorSchema, LAYOUT_MAX_BODY_BYTES, LAYOUT_MAX_FLOOR_BYTES, NO_SCENE, saveLayoutSchema } from '#shared/contracts/shop-layout'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { getLayout, saveLayout } from '#server/features/branches/branches.layout.service'
-import { archiveTable, createTable, deleteTable, restoreTable, updateTable } from '#server/features/branches/branches.service'
+import { getLayout, getPublicExploreLayout, saveLayout } from '#server/features/branches/branches.layout.service'
+import { archiveTable, createTable, deleteTable, listPublicBranches, restoreTable, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
 import { deletePlacementStatement, layoutRows, replaceLayoutStatements, requireActiveTables, touchLayoutStatement } from '#server/features/branches/branches.layout.repository'
-import { branchLayoutItemLooks, branchLayoutPlacements, branches, diningTables } from '#server/features/branches/branches.schema'
+import { branchLayoutItemLooks, branchLayoutPlacements, branches, customFurnitureLooks, customItemLooks, diningTables } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
@@ -69,6 +69,80 @@ const save = (input: SaveLayoutInput, on = db, as = actor, at = branch) => saveL
 const table = (label: string, at = branch, as = actor) => createTable(db, as, at, { label, area: null, seats: 4 }, qr)
 const tableRow = async (id: string) => (await db.select().from(diningTables).where(eq(diningTables.id, id)))[0]!
 const placementsIn = async (at: string) => db.select().from(branchLayoutPlacements).where(eq(branchLayoutPlacements.branchId, at))
+
+describe('Explore publication', () => {
+  const scene = { preset: 'none', entrance: 'ground-door', explore: true } as const
+  const pin = { latitude: 11.5564, longitude: 104.9282 }
+  const layout = () => ({ floors: [floor('ground')], placements: [], scene })
+  const read = () => getPublicExploreLayout(db, TEST_TENANT, branch)
+
+  it('publishes only with a pin and explicit opt-in, and stops serving the saved drawing immediately when either is removed', async () => {
+    await save({ version: 0, layout: layout() })
+    await expectApiError(read, 404, 'NOT_FOUND')
+    await updateBranchSettings(db, actor, branch, { version: 1, ...pin })
+    expect(await listPublicBranches(db, TEST_TENANT)).toMatchObject([{ id: branch, ...pin, hasExplore: true }])
+    expect(await listPublicBranches(db, TEST_TENANT, undefined, false)).toMatchObject([{ hasExplore: false }])
+    expect(await read()).toMatchObject({ scene })
+    await save({ version: 1, layout: { ...layout(), scene: { ...scene, explore: false } } })
+    await expectApiError(read, 404, 'NOT_FOUND')
+    expect(await listPublicBranches(db, TEST_TENANT)).toMatchObject([{ hasExplore: false }])
+    await save({ version: 2, layout: layout() })
+    await updateBranchSettings(db, actor, branch, { version: 2, latitude: null, longitude: null })
+    await expectApiError(read, 404, 'NOT_FOUND')
+    expect(await listPublicBranches(db, TEST_TENANT)).toMatchObject([{ hasExplore: false, latitude: null, longitude: null }])
+    await updateBranchSettings(db, actor, branch, { version: 3, ...pin })
+    await db.update(branches).set({ status: 'archived' }).where(eq(branches.id, branch))
+    await expectApiError(read, 404, 'NOT_FOUND')
+    expect(await listPublicBranches(db, TEST_TENANT)).toEqual([])
+  })
+
+  it('publishes drawing-only data and refuses to read that drawing from a second cafe', async () => {
+    const other = 'tenant-2'
+    await insertBranch(db, { id: newId(), tenantId: other, name: 'Other branch', timezone: 'Asia/Phnom_Penh' })
+    const placedTable = await table('Private table label')
+    await table('Private unplaced table')
+    const furniture = { tenantId: TEST_TENANT, shape: 'round', base: 'pedestal', chair: 'cafe-chair', finishes: { top: 'warm-oak', base: 'walnut' }, defaultWidthCm: 80, defaultDepthCm: 80 } as const
+    await db.insert(customFurnitureLooks).values([
+      { ...furniture, id: 'public-table-look', name: 'Internal table look', photoAssetId: 'private-table-photo' },
+      { ...furniture, id: 'unused-look', name: 'Unused look' },
+    ])
+    await db.insert(customItemLooks).values({
+      id: 'public-item-look', tenantId: TEST_TENANT, name: 'Internal item look', kind: 'plant',
+      finishes: {}, defaultWidthCm: 40, defaultDepthCm: 40, photoAssetId: 'private-item-photo',
+    })
+    const ground = floor('ground')
+    ground.items[0]!.lookId = 'public-item-look'
+    await updateBranchSettings(db, actor, branch, { version: 1, ...pin })
+    await save({ version: 0, layout: { floors: [ground], scene, placements: [{ ...placed(placedTable.id, 'ground'), lookId: 'public-table-look' }] } })
+    const published = await read()
+    expect(published.placements).toEqual([{ floorId: 'ground', lookId: 'public-table-look', seats: 4, x: 200, y: 200, rotation: 90, width: 80, depth: 80 }])
+    expect(published.looks.map(look => look.id)).toEqual(['public-table-look'])
+    expect(published.itemLooks.map(look => look.id)).toEqual(['public-item-look'])
+    const body = JSON.stringify(published)
+    for (const field of [placedTable.id, 'Private', 'Internal', 'photo', 'version', 'updatedByName', 'tableId']) {
+      expect(body).not.toContain(field)
+    }
+    await expectApiError(() => getPublicExploreLayout(db, other, branch), 404, 'NOT_FOUND')
+    expect(await listPublicBranches(db, other)).toMatchObject([{ hasExplore: false, latitude: null, longitude: null }])
+  })
+
+  it('validates paired coordinates and refuses nonexistent, upper-floor and window entrances', async () => {
+    for (const body of [{ latitude: 0 }, { latitude: null, longitude: 0 }, { latitude: 91, longitude: 0 }, { latitude: 0, longitude: 181 }]) {
+      expect(v.safeParse(updateBranchSettingsSchema, { version: 1, ...body }).success).toBe(false)
+    }
+    expect(v.safeParse(updateBranchSettingsSchema, { version: 1, latitude: -90, longitude: 180 }).success).toBe(true)
+    for (const entrance of [undefined, 'unknown', 'first-door', 'ground-window']) {
+      const data = { version: 0, layout: { ...layout(), floors: [floor('ground'), floor('first')], scene: { ...scene, entrance } } }
+      expect(v.safeParse(saveLayoutSchema, data).success).toBe(false)
+    }
+    await save({ version: 0, layout: layout() })
+    await expectApiError(() => save({ version: 1, layout: { floors: [floor('different')], placements: [] } }), 400, 'VALIDATION_FAILED')
+    const legacy = await save({ version: 1, layout: { ...layout(), scene: { preset: 'neighborhood-lane' } } })
+    expect(legacy.scene).toEqual({ ...scene, preset: 'neighborhood-lane' })
+    const cleared = await save({ version: 2, layout: { floors: [floor('different')], placements: [], scene: { preset: 'none', entrance: null, explore: false } } })
+    expect(cleared.scene).toEqual({ preset: 'none', entrance: null, explore: false })
+  })
+})
 
 describe('reading a layout', () => {
   it('is empty at version 0 before the first save, with the branch\'s active tables by label', async () => {

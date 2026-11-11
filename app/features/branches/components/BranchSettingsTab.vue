@@ -13,6 +13,8 @@ import type { BranchForm } from '../schemas/branch-form'
 import { branchFormSchema, formFieldOf, isClosedAllWeek, toBranchForm, toUpdateBranchBody } from '../schemas/branch-form'
 import BranchHoursEditor from './BranchHoursEditor.vue'
 
+const exploreEnabled = useRuntimeConfig().public.explore
+
 const props = defineProps<{ settings: BranchSettings }>()
 const emit = defineEmits<{ saved: [settings: BranchSettings] }>()
 
@@ -68,7 +70,7 @@ async function onSubmit() {
   saving.value = true
   lastError.value = undefined
   conflict.value = false
-  const result = await update.execute({ branchId: saved.value.id, body: toUpdateBranchBody(state, saved.value.version) })
+  const result = await update.execute({ branchId: saved.value.id, body: toUpdateBranchBody(state, saved.value.version, exploreEnabled ? saved.value : undefined) })
   saving.value = false
   if (result.ok) {
     saved.value = result.data
@@ -95,6 +97,14 @@ async function reload() {
   saved.value = latest
   conflict.value = false
   emit('saved', latest)
+}
+
+function pastePin(event: ClipboardEvent) {
+  const pair = event.clipboardData?.getData('text').split(',').map(value => value.trim())
+  if (pair?.length !== 2 || pair.some(value => !value)) return
+  event.preventDefault()
+  state.latitude = pair[0]!
+  state.longitude = pair[1]!
 }
 
 useSubmitShortcut(save)
@@ -294,6 +304,41 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
               class="w-full"
             />
           </UFormField>
+          <fieldset
+            v-if="exploreEnabled"
+            class="space-y-2"
+          >
+            <legend class="text-sm font-medium text-highlighted">
+              Explore map pin
+            </legend>
+            <p class="text-sm text-muted">
+              Enter the branch coordinates, or paste both from Google Maps into either field. Saved coordinates are public.
+            </p>
+            <div class="grid gap-2 @md:grid-cols-2">
+              <UFormField
+                label="Latitude"
+                name="latitude"
+              >
+                <UInput
+                  v-model="state.latitude"
+                  inputmode="decimal"
+                  class="w-full"
+                  @paste="pastePin"
+                />
+              </UFormField>
+              <UFormField
+                label="Longitude"
+                name="longitude"
+              >
+                <UInput
+                  v-model="state.longitude"
+                  inputmode="decimal"
+                  class="w-full"
+                  @paste="pastePin"
+                />
+              </UFormField>
+            </div>
+          </fieldset>
         </section>
       </UCard>
 

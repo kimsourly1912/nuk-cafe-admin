@@ -4,6 +4,33 @@ import { applyMigration, createTestClient, migrationFiles } from '#server/tests/
 
 // Migrations that change tables holding data are checked against data, not only an empty
 // database: staging runs them over its rows.
+describe('0064_branch_explore_pin', () => {
+  it('upgrades a linked branch in place and enforces coordinate pairs and ranges', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0064_branch_explore_pin.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    await client.execute('pragma foreign_keys = on')
+    await client.batch([
+      'insert into organization (id, name, slug, created_at) values (\'cafe\', \'Cafe\', \'cafe\', 1)',
+      'insert into branches (id, tenant_id, name, timezone) values (\'branch\', \'cafe\', \'Main\', \'Asia/Phnom_Penh\')',
+      'insert into branch_layouts (tenant_id, branch_id, version) values (\'cafe\', \'branch\', 7)',
+    ])
+    await applyMigration(client, files[at]!)
+    const saved = await client.execute('select latitude, longitude from branches where id = \'branch\'')
+    expect({ ...saved.rows[0] }).toEqual({ latitude: null, longitude: null })
+    const layout = await client.execute('select version from branch_layouts where branch_id = \'branch\'')
+    expect(layout.rows[0]?.version).toBe(7)
+    expect((await client.execute('pragma foreign_key_check')).rows).toEqual([])
+    for (const values of ['latitude = 1', 'longitude = 1', 'latitude = 91, longitude = 1', 'latitude = 1, longitude = -181']) {
+      await expect(client.execute(`update branches set ${values} where id = 'branch'`)).rejects.toThrow(/CHECK/)
+    }
+    await client.execute('update branches set latitude = -90, longitude = 180 where id = \'branch\'')
+    await client.execute('update branches set latitude = null, longitude = null where id = \'branch\'')
+  })
+})
+
 describe('0052_member_unique', () => {
   async function upTo0052() {
     const client = await createTestClient()

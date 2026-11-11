@@ -22,6 +22,7 @@ import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
 import { canAddFloor, newFloor } from '../designer/starters'
 import type { Starter } from '../designer/starters'
 import EdgePanel from './EdgePanel.vue'
+import ExploreLayoutSettings from './ExploreLayoutSettings.vue'
 import ItemLookFormModal from './ItemLookFormModal.vue'
 import type { ItemLookSource } from './ItemLookFormModal.vue'
 import FloorPlanCanvas from './FloorPlanCanvas.vue'
@@ -34,6 +35,7 @@ import TableQrModal from './TableQrModal.vue'
 const props = defineProps<{
   editor: LayoutEditor
   branchId: string
+  hasPin: boolean
   /** Every table of the branch (the table list's query): for Edit table, View QR and names. */
   diningTables: readonly DiningTable[]
   looks: readonly TableLook[]
@@ -41,6 +43,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{ view3d: [] }>()
 
+const exploreEnabled = useRuntimeConfig().public.explore
+const exploreOpen = ref(false)
 const draft = props.editor.draft
 const layout = computed(() => draft.layout.value)
 const tables = computed(() => props.editor.tables.value)
@@ -651,6 +655,13 @@ function chooseStarter(starter: Starter) {
 </script>
 
 <template>
+  <ExploreLayoutSettings
+    v-if="exploreEnabled"
+    v-model:open="exploreOpen"
+    :layout="layout"
+    :has-pin="hasPin"
+    @change="scene => draft.change(layout => { layout.scene = scene })"
+  />
   <!-- The library (lg and up beside the plan; below, in a slide-over). -->
   <DefineLibrary>
     <div class="flex flex-col gap-5">
@@ -1713,6 +1724,16 @@ function chooseStarter(starter: Starter) {
             <USeparator
               orientation="vertical"
               class="h-5"
+            />
+            <UButton
+              v-if="exploreEnabled"
+              label="Explore settings"
+              icon="i-lucide-map-pin"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :ui="{ label: 'max-xl:sr-only' }"
+              @click="exploreOpen = true"
             />
             <UButton
               label="View in 3D"

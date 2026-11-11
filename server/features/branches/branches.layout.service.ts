@@ -1,7 +1,8 @@
-import { isBuiltInLook, isItemLookKind, NO_SCENE } from '#shared/contracts/shop-layout'
-import type { BranchLayout, Floor, LayoutScene, Placement, SaveLayoutInput, ScenePreset } from '#shared/contracts/shop-layout'
+import { INVALID_STREET_DOOR, isBuiltInLook, isItemLookKind, ITEM_HEIGHTS, NO_SCENE, streetDoor } from '#shared/contracts/shop-layout'
+import type { BranchLayout, Floor, LayoutScene, Placement, PublicExploreLayout, SaveLayoutInput } from '#shared/contracts/shop-layout'
 import type { Db, Statement } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
+import { apiError, ErrorCodes, notFound } from '#server/utils/errors'
 import { toIso } from '#server/utils/time'
 import type { Actor } from '#server/features/identity'
 import { layoutChanged, layoutLooksUnavailable, layoutTablesUnavailable } from './branches.errors'
@@ -31,7 +32,8 @@ function toLayout(rows: LayoutRows): BranchLayout {
 }
 
 function toFloor(row: FloorRow): Floor {
-  return { id: row.id, name: row.name, height: row.heightCm, hasRoof: row.hasRoof, ...row.geometry }
+  const { outline, edges, walls, items } = row.geometry
+  return { id: row.id, name: row.name, height: row.heightCm, hasRoof: row.hasRoof, outline, edges, walls, items }
 }
 
 function toPlacement(row: PlacementRow): Placement {
@@ -55,6 +57,25 @@ export async function getLayout(db: Db, tenantId: string, branchId: string): Pro
   return toLayout(await repo.layoutRows(db, tenantId, branchId))
 }
 
+/** Only an active, opted-in branch with a pin and a valid street door has a public layout. */
+export async function getPublicExploreLayout(db: Db, tenantId: string, branchId: string): Promise<PublicExploreLayout> {
+  const rows = await repo.exploreRows(db, tenantId, branchId)
+  if (!rows) throw notFound('This branch')
+  const floors = rows.floors.map(toFloor)
+  const { preset, entrance } = rows.scene
+  if (!entrance || !streetDoor(floors, entrance)) throw notFound('This branch')
+  return {
+    floors,
+    placements: rows.placements.map((row) => {
+      const { floorId, x, y, rotation, width, depth, lookId } = toPlacement(row)
+      return { floorId, x, y, rotation, width, depth, lookId, seats: row.seats }
+    }),
+    scene: { preset, entrance, explore: true },
+    looks: rows.looks,
+    itemLooks: rows.itemLooks.map(look => ({ ...look, defaultHeight: look.defaultHeight ?? ITEM_HEIGHTS[look.kind].default })),
+  }
+}
+
 /**
  * Saves the whole layout from the version read, in one batch: the version (first save: the
  * layout's row) and the scene if one came (none: the saved one stays, an app tab from before step 4a),
@@ -72,7 +93,13 @@ export async function saveLayout(db: Db, actor: Actor, branchId: string, input: 
   await loadActiveBranch(db, tenantId, branchId)
   const current = await repo.layoutRows(db, tenantId, branchId)
   if ((current.layout?.version ?? 0) !== input.version) throw layoutChanged()
-  const { floors, placements, scene } = input.layout
+  const { floors, placements, scene: requestedScene } = input.layout
+  const savedScene = current.layout?.scene ?? NO_SCENE
+  const scene = requestedScene && { ...savedScene, ...requestedScene }
+  const effectiveScene = scene ?? savedScene
+  if ((effectiveScene.entrance != null || effectiveScene.explore) && !streetDoor(floors, effectiveScene.entrance)) {
+    throw apiError(400, ErrorCodes.VALIDATION_FAILED, INVALID_STREET_DOOR, { fieldErrors: { 'layout.scene.entrance': [INVALID_STREET_DOOR] } })
+  }
   const unavailable = unavailableAt(placements, current.tables.map(table => table.id))
   if (unavailable.length) throw layoutTablesUnavailable(unavailable)
   const unknownLooks = unknownLooksAt(input.layout, current)
@@ -106,9 +133,14 @@ export async function saveLayout(db: Db, actor: Actor, branchId: string, input: 
 }
 
 /** The audit's note of a new scene: its preset, when the save changes it (step 4a). */
-function sceneChange(current: LayoutRows, scene: LayoutScene | undefined): { scene?: ScenePreset } {
+function sceneChange(current: LayoutRows, scene: LayoutScene | undefined) {
+  if (!scene) return {}
   const saved = current.layout?.scene ?? NO_SCENE
-  return scene && scene.preset !== saved.preset ? { scene: scene.preset } : {}
+  return {
+    ...(scene.preset !== saved.preset && { scene: scene.preset }),
+    ...(scene.entrance !== saved.entrance && { entrance: scene.entrance ?? null }),
+    ...(Boolean(scene.explore) !== Boolean(saved.explore) && { explore: Boolean(scene.explore) }),
+  }
 }
 
 /** The positions of the placements whose table isn't one of `activeIds`. */

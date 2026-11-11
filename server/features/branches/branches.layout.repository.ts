@@ -1,11 +1,11 @@
-import { asc, eq, inArray, sql } from 'drizzle-orm'
-import type { BuiltInLookId, FloorGeometry, ItemLookKind, LayoutScene, LayoutTable } from '#shared/contracts/shop-layout'
+import { and, asc, eq, exists, inArray, sql } from 'drizzle-orm'
+import type { BuiltInLookId, FloorGeometry, ItemLook, ItemLookKind, LayoutScene, LayoutTable, TableLook } from '#shared/contracts/shop-layout'
 import type { Db, Statement } from '#server/utils/batch'
 import { chunk, insertAll, requireCount } from '#server/utils/batch'
 import { inTenant } from '#server/utils/query'
 import { user } from '#server/db/tables'
-import { activeTable } from './branches.repository'
-import { branchLayoutFloors, branchLayoutItemLooks, branchLayoutPlacements, branchLayouts, customFurnitureLooks, customItemLooks, diningTables } from './branches.schema'
+import { activeBranch, activeTable, branchHasPin, exploreIsOn } from './branches.repository'
+import { branchLayoutFloors, branchLayoutItemLooks, branchLayoutPlacements, branchLayouts, branches, customFurnitureLooks, customItemLooks, diningTables } from './branches.schema'
 
 // --- Row types ---
 
@@ -103,6 +103,54 @@ export async function layoutRows(db: Db, tenantId: string, branchId: string): Pr
     db.select({ id: customItemLooks.id, kind: customItemLooks.kind }).from(customItemLooks).where(inTenant(customItemLooks, tenantId)),
   ])
   return { layout: layouts[0], floors, placements, tables, lookIds: looks.map(look => look.id), itemLooks }
+}
+
+interface ExploreRows {
+  scene: LayoutScene
+  floors: FloorRow[]
+  placements: (PlacementRow & { seats: number })[]
+  looks: Omit<TableLook, 'name' | 'photo'>[]
+  itemLooks: (Omit<ItemLook, 'name' | 'photo' | 'defaultHeight'> & { defaultHeight: number | null })[]
+}
+
+/** Publication state and the referenced drawing are read in one snapshot. */
+export async function exploreRows(db: Db, tenantId: string, branchId: string): Promise<ExploreRows | undefined> {
+  const publication = db.select({ scene: branchLayouts.scene }).from(branchLayouts)
+    .innerJoin(branches, and(eq(branches.tenantId, branchLayouts.tenantId), eq(branches.id, branchLayouts.branchId), activeBranch, branchHasPin))
+    .where(and(ofBranch(branchLayouts, tenantId, branchId), exploreIsOn)).limit(1)
+  const isPublished = exists(publication)
+  const [published, floors, placements, looks, itemLooks] = await db.batch([
+    publication,
+    db.select(floorColumns).from(branchLayoutFloors)
+      .where(and(ofBranch(branchLayoutFloors, tenantId, branchId), isPublished)).orderBy(asc(branchLayoutFloors.position)),
+    db.select({ ...placementColumns, seats: diningTables.seats }).from(branchLayoutPlacements)
+      .innerJoin(diningTables, and(
+        eq(diningTables.tenantId, branchLayoutPlacements.tenantId),
+        eq(diningTables.branchId, branchLayoutPlacements.branchId),
+        eq(diningTables.id, branchLayoutPlacements.tableId),
+        activeTable,
+      ))
+      .where(and(ofBranch(branchLayoutPlacements, tenantId, branchId), isPublished))
+      .orderBy(asc(branchLayoutPlacements.floorId), asc(branchLayoutPlacements.xCm), asc(branchLayoutPlacements.yCm), asc(branchLayoutPlacements.tableId)),
+    db.select({
+      id: customFurnitureLooks.id, shape: customFurnitureLooks.shape,
+      base: customFurnitureLooks.base, chair: customFurnitureLooks.chair, finishes: customFurnitureLooks.finishes,
+      defaultWidth: customFurnitureLooks.defaultWidthCm, defaultDepth: customFurnitureLooks.defaultDepthCm,
+    }).from(customFurnitureLooks).where(inTenant(customFurnitureLooks, tenantId, inArray(customFurnitureLooks.id,
+      db.select({ id: branchLayoutPlacements.customLookId }).from(branchLayoutPlacements)
+        .where(and(ofBranch(branchLayoutPlacements, tenantId, branchId), isPublished)),
+    ))).orderBy(asc(customFurnitureLooks.id)),
+    db.select({
+      id: customItemLooks.id, kind: customItemLooks.kind, finishes: customItemLooks.finishes,
+      defaultWidth: customItemLooks.defaultWidthCm, defaultDepth: customItemLooks.defaultDepthCm,
+      defaultHeight: customItemLooks.defaultHeightCm,
+    }).from(customItemLooks).where(inTenant(customItemLooks, tenantId, inArray(customItemLooks.id,
+      db.select({ id: branchLayoutItemLooks.lookId }).from(branchLayoutItemLooks)
+        .where(and(ofBranch(branchLayoutItemLooks, tenantId, branchId), isPublished)),
+    ))).orderBy(asc(customItemLooks.id)),
+  ])
+  const scene = published[0]?.scene
+  return scene ? { scene, floors, placements, looks, itemLooks } : undefined
 }
 
 // --- Guards ---
