@@ -229,7 +229,7 @@ describe('the shop designer on saved layouts', () => {
     expect(after.placements.find(placement => placement.tableId === saved.placements.find(other => other.floorId === loft.id)!.tableId)).toMatchObject({ lookId: 'oak-rectangle', width: 120, depth: 80 })
   })
 
-  it('a stale save keeps the draft: Load latest takes theirs (undo brings mine back), Overwrite with mine asks first', { timeout: 60_000 }, async () => {
+  it('a stale save keeps the draft: Load latest takes theirs (undo brings mine back), Overwrite with mine asks first', { timeout: 120_000 }, async () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').click()
@@ -241,8 +241,11 @@ describe('the shop designer on saved layouts', () => {
     const theirs = { ...before.placements[0]!, x: 150, y: 300 }
     expect(await saveElsewhere(page, { version: before.version, layout: { floors: before.floors, placements: [theirs] } })).toBe(200)
 
+    await page.getByRole('group', { name: 'Move the selection' }).getByRole('button', { name: 'Done' }).click()
     const views = page.getByRole('group', { name: 'Dining tables views' })
     await views.getByRole('button', { name: 'View in 3D' }).click()
+    // CI uses software WebGL. Wait until startup measurement stops scheduling frames.
+    await page.getByTestId('quality').waitFor({ timeout: 45_000 })
     await saveButton(page).click()
     const conflict = page.getByTestId('layout-conflict')
     await conflict.getByText('This layout was changed somewhere else').waitFor()
