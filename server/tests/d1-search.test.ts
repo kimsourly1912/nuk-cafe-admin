@@ -15,7 +15,7 @@ import { deleteOldest, insertAll, requireCount, requireOneChange, runBatch, upda
 import { byId, byName, firstRow, hasAny, inTenant, nextPosition, readPage } from '#server/utils/query'
 import { menuItemVariations, menuOptionSets, menuOptionValues, menuPromotions } from '#server/features/menu/menu.schema'
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
-import { createLook, deleteLook, getLayout, listLooks, saveLayout, updateLook } from '#server/features/branches'
+import { createItemLook, createLook, deleteItemLook, deleteLook, getLayout, listItemLooks, listLooks, saveLayout, updateLook } from '#server/features/branches'
 import { diningTables } from '#server/features/branches/branches.schema'
 import { jsonBytes, largestLayout } from '#server/tests/support/layouts'
 import { migrationFiles, addBranchStaff, createUser, ensureTenant, insertBranch, insertSoldLine } from '#server/tests/support/db'
@@ -483,5 +483,30 @@ describe('the shop layout on real D1 (D273)', { timeout: 60_000, tags: ['slow'] 
     expect((await updateLook(db, owner, look.id, { version: 1, ...input, name: 'D1 oak' })).version).toBe(2)
     await save(db, 1, 'round-cafe')
     await deleteLook(db, owner, look.id, { version: 2 })
+  })
+
+  it('item looks (step 3d): every floor using 48 looks saves; D1 refuses a look deleted under a save, and one in use', async () => {
+    const branchId = newId()
+    await insertBranch(db, { id: branchId, name: 'Item look lab', timezone: 'Asia/Phnom_Penh', tenantId: ours })
+    const owner: Actor = { ...ourOwner, userId: (await createUser(db)).id }
+    const input = (name: string) => ({ name, kind: 'service-counter', finishes: {}, defaultWidth: 180, defaultDepth: 65, photoId: null }) as const
+    const lookIds: string[] = []
+    // 48, leaving room under the limit of 50 for the two below; d1-limits.test.ts saves all 50.
+    for (let n = 0; n < 48; n++) lookIds.push((await createItemLook(db, owner, input(`D1 counter ${n}`))).id)
+    // 480 uses (10 floors × 48 looks), in pieces under D1's 100 parameters.
+    const largest = largestLayout([], 0, lookIds)
+    expect((await saveLayout(db, owner, branchId, largest)).floors).toEqual(largest.layout.floors)
+    expect((await listItemLooks(db, ours)).filter(look => lookIds.includes(look.id)).every(look => look.pieces > 0)).toBe(true)
+
+    const floor = (lookId: string) => ({ ...largestLayout([]).layout.floors[0]!, items: [{ id: 'counter', kind: 'service-counter' as const, x: 0, y: 0, rotation: 0, width: 180, depth: 65, finishes: {}, lookId }] })
+    const save = (on: Db, version: number, lookId: string) => saveLayout(on, owner, branchId, { version, layout: { floors: [floor(lookId)], placements: [] } })
+    // Deleted between the save's checks and its write: D1's foreign key stops the batch.
+    const gone = await createItemLook(db, owner, input('D1 gone'))
+    await expectApiError(() => save(interleaved(db, () => deleteItemLook(db, owner, gone.id, { version: 1 }), 1), 1, gone.id), 409, 'LAYOUT_LOOK_UNAVAILABLE', ['layout.floors.0.items.0.lookId'])
+    expect((await getLayout(db, ours, branchId)).version).toBe(1)
+    // Placed between the delete's check and its write: the same key refuses the delete.
+    const fresh = await createItemLook(db, owner, input('D1 fresh'))
+    await expectApiError(() => deleteItemLook(interleaved(db, () => save(db, 1, fresh.id), 1), owner, fresh.id, { version: 1 }), 409, 'LOOK_IN_USE')
+    expect((await listItemLooks(db, ours)).find(look => look.id === fresh.id)).toMatchObject({ pieces: 1 })
   })
 })

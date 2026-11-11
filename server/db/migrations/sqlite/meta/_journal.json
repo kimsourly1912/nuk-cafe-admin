@@ -428,6 +428,13 @@
       "when": 1794360487337,
       "tag": "0060_look_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "6",
+      "when": 1794364885313,
+      "tag": "0061_item_looks",
+      "breakpoints": true
     }
   ]
 }

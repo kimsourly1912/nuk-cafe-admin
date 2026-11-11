@@ -49,6 +49,16 @@ export const ITEM_KINDS = [
   'service-counter', 'display-shelf', 'planter', 'plant', 'room-divider', 'stairs',
 ] as const
 export type ItemKind = typeof ITEM_KINDS[number]
+/**
+ * The kinds a cafe can save its own look for (step 3d): every chair and fixture, not stairs (a
+ * structure). Adding a kind here needs no migration: the database stores it as text.
+ */
+export const ITEM_LOOK_KINDS = [
+  'cafe-chair', 'bentwood-chair', 'bar-stool', 'dining-bench',
+  'service-counter', 'display-shelf', 'planter', 'plant', 'room-divider',
+] as const satisfies readonly ItemKind[]
+export type ItemLookKind = typeof ITEM_LOOK_KINDS[number]
+export const isItemLookKind = (kind: string): kind is ItemLookKind => (ITEM_LOOK_KINDS as readonly string[]).includes(kind)
 
 /** A table look's top (D273): round, rectangle (square is a rectangle) or a booth with benches. */
 export const TABLE_SHAPES = ['round', 'rect', 'booth'] as const
@@ -102,17 +112,26 @@ export const ITEM_SIZE_MIN_CM = 10
 export const ITEM_SIZE_MAX_CM = 2_000
 
 /** Furniture or a fixture: its centre, turn and footprint. Height is the kind's own. */
-export const itemSchema = v.strictObject({
-  id: idSchema,
-  kind: v.picklist(ITEM_KINDS),
-  x: cmSchema,
-  y: cmSchema,
-  rotation: rotationSchema,
-  width: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
-  depth: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
-  /** By the kind's finish slots (`frame`, `seat`, `top`…); a missing slot uses the kind's default. */
-  finishes: finishesSchema,
-})
+export const itemSchema = v.pipe(
+  v.strictObject({
+    id: idSchema,
+    kind: v.picklist(ITEM_KINDS),
+    x: cmSchema,
+    y: cmSchema,
+    rotation: rotationSchema,
+    width: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
+    depth: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
+    /** By the kind's finish slots (`frame`, `seat`, `top`…); a missing slot uses the kind's default. */
+    finishes: finishesSchema,
+    /**
+     * One of the cafe's own looks for this kind (step 3d): its finishes then win over the item's own,
+     * and editing the look changes every piece that uses it. Left out: the item's own finishes.
+     * A look that isn't the cafe's, or is of another kind, is 409 `LAYOUT_LOOK_UNAVAILABLE`.
+     */
+    lookId: v.optional(idSchema),
+  }),
+  v.check(item => item.lookId === undefined || isItemLookKind(item.kind), 'Stairs have no custom look'),
+)
 export type LayoutItem = v.InferOutput<typeof itemSchema>
 
 export const floorSchema = v.pipe(
@@ -213,14 +232,21 @@ export interface TableLook {
   /** The size a newly placed table starts with; each placement keeps its own. */
   defaultWidth: number
   defaultDepth: number
-  /** A custom look's photo (step 3b), shown in the picker and the table's details; built-in looks have none. */
-  photo?: LookPhoto | null
+  /**
+   * Shown in the picker and the table's details: a custom look's upload (step 3b), or the picture
+   * a built-in look ships with (step 3d, a static file of the app's).
+   */
+  photo?: LookImage | null
 }
 
-/** A look's photo: an upload of the cafe's (`id`, for `photoId`) and where it's served. */
-export interface LookPhoto {
-  id: string
+/** Where a look's picture is served. */
+export interface LookImage {
   url: string
+}
+
+/** A custom look's photo: an upload of the cafe's (`id`, for `photoId`) and where it's served. */
+export interface LookPhoto extends LookImage {
+  id: string
 }
 
 /** A look's finishes by part: the table's top and base, and its chairs' frame and upholstery. */
@@ -269,6 +295,58 @@ export interface CustomLook extends TableLook {
   version: number
   /** How many placed tables use it, in every branch's saved layout. It can't be deleted while any does. */
   tables: number
+}
+
+/** A cafe's own chair and fixture looks (step 3d), at most. */
+export const MAX_CUSTOM_ITEM_LOOKS = 50
+
+/**
+ * What a chair or fixture looks like (step 3d): a kind, its finishes by the kind's slots, and the
+ * size a newly placed piece starts with. Shared by the pieces using it; each keeps its own size.
+ */
+export interface ItemLook {
+  id: string
+  name: string
+  kind: ItemLookKind
+  finishes: Record<string, Finish>
+  defaultWidth: number
+  defaultDepth: number
+  photo?: LookImage | null
+}
+
+const itemLookFields = {
+  name: lookFields.name,
+  /** By the kind's finish slots (`frame`, `seat`, `cabinet`, `top`…); a missing slot uses the kind's default. */
+  finishes: finishesSchema,
+  defaultWidth: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
+  defaultDepth: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
+  /** As a table look's `photoId`: one upload is one look's photo only. */
+  photoId: lookFields.photoId,
+}
+
+/** `POST …/admin/item-looks`: a new chair or fixture look for the whole cafe (every branch). */
+export const createItemLookSchema = v.strictObject({
+  kind: v.picklist(ITEM_LOOK_KINDS),
+  ...itemLookFields,
+})
+export type CreateItemLookInput = v.InferOutput<typeof createItemLookSchema>
+
+/**
+ * `PATCH …/admin/item-looks/{id}`: the whole look again, at the version read, **without its kind**:
+ * the pieces saved with it are of that kind, so another kind is another look.
+ */
+export const updateItemLookSchema = v.strictObject({
+  version: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  ...itemLookFields,
+})
+export type UpdateItemLookInput = v.InferOutput<typeof updateItemLookSchema>
+
+/** One of the cafe's chair and fixture looks, as `GET …/admin/item-looks` lists them by name. */
+export interface CustomItemLook extends ItemLook {
+  photo: LookPhoto | null
+  version: number
+  /** How many placed pieces use it, in every branch's saved layout. It can't be deleted while any does. */
+  pieces: number
 }
 
 /** What the layout needs to know about a dining table: the record stays the branches feature's. */

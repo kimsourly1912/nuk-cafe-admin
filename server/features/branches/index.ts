@@ -2,6 +2,7 @@ export { activeBranchCounts, activeTableLabels, archiveTable, cafeToday, createB
 export type { BranchClock, SeededBranch } from './branches.service'
 export { getLayout, saveLayout } from './branches.layout.service'
 export { createLook, deleteLook, listLooks, updateLook } from './branches.looks.service'
+export { createItemLook, deleteItemLook, listItemLooks, updateItemLook } from './branches.item-looks.service'
 export { qrConfigFrom } from './branches.qr'
 export type { QrConfig } from './branches.qr'
 

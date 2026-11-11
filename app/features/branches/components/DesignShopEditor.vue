@@ -9,10 +9,11 @@
  */
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import type { DiningTable } from '#shared/contracts/branches'
-import type { CustomLook, Finish, Floor, InnerWall, ItemKind, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
+import { isItemLookKind } from '#shared/contracts/shop-layout'
+import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory } from '../designer/catalog'
-import { FINISH_SWATCHES, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK } from '../designer/catalog'
+import { FINISH_SWATCHES, findItemLook, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK, pieceFinishes } from '../designer/catalog'
 import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, outsideOutline, placementExtent, snap } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { areaM2, edgeNames, shapeOf } from '../designer/outline'
@@ -22,6 +23,8 @@ import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
 import { canAddFloor, newFloor } from '../designer/starters'
 import type { Starter } from '../designer/starters'
 import EdgePanel from './EdgePanel.vue'
+import ItemLookFormModal from './ItemLookFormModal.vue'
+import type { ItemLookSource } from './ItemLookFormModal.vue'
 import FloorPlanCanvas from './FloorPlanCanvas.vue'
 import LayoutStarterPicker from './LayoutStarterPicker.vue'
 import LookFormModal from './LookFormModal.vue'
@@ -52,6 +55,7 @@ const canvas = useTemplateRef<InstanceType<typeof FloorPlanCanvas>>('canvas')
 const libraryOpen = ref(false)
 const detailsOpen = ref(false)
 const confirm = useConfirm()
+const tenantPath = useTenantPath()
 
 const [DefineLibrary, ReuseLibrary] = createReusableTemplate()
 const [DefineDetails, ReuseDetails] = createReusableTemplate()
@@ -85,6 +89,9 @@ const CATEGORIES: { key: ItemCategory, label: string }[] = [
   { key: 'structure', label: 'Structure' },
 ]
 const catalog = CATEGORIES.map(category => ({ ...category, specs: Object.values(ITEM_SPECS).filter(spec => spec.category === category.key) }))
+/** The cafe's own chair and fixture looks (step 3d), by category: shown after the built-in pieces. */
+const itemLooks = computed(() => props.editor.itemLooks.value)
+const itemLooksIn = (category: ItemCategory) => itemLooks.value.filter(look => ITEM_SPECS[look.kind].category === category)
 
 const placedIds = computed(() => new Set(layout.value.placements.map(placement => placement.tableId)))
 const unplaced = computed(() => tables.value.filter(table => !placedIds.value.has(table.id)))
@@ -145,10 +152,13 @@ function placeTable(tableId: string, at: Point, lookId: string = NEW_TABLE_LOOK)
   selection.value = { kind: 'table', id: tableId }
 }
 
-function placeItem(kind: ItemKind, at: Point) {
-  const spec = ITEM_SPECS[kind]
+/** A piece from the library: a built-in one, or with `lookId` one of the cafe's looks (its kind and size). */
+function placeItem(kind: ItemKind, at: Point, lookId?: string) {
+  const look = findItemLook(itemLooks.value, lookId)
+  const size = look ?? { defaultWidth: ITEM_SPECS[kind].width, defaultDepth: ITEM_SPECS[kind].depth }
   const id = newLayoutId('item')
-  changeFloor(target => target.items.push({ id, kind, x: snap(at.x), y: snap(at.y), rotation: 0, width: spec.width, depth: spec.depth, finishes: {} }))
+  const item: LayoutItem = { id, kind: look?.kind ?? kind, x: snap(at.x), y: snap(at.y), rotation: 0, width: size.defaultWidth, depth: size.defaultDepth, finishes: {}, ...(look && { lookId: look.id }) }
+  changeFloor(target => target.items.push(item))
   selection.value = { kind: 'item', id }
 }
 
@@ -366,6 +376,64 @@ function duplicateItem(itemId: string) {
   selection.value = { kind: 'item', id }
 }
 
+// --- The cafe's own chair and fixture looks (step 3d) ---
+
+const itemLookModal = overlay.create(ItemLookFormModal)
+const isCustomItem = (look: ItemLook): look is CustomItemLook => 'version' in look
+const selectedItemLook = computed(() => (selectedItem.value ? findItemLook(itemLooks.value, selectedItem.value.lookId) : undefined))
+/** The piece's look choices: its own finishes, or one of the cafe's looks of its kind. */
+const OWN_FINISHES = 'own'
+const itemLookItems = computed(() => {
+  const item = selectedItem.value
+  if (!item) return []
+  return [{ label: 'Own finishes', value: OWN_FINISHES }, ...itemLooks.value.filter(look => look.kind === item.kind).map(look => ({ label: look.name, value: look.id }))]
+})
+const itemLookUsers = computed(() => {
+  const item = selectedItem.value
+  if (!item?.lookId) return 0
+  return floors.value.flatMap(candidate => candidate.items).filter(other => other.lookId === item.lookId && other.id !== item.id).length
+})
+
+/**
+ * Gives a piece one of the cafe's looks (its size becomes the look's, like a table's) or its own
+ * finishes again, keeping how it looked: one source of finishes at a time.
+ */
+function setItemLook(itemId: string, lookId: string) {
+  const look = lookId === OWN_FINISHES ? undefined : findItemLook(itemLooks.value, lookId)
+  draft.change((next) => {
+    const item = next.floors.flatMap(candidate => candidate.items).find(candidate => candidate.id === itemId)
+    if (!item) return
+    if (look) {
+      Object.assign(item, { lookId: look.id, finishes: {}, width: look.defaultWidth, depth: look.defaultDepth })
+      return
+    }
+    item.finishes = { ...pieceFinishes(item, itemLooks.value) }
+    delete item.lookId
+  })
+}
+
+/** A new chair or fixture look; with `forItem`, that piece gets it at once (at its own size). */
+async function newItemLook(options: { category?: ItemCategory, from?: ItemLookSource, forItem?: string } = {}) {
+  const { category, from, forItem } = options
+  const saved = await itemLookModal.open({ category, from }).result
+  if (!saved || !forItem) return
+  draft.change((next) => {
+    const item = next.floors.flatMap(candidate => candidate.items).find(candidate => candidate.id === forItem)
+    if (item && item.kind === saved.kind) Object.assign(item, { lookId: saved.id, finishes: {} })
+  })
+}
+
+function saveItemAsLook(item: LayoutItem) {
+  if (!isItemLookKind(item.kind)) return
+  void newItemLook({ from: { kind: item.kind, finishes: pieceFinishes(item, itemLooks.value), width: item.width, depth: item.depth }, forItem: item.id })
+}
+
+function editItemLook(look: ItemLook) {
+  if (isCustomItem(look)) itemLookModal.open({ look })
+}
+
+const unknownItemLookLabels = computed(() => props.editor.unknownItemLooks.value.map(item => ITEM_SPECS[item.kind].label))
+
 // --- The cafe's own looks (step 3a) ---
 
 const lookModal = overlay.create(LookFormModal)
@@ -395,12 +463,12 @@ function viewQr() {
   if (table?.qrUrl) qrModal.open({ table: { ...table, qrUrl: table.qrUrl } })
 }
 
-type LibraryPiece = { kind: 'table', tableId: string } | { kind: 'look', lookId: string } | { kind: 'item', itemKind: ItemKind }
+type LibraryPiece = { kind: 'table', tableId: string } | { kind: 'look', lookId: string } | { kind: 'item', itemKind: ItemKind, lookId?: string }
 
 function place(piece: LibraryPiece, at: Point) {
   if (piece.kind === 'table') placeTable(piece.tableId, at)
   else if (piece.kind === 'look') void placeLook(piece.lookId, at)
-  else placeItem(piece.itemKind, at)
+  else placeItem(piece.itemKind, at, piece.lookId)
 }
 
 function placeInMiddle(piece: LibraryPiece) {
@@ -647,18 +715,86 @@ function chooseStarter(starter: Starter) {
             @pointerdown="startLibraryDrag($event, { kind: 'item', itemKind: spec.kind })"
             @click="placeInMiddle({ kind: 'item', itemKind: spec.kind })"
           >
+            <img
+              v-if="spec.photo"
+              :src="spec.photo"
+              alt=""
+              draggable="false"
+              loading="lazy"
+              class="aspect-4/3 w-full rounded-sm bg-muted object-cover"
+            >
             <UIcon
+              v-else
               :name="ITEM_ICONS[spec.kind]"
               class="size-5 text-muted"
             />
             <span>{{ spec.label }}</span>
             <span class="text-xs text-muted">{{ spec.footprint === 'round' ? `Ø ${spec.width} cm` : `${spec.width} × ${spec.depth}` }}</span>
           </button>
+          <!-- The cafe's own looks of this category (step 3d): shared by the pieces placed with them. -->
+          <div
+            v-for="look in itemLooksIn(category.key)"
+            :key="look.id"
+            class="relative"
+          >
+            <button
+              type="button"
+              class="flex size-full touch-none flex-col items-start gap-1 rounded-md border border-default p-2 text-left text-sm text-highlighted hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
+              :data-testid="`item-look-${look.name}`"
+              @pointerdown="startLibraryDrag($event, { kind: 'item', itemKind: look.kind, lookId: look.id })"
+              @click="placeInMiddle({ kind: 'item', itemKind: look.kind, lookId: look.id })"
+            >
+              <img
+                v-if="look.photo"
+                :src="look.photo.url"
+                alt=""
+                draggable="false"
+                loading="lazy"
+                class="aspect-4/3 w-full rounded-sm bg-muted object-cover"
+              >
+              <UIcon
+                v-else
+                :name="ITEM_ICONS[look.kind]"
+                class="size-5 text-primary"
+              />
+              <span class="break-words">{{ look.name }}</span>
+              <span class="text-xs text-muted">{{ ITEM_SPECS[look.kind].footprint === 'round' ? `Ø ${look.defaultWidth} cm` : `${look.defaultWidth} × ${look.defaultDepth}` }}</span>
+            </button>
+            <UButton
+              icon="i-lucide-pencil"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              class="absolute top-1 right-1"
+              :class="look.photo && 'bg-default/80'"
+              :aria-label="`Edit the look ${look.name}`"
+              @click="editItemLook(look)"
+            />
+          </div>
         </div>
+        <UButton
+          v-if="category.key !== 'structure'"
+          :label="category.key === 'chairs' ? 'New chair look' : 'New fixture look'"
+          icon="i-lucide-plus"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          class="self-start"
+          @click="newItemLook({ category: category.key })"
+        />
       </section>
       <p class="text-xs text-muted">
         Drag onto the plan, or click to place it in the middle. Doors and windows go on an edge: click one on the plan.
       </p>
+      <UButton
+        label="Manage looks"
+        icon="i-lucide-swatch-book"
+        color="neutral"
+        variant="link"
+        size="sm"
+        class="self-start px-0"
+        :to="tenantPath('/admin/branches/looks')"
+      />
     </div>
   </DefineLibrary>
 
@@ -899,10 +1035,55 @@ function chooseStarter(starter: Starter) {
           />
         </div>
       </UFormField>
+      <template v-if="isItemLookKind(selectedItem.kind)">
+        <UFormField
+          label="Look"
+          :help="selectedItemLook
+            ? `${itemLookUsers ? `Also used by ${itemLookUsers} ${itemLookUsers === 1 ? 'piece' : 'pieces'} here. ` : ''}Editing a look changes every piece that uses it.`
+            : 'Its own finishes, below.'"
+        >
+          <div class="flex items-center gap-2">
+            <img
+              v-if="(selectedItemLook?.photo?.url ?? ITEM_SPECS[selectedItem.kind].photo)"
+              :src="selectedItemLook?.photo?.url ?? ITEM_SPECS[selectedItem.kind].photo!"
+              :alt="`Photo of ${selectedItemLook?.name ?? ITEM_SPECS[selectedItem.kind].label}`"
+              class="aspect-4/3 w-14 shrink-0 rounded-md bg-muted object-cover"
+              data-testid="selected-item-photo"
+            >
+            <USelect
+              :model-value="selectedItemLook?.id ?? OWN_FINISHES"
+              :items="itemLookItems"
+              class="min-w-0 flex-1"
+              @update:model-value="value => setItemLook(selectedItem!.id, String(value))"
+            />
+          </div>
+        </UFormField>
+        <div class="flex flex-wrap gap-2">
+          <UButton
+            v-if="selectedItemLook"
+            label="Edit look"
+            icon="i-lucide-pencil"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            @click="editItemLook(selectedItemLook)"
+          />
+          <UButton
+            label="Save as new look"
+            icon="i-lucide-copy-plus"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            @click="saveItemAsLook(selectedItem)"
+          />
+        </div>
+      </template>
       <div
-        v-for="slot in ITEM_SPECS[selectedItem.kind].slots"
+        v-for="slot in (selectedItemLook ? [] : ITEM_SPECS[selectedItem.kind].slots)"
         :key="slot.key"
         class="flex flex-col gap-2"
+        role="group"
+        :aria-label="slot.label"
       >
         <p class="text-sm font-medium text-highlighted">
           {{ slot.label }}
@@ -1399,6 +1580,17 @@ function chooseStarter(starter: Starter) {
           description="Deleted since this layout was opened. Give it the standard look to save, then choose another."
           :actions="[{ label: 'Use Round café table', color: 'neutral', variant: 'outline', onClick: () => editor.resetUnknownLooks() }]"
           data-testid="layout-unknown-looks"
+        />
+        <UAlert
+          v-if="unknownItemLookLabels.length"
+          color="warning"
+          variant="subtle"
+          icon="i-lucide-triangle-alert"
+          class="pointer-events-auto max-w-xl"
+          :title="`The look of ${unknownItemLookLabels.length === 1 ? 'a piece' : `${unknownItemLookLabels.length} pieces`} (${listLabels([...new Set(unknownItemLookLabels)])}) was deleted.`"
+          description="Deleted since this layout was opened. Give the pieces their own finishes to save, then choose another look."
+          :actions="[{ label: 'Use own finishes', color: 'neutral', variant: 'outline', onClick: () => editor.resetUnknownLooks() }]"
+          data-testid="layout-unknown-item-looks"
         />
         <UAlert
           v-if="outsideLabels.length && mode === 'select'"

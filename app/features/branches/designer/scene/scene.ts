@@ -1,6 +1,6 @@
 import { Box3, CircleGeometry, Group, Mesh, Vector3 } from 'three'
-import type { LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { findLook } from '../catalog'
+import type { ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { findLook, pieceFinishes } from '../catalog'
 import { boundsOf } from '../geometry'
 import type { FloorBuild } from './building'
 import { buildFloor, SLAB_THICKNESS_CM } from './building'
@@ -18,6 +18,8 @@ export interface SceneInput {
   layout: ShopLayout
   tables: readonly LayoutTable[]
   looks: readonly TableLook[]
+  /** The cafe's chair and fixture looks (step 3d): a piece with one takes its finishes. */
+  itemLooks?: readonly ItemLook[]
 }
 
 export interface FloorNode extends FloorBuild {
@@ -52,7 +54,7 @@ export interface BuiltScene {
 }
 
 export function buildScene(context: BuildContext, input: SceneInput): BuiltScene {
-  const { layout, tables, looks } = input
+  const { layout, tables, looks, itemLooks = [] } = input
   const root = new Group()
   const floors: FloorNode[] = []
   const tableNodes = new Map<string, TableNode>()
@@ -62,7 +64,7 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
     built.group.position.y = cm(elevation)
     built.group.userData.baseY = cm(elevation)
     for (const item of floor.items) {
-      const object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, finishes: item.finishes, floorHeight: floor.height })
+      const object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height })
       object.position.set(cm(item.x), 0, cm(item.y))
       object.rotation.y = yRotation(item.rotation)
       object.userData.itemId = item.id

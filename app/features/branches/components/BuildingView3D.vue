@@ -7,7 +7,7 @@
  * shows the same message, with Try again.
  */
 import type { DiningTable } from '#shared/contracts/branches'
-import type { LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import type { ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { findLook } from '../designer/catalog'
 import type { Viewpoint } from '../designer/geometry'
 import type { BuildingViewer } from '../designer/scene/building-viewer'
@@ -19,6 +19,8 @@ const props = defineProps<{
   layout: ShopLayout
   tables: readonly LayoutTable[]
   looks: readonly TableLook[]
+  /** The cafe's chair and fixture looks (step 3d): pieces with one take its finishes. */
+  itemLooks?: readonly ItemLook[]
   /** The branch's tables with their QR codes, for the table card's View QR. */
   diningTables: readonly DiningTable[]
   /** The layout shown has changes that aren't saved yet. */
@@ -83,7 +85,7 @@ async function start() {
       onSelectTable: id => (selectedTable.value = id),
       onSelectFloor: id => void focusFloor(id),
     })
-    viewer.setScene({ layout: props.layout, tables: props.tables, looks: props.looks })
+    viewer.setScene({ layout: props.layout, tables: props.tables, looks: props.looks, itemLooks: props.itemLooks })
     status.value = 'ready'
     // A table picked in Design shop, or before Try again.
     if (selectedTable.value) void reveal(selectedTable.value)
@@ -101,7 +103,7 @@ onBeforeUnmount(() => {
   viewer = null
 })
 
-watch(() => [props.layout, props.tables, props.looks] as const, ([layout, tables, looks]) => viewer?.setScene({ layout, tables, looks }))
+watch(() => [props.layout, props.tables, props.looks, props.itemLooks] as const, ([layout, tables, looks, itemLooks]) => viewer?.setScene({ layout, tables, looks, itemLooks }))
 watch(dark, value => viewer?.setTheme(value))
 watch(selectedTable, id => viewer?.selectTable(id))
 

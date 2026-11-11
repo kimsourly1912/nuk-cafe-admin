@@ -171,6 +171,8 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /admin/branches/{id}/layout': () => ({ version: 0, updatedAt: null, floors: [], placements: [], tables: [] }),
   // No custom table looks (D273, step 3a): the built-in ones only.
   'GET /admin/furniture-looks': () => [],
+  // No chair or fixture looks (step 3d): the built-in pieces only.
+  'GET /admin/item-looks': () => [],
   'GET /admin/menu/items': () => pageOf([]),
   'GET /admin/exchange-rates': () => ({ current: null, history: [] }),
   'GET /admin/khqr': () => ({ version: 1, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: ['USD'], updatedAt: null, updatedBy: null, automaticCheck: false, token: null, tokenStorage: false }),

@@ -1,5 +1,5 @@
 import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
-import { MAX_CUSTOM_LOOKS } from '#shared/contracts/shop-layout'
+import { MAX_CUSTOM_ITEM_LOOKS, MAX_CUSTOM_LOOKS } from '#shared/contracts/shop-layout'
 import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const BranchErrorCodes = {
@@ -84,15 +84,24 @@ export const layoutTablesUnavailable = (positions: number[]) =>
   })
 
 /**
- * A save gives tables a look that isn't a built-in one or one of this cafe's custom looks (deleted
- * meanwhile, or another cafe's). Named by their place in the save, like the tables above.
+ * A save gives tables or furniture a look that isn't a built-in one or one of this cafe's own
+ * (deleted meanwhile, another cafe's, or a chair look on a counter). `fields` are the `lookId`
+ * paths of the save (`layout.placements.<i>.lookId`, `layout.floors.<f>.items.<i>.lookId`): named
+ * by their place in the save, like the tables above.
  */
-export const layoutLooksUnavailable = (positions: number[]) =>
-  apiError(409, BranchErrorCodes.LAYOUT_LOOK_UNAVAILABLE, positions.length === 1
-    ? 'A table on this plan uses a look that was deleted. Choose another look for it and save again.'
-    : `${positions.length} tables on this plan use a look that was deleted. Choose another look for them and save again.`, {
-    fieldErrors: Object.fromEntries(positions.map(index => [`layout.placements.${index}.lookId`, ['This look was deleted']])),
+export function layoutLooksUnavailable(fields: string[]) {
+  const tables = fields.filter(field => field.startsWith('layout.placements.')).length
+  const pieces = fields.length - tables
+  const named = [
+    tables && (tables === 1 ? 'a table' : `${tables} tables`),
+    pieces && (pieces === 1 ? 'a piece of furniture' : `${pieces} pieces of furniture`),
+  ].filter(Boolean).join(' and ')
+  const subject = named.charAt(0).toUpperCase() + named.slice(1)
+  const one = fields.length === 1
+  return apiError(409, BranchErrorCodes.LAYOUT_LOOK_UNAVAILABLE, `${subject} on this plan ${one ? 'uses' : 'use'} a look that was deleted. Choose another look for ${one ? 'it' : 'them'} and save again.`, {
+    fieldErrors: Object.fromEntries(fields.map(field => [field, ['This look was deleted']])),
   })
+}
 
 export const lookNotFound = () => notFound('This look')
 
@@ -111,6 +120,25 @@ export function lookInUse(tables: { label: string, branch: string }[], total: nu
   const names = tables.map(table => `${table.label} (${table.branch})`).join(', ')
   const more = total - tables.length
   return apiError(409, BranchErrorCodes.LOOK_IN_USE, `This look is used by ${names}${more > 0 ? ` and ${more} more` : ''}. Give ${total === 1 ? 'that table' : 'those tables'} another look first.`)
+}
+
+export const itemLookNotFound = () => notFound('This look')
+
+export const itemLookChanged = () => versionConflict('This look')
+
+export const itemLookNameTaken = (name: string) =>
+  apiError(409, BranchErrorCodes.LOOK_NAME_TAKEN, `There is already a chair or fixture look named "${name}".`, {
+    fieldErrors: { name: ['Already used by another look'] },
+  })
+
+export const itemLookLimit = () =>
+  apiError(409, BranchErrorCodes.LOOK_LIMIT, `A cafe can have at most ${MAX_CUSTOM_ITEM_LOOKS} chair and fixture looks. Delete one you don't use first.`)
+
+/** A delete of a chair or fixture look placed pieces still use: `places` are some of its floors, `total` all its pieces. */
+export function itemLookInUse(places: { floor: string, branch: string, pieces: number }[], total: number) {
+  const named = places.map(place => `${place.pieces} on the ${place.floor} floor (${place.branch})`).join(', ')
+  const more = total - places.reduce((sum, place) => sum + place.pieces, 0)
+  return apiError(409, BranchErrorCodes.LOOK_IN_USE, `This look is used by ${total === 1 ? '1 piece' : `${total} pieces`}: ${named}${more > 0 ? ` and ${more} more` : ''}. Give ${total === 1 ? 'it' : 'them'} another look first.`)
 }
 
 /** A deployed server without `NUXT_QR_SECRET` (docs/server/operations.md → Configuration). */

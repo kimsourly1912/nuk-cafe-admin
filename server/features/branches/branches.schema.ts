@@ -2,8 +2,8 @@ import { sql } from 'drizzle-orm'
 import { check, foreignKey, index, integer, primaryKey, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { DINING_TABLE_STATUSES } from '#shared/contracts/branches'
-import { BUILT_IN_LOOK_IDS, LOOK_CHAIRS, TABLE_BASES, TABLE_SHAPES } from '#shared/contracts/shop-layout'
-import type { FloorGeometry, LookFinishes } from '#shared/contracts/shop-layout'
+import { BUILT_IN_LOOK_IDS, ITEM_LOOK_KINDS, LOOK_CHAIRS, TABLE_BASES, TABLE_SHAPES } from '#shared/contracts/shop-layout'
+import type { Finish, FloorGeometry, LookFinishes } from '#shared/contracts/shop-layout'
 import { BRANCH_ROLES } from '#shared/contracts/staff'
 import { newId } from '#server/utils/ids'
 
@@ -218,4 +218,54 @@ export const branchLayoutPlacements = sqliteTable('branch_layout_placements', {
   index('branch_layout_placements_look_idx').on(t.tenantId, t.customLookId),
   check('branch_layout_placements_check', sql`${t.rotation} between 0 and 359 and ${t.widthCm} between 40 and 600 and ${t.depthCm} between 40 and 600`),
   check('branch_layout_placements_look_check', sql`(${t.look} is null) <> (${t.customLookId} is null)`),
+])
+
+/**
+ * A cafe's own chair or fixture look (D273, step 3d): cafe-wide, shared by every piece placed with
+ * it in any branch, like a table look. Its kind is set when it's made and never changes: the
+ * pieces saved with it are of that kind (`branch_layout_item_looks` names the kind in its foreign
+ * key). The kind is checked by the shared contract, not a `CHECK`, so a new kind needs no rebuild.
+ */
+export const customItemLooks = sqliteTable('custom_item_looks', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  tenantId: tenantId(),
+  name: text().notNull(),
+  kind: text({ enum: ITEM_LOOK_KINDS }).notNull(),
+  /** Palette keys by the kind's finish slots, checked by the shared contract. */
+  finishes: text({ mode: 'json' }).$type<Record<string, Finish>>().notNull(),
+  defaultWidthCm: integer().notNull(),
+  defaultDepthCm: integer().notNull(),
+  /** A `media_assets` id of the same cafe, no foreign key: as a table look's photo (step 3b). */
+  photoAssetId: text(),
+  version: integer().notNull().default(1),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  // The target of a use's foreign key: a piece uses a look of its own cafe and its own kind only.
+  uniqueIndex('custom_item_looks_tenant_id_kind_idx').on(t.tenantId, t.id, t.kind),
+  uniqueIndex('custom_item_looks_name_idx').on(t.tenantId, sql`lower(${t.name})`),
+  check('custom_item_looks_check', sql`${t.defaultWidthCm} between 10 and 2000 and ${t.defaultDepthCm} between 10 and 2000`),
+])
+
+/**
+ * Which custom item looks a saved floor's furniture uses, and how many pieces (D273, step 3d). The
+ * pieces themselves are in the floor's drawing (JSON), which no foreign key can reach: these rows
+ * are written from it in the layout's save batch, so the database refuses another cafe's look, a
+ * look of another kind and the delete of a look in use (restrict), as it does for tables' looks.
+ * Replaced with the floors on every save, and gone with their floor (cascade).
+ */
+export const branchLayoutItemLooks = sqliteTable('branch_layout_item_looks', {
+  tenantId: tenantId(),
+  branchId: text().notNull(),
+  floorId: text().notNull(),
+  lookId: text().notNull(),
+  kind: text({ enum: ITEM_LOOK_KINDS }).notNull(),
+  pieces: integer().notNull(),
+}, t => [
+  primaryKey({ columns: [t.tenantId, t.branchId, t.floorId, t.lookId] }),
+  foreignKey({ name: 'branch_layout_item_looks_floor_fk', columns: [t.tenantId, t.branchId, t.floorId], foreignColumns: [branchLayoutFloors.tenantId, branchLayoutFloors.branchId, branchLayoutFloors.id] }).onDelete('cascade'),
+  foreignKey({ name: 'branch_layout_item_looks_look_fk', columns: [t.tenantId, t.lookId, t.kind], foreignColumns: [customItemLooks.tenantId, customItemLooks.id, customItemLooks.kind] }).onDelete('restrict'),
+  // Where a look is used: its piece count, and the restrict check when it is deleted.
+  index('branch_layout_item_looks_look_idx').on(t.tenantId, t.lookId),
+  check('branch_layout_item_looks_check', sql`${t.pieces} between 1 and 200`),
 ])

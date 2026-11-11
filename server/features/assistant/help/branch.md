@@ -66,6 +66,15 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - **Delete** (in the look's form) works only when no saved layout uses the look. Give its tables another look and save the layout first.
 - The built-in looks (Round café table, Square bistro table, Oak rectangle, Communal table, Green velvet booth) can't be changed or deleted; use **Save as new look** to start from one.
 - **Photo** (optional, in the look's form): **Upload photo** of the real piece, framed 4:3. It shows on the look under Table looks, next to **Look** in a table's panel, and on the table's card in 3D. The plan and the 3D building keep the simple shape. **Remove** takes it off. A new look (also **Save as new look**) starts without a photo: each look has its own.
+- The built-in looks and pieces show a picture of their 3D model; your own looks show their photo, or a shape icon without one.
+
+**Your own chair and fixture looks:** under **Extra seating** and **Fixtures** in the library, **New chair look** or **New fixture look** opens a form with a live preview: a name, the **Kind** (Café chair, Bar stool, Service counter, Plant…), the size new pieces start with, a finish for each part, and an optional **Photo**. Your looks appear after the built-in pieces, for every branch (up to 50). Stairs have no look of their own.
+
+- Click a placed chair or fixture: its panel's **Look** gives it one of your looks of its kind (it takes the look's finishes and size), or **Own finishes** to set its finishes yourself (it keeps the look's finishes as a start). **Save as new look** starts a new look from that piece and gives it to it; **Edit look** changes the look.
+- A look is shared like a table look: editing it changes **every piece that uses it**, in every branch; each piece keeps its own size and turn. A look's kind can't change: for another kind, make a new look.
+- **Delete** works only when no saved layout uses the look. The message names the floors that use it.
+
+**Furniture looks page:** the **Looks** button on **Dining tables** (or **Manage looks** at the bottom of the library) lists every look: table looks, chairs and fixtures, each with **Your looks** and **Built in**. **New look** adds one; click your look's name to edit it; its **⋮** menu has **Edit**, **New look from this** and **Delete** (off while the look is in use). A built-in one's **⋮** has **New look from this**.
 
 **Floors:** the tabs above the plan. **Add floor** puts a floor on top with the same outline. The **⋯** menu next to the tabs renames the floor, sets its **height** (200–800 cm, the wall height in 3D), turns its **roof** on or off (off: an open patio), or **Remove floor…**: it names the tables that go back to Unplaced tables. Up to 10 floors. **Floor below** shows the floor underneath faintly, so stairs and walls line up.
 
@@ -86,7 +95,9 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - **"3D view is not available here"**: this browser or device can't draw 3D right now (an old device, or a phone that put the page to sleep). Press **Try again**. The floor and table lists, **View QR** and **Design shop** work without it; the layout itself is fine.
 - **"The look of … was deleted"**: a look this plan used was deleted on another device before you saved. Press **Use Round café table**, save, then choose another look.
 - **"This look is used by …"**: a look can't be deleted while tables use it. The message names them; give them another look, save the layout, then delete.
-- **"There is already a look named …"**: another look has that name (in any capitals). Choose another name.
+- **"The look of a piece (…) was deleted"**: a chair or fixture look this plan used was deleted on another device before you saved. Press **Use own finishes**, save, then choose another look.
+- **"This look is used by 3 pieces: …"**: a chair or fixture look can't be deleted while pieces use it. The message names the floors; give those pieces **Own finishes** or another look, save the layout, then delete.
+- **"There is already a look named …"** or **"… chair or fixture look named …"**: another look of that type has that name (in any capitals). Choose another name.
 - **"Upload the image again"** under a look's photo: the photo can't be used (it was given to another look meanwhile, or uploaded more than a day ago and never saved). Press **Replace photo** and choose it again.
 - **"… is outside the … floor"**: after the outline changed, a table or piece of furniture sits outside it. Saving still works; move it back in or remove it.
 - **"Draw the … floor's outline first"**: a floor has no outline yet (Blank). Use **Draw outline**, then save.

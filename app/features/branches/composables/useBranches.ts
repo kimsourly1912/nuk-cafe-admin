@@ -1,5 +1,5 @@
 import type { BranchPause, BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
-import type { BranchLayout, CreateLookInput, CustomLook, SaveLayoutInput } from '#shared/contracts/shop-layout'
+import type { BranchLayout, CreateItemLookInput, CreateLookInput, CustomItemLook, CustomLook, SaveLayoutInput, UpdateItemLookInput } from '#shared/contracts/shop-layout'
 
 const base = (branchId: string) => `/admin/branches/${branchId}`
 
@@ -258,6 +258,63 @@ export function useLookMutations() {
       confirm: input => ({
         title: `Delete the look "${input.look.name}"?`,
         description: 'No table uses it. It can\'t be restored.',
+        confirmLabel: 'Delete look',
+        danger: true,
+      }),
+      successMessage: (_, input) => `Look "${input.look.name}" deleted`,
+      errorMessage: input => `Could not delete "${input.look.name}"`,
+      invalidate: ['branches'],
+    },
+  )
+
+  return { create, update, remove }
+}
+
+/**
+ * The cafe's own chair and fixture looks (D273, step 3d), for every branch: `branches:item-looks`.
+ * A change invalidates `branches`, so open layouts and this list follow.
+ */
+export function useItemLooks(options: { immediate?: boolean } = {}) {
+  return useApiQuery('branches:item-looks', () => apiFetch<CustomItemLook[]>('/admin/item-looks'), options)
+}
+
+const itemLookLock = (input: { look: CustomItemLook }) => `furniture-item-look:${input.look.id}`
+
+export function useItemLookMutations() {
+  const create = useMutation(
+    (input: CreateItemLookInput) => apiFetch<CustomItemLook>('/admin/item-looks', { method: 'POST', body: input }),
+    {
+      id: 'branches:item-look-create',
+      key: input => input.name.toLowerCase(),
+      successMessage: look => `Look "${look.name}" saved`,
+      errorMessage: input => `Could not save "${input.name}"`,
+      invalidate: ['branches'],
+    },
+  )
+
+  /** The whole look again, without its kind (a look's kind never changes). */
+  const update = useMutation(
+    (input: { look: CustomItemLook, body: Omit<UpdateItemLookInput, 'version'> }) => apiFetch<CustomItemLook>(`/admin/item-looks/${input.look.id}`, { method: 'PATCH', body: { version: input.look.version, ...input.body } }),
+    {
+      id: 'branches:item-look-update',
+      key: itemLookLock,
+      lock: itemLookLock,
+      successMessage: look => `Look "${look.name}" saved`,
+      errorMessage: input => `Could not save "${input.look.name}"`,
+      invalidate: ['branches'],
+    },
+  )
+
+  /** Deletes a look no placed piece uses; the server refuses one in use and names its floors (409 `LOOK_IN_USE`). */
+  const remove = useMutation(
+    (input: { look: CustomItemLook }) => apiFetch<null>(`/admin/item-looks/${input.look.id}`, { method: 'DELETE', query: { version: input.look.version } }),
+    {
+      id: 'branches:item-look-delete',
+      key: itemLookLock,
+      lock: itemLookLock,
+      confirm: input => ({
+        title: `Delete the look "${input.look.name}"?`,
+        description: 'No piece of furniture uses it. It can\'t be restored.',
         confirmLabel: 'Delete look',
         danger: true,
       }),
