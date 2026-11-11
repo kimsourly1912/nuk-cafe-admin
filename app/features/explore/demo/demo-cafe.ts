@@ -7,6 +7,8 @@ import type { LayoutTable, ShopLayout } from '#shared/contracts/shop-layout'
  */
 
 export const DEMO_CAFE_NAME = 'Demo café'
+/** The demo street's place id in the world: it isn't a branch, and has no gateways. */
+export const DEMO_PLACE = 'demo'
 /** The surroundings' seed: the same street every visit. */
 export const DEMO_SEED = 'explore-demo'
 

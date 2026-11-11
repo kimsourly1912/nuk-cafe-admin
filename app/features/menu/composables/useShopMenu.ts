@@ -61,6 +61,17 @@ export function useTableContext() {
 /** The branch the customer picked (only offered when there are several), across visits. */
 const useChosenBranch = createSharedComposable(() => useLocalStorage<string | null>('nuk-cafe:branch', null, { initOnMounted: true }))
 
+/** Choosing the branch whose menu shows, without reading the branch list (Explore's handoff, D275). */
+export function useBranchChoice() {
+  const chosen = useChosenBranch()
+  return {
+    chosen: readonly(chosen),
+    choose: (id: string) => {
+      chosen.value = id
+    },
+  }
+}
+
 /** The active branches, whether each is open, and which one's menu is asked for. */
 export function useShopBranch() {
   const { table } = useTableContext()

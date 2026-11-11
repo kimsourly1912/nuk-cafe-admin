@@ -30,7 +30,7 @@ function draw() {
   }
   context.setTransform(ratio, 0, 0, ratio, 0, 0)
   const view = world.mapView()
-  drawMap(context, world.district, view, { width: SIZE, height: SIZE, scale: SIZE / METRES, center: view.player.position, rotation: view.cameraYaw, colors })
+  drawMap(context, world.district(), view, { width: SIZE, height: SIZE, scale: SIZE / METRES, center: view.player.position, rotation: view.cameraYaw, colors })
   // North on the rim, where the world's −z falls on this turned map.
   const radius = SIZE / 2 - 11
   const x = SIZE / 2 + Math.sin(view.cameraYaw) * radius

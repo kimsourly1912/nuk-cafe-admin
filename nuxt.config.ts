@@ -34,7 +34,7 @@ function copyLibsqlNativeBinary(serverDir: string) {
  * else is locked to this origin (connections also to the page's own `blob:` URLs, D274); only public
  * menu documents allow the automatic analytics script.
  */
-function securityHeaders(publicMenu = false): Record<string, string> {
+function securityHeaders(publicMenu = false, location = false): Record<string, string> {
   const csp = [
     `default-src 'self'`,
     `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${publicMenu ? ' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/' : ''}`,
@@ -58,7 +58,9 @@ function securityHeaders(publicMenu = false): Record<string, string> {
     'referrer-policy': 'strict-origin',
     // SPA navigation keeps the initial document's policy, including when entering Google sign-in.
     'cross-origin-opener-policy': 'same-origin-allow-popups',
-    'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+    // Explore's nearby list asks for the position on a tap (D275 step E4): only a cafe's menu and
+    // Explore documents allow it, for this origin only (no frame); everything else denies it.
+    'permissions-policy': `camera=(), microphone=(), geolocation=(${location ? 'self' : ''}), payment=()`,
   }
 }
 
@@ -70,7 +72,9 @@ function deployedSecurityRules() {
     '/**': { headers: securityHeaders() },
     // The returning popup must keep the provider document's unsafe-none policy (D261).
     '/google-callback': { headers: { 'cross-origin-opener-policy': 'unsafe-none', 'cache-control': 'no-store' } },
-    '/c/*': { headers: securityHeaders(true) },
+    // A cafe's menu: Explore opens from it in the same document, so it carries Explore's location rule.
+    '/c/*': { headers: securityHeaders(true, true) },
+    '/c/*/explore': { headers: securityHeaders(false, true) },
     '/table/**': { headers: tokenEntryHeaders },
     '/reset-password': { headers: tokenEntryHeaders },
     '/verify-email': { headers: tokenEntryHeaders },
