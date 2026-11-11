@@ -2,7 +2,7 @@ import { Box3, CircleGeometry, Group, Mesh, PlaneGeometry, Vector3 } from 'three
 import type { Object3D } from 'three'
 import { isFigureKind } from '#shared/contracts/shop-layout'
 import type { FigureKind, ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { findLook, pieceFinishes } from '../catalog'
+import { findItemLook, findLook, ITEM_SPECS, pieceFinishes, pieceHeight } from '../catalog'
 import { boundsOf } from '../geometry'
 import type { FloorBuild } from './building'
 import { buildFloor, SLAB_THICKNESS_CM } from './building'
@@ -48,6 +48,17 @@ export interface TableNode {
   labelAnchor: Vector3
 }
 
+/** A piece of furniture, a fixture, stairs or a figure, as the 3D view picks it (step 3e). */
+export interface ItemNode {
+  itemId: string
+  /** Its look's name, or its kind's ("Bar stool"). */
+  label: string
+  floorId: string
+  object: Group
+  /** On the piece's floor group, above the piece: where its chip floats. */
+  labelAnchor: Vector3
+}
+
 /**
  * A person or pet (step 3g, D274), standing where the plan puts it: the generated figure (`body`)
  * and its idle motion. When the kind has a model file, the viewer loads it into the anchor and hides
@@ -66,6 +77,8 @@ export interface BuiltScene {
   root: Group
   floors: FloorNode[]
   tables: Map<string, TableNode>
+  /** Every piece by its id (step 3e): not the tables, which are `tables`. */
+  items: Map<string, ItemNode>
   figures: FigureNode[]
   /** The building without the ground, as built. */
   bounds: Box3
@@ -76,6 +89,7 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
   const root = new Group()
   const floors: FloorNode[] = []
   const tableNodes = new Map<string, TableNode>()
+  const itemNodes = new Map<string, ItemNode>()
   const figures: FigureNode[] = []
   const topmost = layout.floors.findLastIndex(floor => floor.outline.length >= 3)
   let elevation = 0
@@ -95,12 +109,16 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
         figures.push({ itemId: item.id, kind: item.kind, floorId: floor.id, anchor: object, body: figure.body, idle: figure.idle })
       }
       else {
-        object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height })
+        object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, height: item.height, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height })
       }
       object.position.set(cm(item.x), 0, cm(item.y))
       object.rotation.y = yRotation(item.rotation)
       object.userData.itemId = item.id
       built.group.add(object)
+      const look = findItemLook(itemLooks, item.lookId)
+      const label = look && look.kind === item.kind ? look.name : ITEM_SPECS[item.kind].label
+      const top = item.kind === 'stairs' ? floor.height : pieceHeight(item)
+      itemNodes.set(item.id, { itemId: item.id, label, floorId: floor.id, object, labelAnchor: new Vector3(cm(item.x), cm(top + 30), cm(item.y)) })
     }
     const plan = boundsOf(floor.outline)
     floors.push({
@@ -137,7 +155,7 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
 
   root.updateMatrixWorld(true)
   const bounds = new Box3().setFromObject(root)
-  return { root, floors, tables: tableNodes, figures, bounds }
+  return { root, floors, tables: tableNodes, items: itemNodes, figures, bounds }
 }
 
 /**

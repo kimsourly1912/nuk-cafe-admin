@@ -235,6 +235,11 @@ export const customItemLooks = sqliteTable('custom_item_looks', {
   finishes: text({ mode: 'json' }).$type<Record<string, Finish>>().notNull(),
   defaultWidthCm: integer().notNull(),
   defaultDepthCm: integer().notNull(),
+  /**
+   * The height a new piece starts with (step 3e); `null` for the kind's default (looks saved before
+   * 3e). Each kind's own range is the contract's (`ITEM_HEIGHTS`); the database keeps the bound.
+   */
+  defaultHeightCm: integer(),
   /** A `media_assets` id of the same cafe, no foreign key: as a table look's photo (step 3b). */
   photoAssetId: text(),
   version: integer().notNull().default(1),
@@ -245,6 +250,8 @@ export const customItemLooks = sqliteTable('custom_item_looks', {
   uniqueIndex('custom_item_looks_tenant_id_kind_idx').on(t.tenantId, t.id, t.kind),
   uniqueIndex('custom_item_looks_name_idx').on(t.tenantId, sql`lower(${t.name})`),
   check('custom_item_looks_check', sql`${t.defaultWidthCm} between 10 and 2000 and ${t.defaultDepthCm} between 10 and 2000`),
+  // Added with its column (migration 0062): a column's CHECK, so the table isn't rebuilt.
+  check('custom_item_looks_height_check', sql`${t.defaultHeightCm} is null or ${t.defaultHeightCm} between 20 and 300`),
 ])
 
 /**

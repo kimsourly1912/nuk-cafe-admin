@@ -233,7 +233,7 @@ describe('the shop layout at its limits (D273)', () => {
     await insertBranch(db, { id: branchId, name: 'Look house', timezone: 'Asia/Phnom_Penh' })
     const owner: Actor = { ...actor, userId: (await createUser(db)).id }
     const lookIds: string[] = []
-    for (let n = 0; n < MAX_CUSTOM_ITEM_LOOKS; n++) lookIds.push((await createItemLook(db, owner, { name: `Counter ${n}`, kind: 'service-counter', finishes: {}, defaultWidth: 180, defaultDepth: 65, photoId: null })).id)
+    for (let n = 0; n < MAX_CUSTOM_ITEM_LOOKS; n++) lookIds.push((await createItemLook(db, owner, { name: `Counter ${n}`, kind: 'service-counter', finishes: {}, defaultWidth: 180, defaultDepth: 65, defaultHeight: null, photoId: null })).id)
     const input = largestLayout([], 0, lookIds)
     const saved = await saveLayout(db, owner, branchId, input)
     expect(saved.floors).toEqual(input.layout.floors)

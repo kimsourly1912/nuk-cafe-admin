@@ -107,6 +107,8 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 | 3b. Photos (**built**) | Look photos via `media_assets` attach/release | Photo shows in the picker and table details |
 | 3d. Chairs and fixtures (**built**) | Custom chair and fixture looks that save, their photo, pictures on the built-in looks, a Looks page | Make a chair look on the Looks page, place it in two branches, edit it, delete it once unused; built-in pictures in the library |
 | 2d. Editor finish (**built**, 2b's deferred items) | Frame 2B's quick actions beside the selection (tables, furniture, walls, edges), corner handles to resize, lengths typed on the plan's labels (3A), "Saved by" in the stale-save message (6A) | Resize, turn and duplicate tables and type a length without the panel, on a tablet and a phone |
+| 3e. Heights and picking pieces (**built**, one PR with 3f at the owner's choice) | A chair's or fixture's own height (QS2), on pieces and looks, in each kind's range; a piece picked in 3D with its card and Show on plan | Make a counter stool (65 cm) look, place it, raise a shelf; tap a chair in 3D and go back to it on the plan |
+| 3f. More furniture (**built**, with 3e) | Lounge seating, bar and service, decor and lighting, outdoor: 11 kinds generated from code, with looks, heights and pictures; overhead pieces never warn | Furnish a lounge corner and a terrace; a parasol over a table and a pendant lamp over the bar give no warning |
 | 3c. Pilot | Pilot with a real café; prioritize more furniture from what the owner reaches for | The owner recreates part of their café and explores it without help |
 | 3g, 3h, 4a–4d. Scenes | People and pets (3g), the Neighborhood lane test scene and benchmark (3h) before the pilot; the saved scene preset and Neighborhood lane (4a), then Riverside, Seaside and City street (4b–4d) after it. [Scenes plan](shop-designer-scenes.md) | Per step, in that plan |
 
@@ -390,3 +392,55 @@ Named 3d because 2d was taken. Four things, one PR: a cafe's own chair and fixtu
   - `app/features/branches/tests/designer-scene.test.ts`: a piece takes its look's finishes (not a gone one, nor one of another kind) in the building; every built-in look and piece but stairs has its picture, and the folder holds nothing else.
 - **Guards checked by removing them:** see [progress](../progress.md) for the list and evidence.
 - **Review on staging:** Branches → Dining tables → **Looks**. Make a chair look (**New chair look**, a bar stool in brass) and a fixture look with a photo. In Design shop, place the chair look in two branches and save; edit it on the Looks page: both change in the plan and in 3D. **Delete** says it's in use; give the pieces **Own finishes**, save, then delete it.
+
+## Step 3e: heights and picking a piece in 3D (built 2026-11-11)
+
+One PR with step 3f at the owner's choice (2026-11-11: "collect all the steps that are small or medium in one PR"); one commit each.
+
+- **Where:** contract `shared/contracts/shop-layout.ts` (`ITEM_HEIGHTS`, `heightFits`, an item's `height`, a look's `defaultHeight`); migration `0062_item_look_heights`; `branches.item-looks.repository.ts`, `.service.ts`, `branches.errors.ts` (`itemLookHeightOutOfRange`); app `designer/catalog.ts` (`pieceHeight`), `scene/furniture.ts` (every chair and fixture builder takes a height), `scene/scene.ts` (`ItemNode`, `BuiltScene.items`), `scene/building-viewer.ts` (`selectItem`, `onSelectItem`, one selection), `BuildingView3D.vue` (the piece card), `BranchPage.vue` (one selected piece for both views), `DesignShopEditor.vue` and `ItemLookFormModal.vue` (**Height (cm)**).
+- **Heights (QS2, answered "build it"):**
+  - Each chair and fixture kind has a default and a range in the contract (`ITEM_HEIGHTS`): what its model draws well (a bar stool 45–90 cm: a low stool, a counter stool at 65, bar height at 75). The range is the contract's, so the server enforces it, not only the field's limits.
+  - A piece's `height` is optional in its floor's JSON (no migration): left out, the kind's default, so every layout saved before 3e draws as it did. Stairs (their floor's height) and people and pets (their own) have none: the contract refuses one.
+  - A look's `defaultHeight` is the height a new piece starts with, like its width and depth; each piece keeps its own, and choosing a look gives the piece the look's height. Stored as `custom_item_looks.default_height_cm`, `null` for looks saved before 3e (the API answers the kind's default).
+  - An edit has no kind, so its height is checked against the look's kind in the service (400 `VALIDATION_FAILED` on `defaultHeight`); a create's in the contract.
+  - **The migration adds the column in place** with a column CHECK (`20–300`, the database's bound for every kind). drizzle-kit wanted to rebuild the table to add the CHECK, but `branch_layout_item_looks` points at it with a restrict foreign key: dropping it would fail or lose the link on D1. The schema names the same rule, so a later `generate` says "No schema changes".
+  - **Taller means moved, not stretched:** a taller chair has a higher seat (the back stays 37 cm above it), legs keep their thickness, a taller shelf has more shelves 30 cm apart, a plant a longer stem with its leaves the same size. At each kind's default nothing changes, except the display shelf: its top shelf's jars poked through the top board, so its shelves are now spaced to fit (its picture made again).
+  - **A planter's and a plant's height is to the top of the leaves**, as they look: their defaults are now 75 and 125 cm (they were listed as 60 and 120, but their leaves already reached 76 and 127). Only the catalog's number changed, not the model.
+- **Picking a piece in 3D:**
+  - A tap on a chair, fixture, stairs or person or pet selects it: the whole piece lights up (a figure's contact shadow doesn't), its chip floats above it, and its card (where the table card goes) shows its name (its look's, or its kind's), what it is, its size and height, its floor and its picture, with **Show on plan**.
+  - **One selection at a time**, shared by both views: `BranchPage` keeps one (a table or a piece), so a piece selected in Design shop is selected in 3D and brought into view (the cutaway when the exterior hides it), and **Show on plan** opens Design shop on its floor with it selected. Clearing one kind (Design shop letting go of a table) never clears the other.
+  - The selection survives the building being drawn again (an edit, Undo), and is dropped when the piece is gone.
+- **Not in 3e:** a piece in the Floors and tables lists (they stay tables only: a café has hundreds of pieces); a height for tables (one height, D273).
+- **Tests:**
+  - `server/features/branches/tests/branches.item-looks.service.test.ts` (+4): a look's height and the kind's default for one without; out of range refused on create (contract) and edit (the look's kind); the database's bound; a piece's height saved, out of range, and refused on stairs and a cat.
+  - `server/tests/migrations.test.ts` (`0062_item_look_heights`): looks and their uses kept (not rebuilt), null for old looks, the bound enforced.
+  - `app/features/branches/tests/designer-scene.test.ts` (+11): every chair and fixture as tall as asked at its minimum, default and maximum on the same footprint; legs keep their thickness; the building draws a piece at its height.
+  - `app/features/branches/tests/designer-viewer.test.ts` (+4): a tap on a piece selects and lights it, a tap on nothing clears it; a figure's contact shadow not lit; one selection at a time; kept across a rebuild, dropped once gone.
+  - `test/e2e/shop-designer.test.ts` (20): a chair look made at 65 cm, placed at 65; a bar stool's height typed (75 → 65), saved, its card in 3D ("65 cm high"), **Show on plan** back to it.
+- **Review on staging:** Dining tables → **Looks** → **New chair look**: a Bar stool at 65 cm. Place it in Design shop: its panel says 65. Select a display shelf and make it 240: it gets more shelves in 3D. In View in 3D tap a chair: its card shows it; **Show on plan** selects it on the plan.
+
+## Step 3f: more furniture (built 2026-11-11)
+
+In the same PR as step 3e (owner's choice), its own commit.
+
+- **Where:** contract `ITEM_KINDS`, `ITEM_LOOK_KINDS`, `ITEM_HEIGHTS` (no migration: kinds are text, checked by the contract); `designer/catalog.ts` (`ITEM_SPECS`, `CATEGORIES` and `LOOK_CATEGORIES`, an `overhead` flag); `scene/furniture.ts` (11 builders), `scene/materials.ts` (`pastry`, `chalkboard`); `placement-warnings.ts`; `FloorPlanCanvas.vue` (round pieces drawn round, overhead ones dashed); `DesignShopEditor.vue`, `LooksPage.vue`, `ItemLookFormModal.vue` (sections from `CATEGORIES`); `public/shop-designer/looks/` (11 pictures).
+- **What (the plan's four groups, generated from code like the rest):**
+
+  | Section | Kinds (default size, height range) |
+  |---|---|
+  | Lounge seating | Armchair (76 × 80, 65–100), Sofa (180 × 88, cushions every ~60 cm, 65–100), Coffee table (100 × 60, 30–60) |
+  | Bar and service | Coffee station (160 × 70: a counter, 80–110, with an espresso machine, grinder and cups on it), Pastry case (120 × 65, a glass case on a cabinet, 95–150), Menu board (60 × 50, a sandwich board, 70–140) |
+  | Decor and lighting | Pendant lamp (Ø 45, its shade hanging at 140–260, its cord to the ceiling), Floor lamp (Ø 45, 120–190), Water jar (Ø 60, a Khmer glazed jar, 45–110) |
+  | Outdoor | Parasol (Ø 240, 200–280), Bicycle (175 × 58, 90–115) |
+- **Decided while building:**
+  - **Every new kind takes a cafe's own look**, a height and finishes by part, like 3d's chairs and fixtures. The library, the Looks page and the look form list their sections from one `CATEGORIES` list in the catalog (each with **New … look**: lounge, bar, decor, outdoor), instead of the chairs-or-fixtures choice written in three components.
+  - **Overhead pieces** (pendant lamp, parasol) have no footprint for the warnings, like people and pets: a parasol over a table or a lamp over the bar is where it belongs. The plan draws them as a dashed outline with a small middle to grab, so the table under them stays visible and clickable. A floor lamp still warns.
+  - **A pendant lamp's height is how low its shade hangs**, its cord going up to its floor's height (at most 40 cm under the ceiling); a coffee station's is its counter's, its machine standing on it. No light is added: the bulb glows (a real light per lamp would cost a shadow map each on a phone).
+  - **No rug yet:** its height (1–2 cm) is outside the database's bound for a look's height (20–300), and a look kind with no height would need the contract's height to be optional per kind. Left for the pilot to ask for.
+- **Tests:**
+  - `designer-scene.test.ts`: every new kind fills the footprint the plan draws, stands as tall as asked across its range (the pendant measured at its shade, the coffee station at its counter), and ships its picture.
+  - `designer-geometry.test.ts`: a parasol and a pendant lamp over a table give no warning; a floor lamp in a chair's place does.
+  - `branches.item-looks.service.test.ts`: a parasol look with its height, placed and saved with a sofa; a 2 m sofa refused.
+  - `test/e2e/shop-designer.test.ts`: the four sections and **New lounge look**; an armchair, a coffee station, a pendant lamp and a parasol placed, the parasol's range shown, saved, drawn in 3D; the Looks page's Lounge seating and Outdoor sections.
+- **Review on staging:** in Design shop, furnish a lounge corner (sofa, armchair, coffee table, floor lamp) and a terrace (parasol over a table, bicycle); put a pendant lamp over the counter. No warnings for the parasol or the lamp. Make a **New outdoor look** (a terracotta parasol) on the Looks page. View in 3D.
+

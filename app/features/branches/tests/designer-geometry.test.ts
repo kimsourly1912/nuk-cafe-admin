@@ -175,6 +175,17 @@ describe('the plan', () => {
     expect(placementWarnings(floor, [piece], seated).size).toBe(0)
   })
 
+  it('never warns about a pendant lamp or a parasol over a table; a floor lamp in a chair\'s place does (step 3f)', () => {
+    const floor = { ...demoLayout().floors[0]!, walls: [] }
+    const table = { tableId: 'table', x: 300, y: 300, width: 80, depth: 80, rotation: 0 }
+    const piece = tableFootprint(table, round, chairPoses(round, table.width, table.depth, 4))
+    const parasol = itemFootprint({ id: 'parasol', kind: 'parasol', x: 300, y: 300, rotation: 0, width: 240, depth: 240 })
+    const pendant = itemFootprint({ id: 'pendant', kind: 'pendant-lamp', x: 300, y: 300, rotation: 0, width: 45, depth: 45 })
+    expect(placementWarnings(floor, [piece, parasol, pendant]).size).toBe(0)
+    const lamp = itemFootprint({ id: 'lamp', kind: 'floor-lamp', x: 300, y: 300, rotation: 0, width: 45, depth: 45 })
+    expect(placementWarnings(floor, [piece], lamp).get('lamp')).toEqual({ outside: false, overlap: true })
+  })
+
   it('uses a point inside a U-shaped floor and skips a door viewpoint outside a narrow room', () => {
     const floor = demoLayout().floors[0]!
     floor.outline = [

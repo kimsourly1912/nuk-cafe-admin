@@ -9,9 +9,9 @@
  * Open via `useOverlay().create(ItemLookFormModal)`; emits `close(look)` with the look as saved.
  */
 import type { CreateItemLookInput, CustomItemLook, Finish, ItemLookKind } from '#shared/contracts/shop-layout'
-import { ITEM_LOOK_KINDS, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, LOOK_NAME_MAX } from '#shared/contracts/shop-layout'
-import type { ItemCategory } from '../designer/catalog'
-import { FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
+import { heightFits, heightRangeMessage, ITEM_HEIGHTS, ITEM_LOOK_KINDS, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, LOOK_NAME_MAX } from '#shared/contracts/shop-layout'
+import type { LookCategory } from '../designer/catalog'
+import { FINISH_SWATCHES, ITEM_SPECS, itemFinish, LOOK_CATEGORIES } from '../designer/catalog'
 import type { StudioViewer } from '../designer/scene/studio-viewer'
 import { useItemLookMutations } from '../composables/useBranches'
 
@@ -21,6 +21,7 @@ export interface ItemLookSource {
   finishes: Record<string, Finish>
   width: number
   depth: number
+  height: number
 }
 
 const props = defineProps<{
@@ -28,23 +29,22 @@ const props = defineProps<{
   look?: CustomItemLook
   from?: ItemLookSource
   /** A new look's kinds: only this category's (Extra seating or Fixtures); every one without it. */
-  category?: ItemCategory
+  category?: LookCategory
 }>()
 const emit = defineEmits<{ 'close': [saved?: CustomItemLook], 'update:open': [open: boolean] }>()
 
-const CATEGORY_LABELS: Partial<Record<ItemCategory, string>> = { chairs: 'Chairs', fixtures: 'Fixtures' }
 const kindItems = computed(() => {
-  const categories = (['chairs', 'fixtures'] as const).filter(category => !props.category || props.category === category)
+  const categories = LOOK_CATEGORIES.filter(category => !props.category || props.category === category.key)
   return categories.flatMap(category => [
-    ...(categories.length > 1 ? [{ type: 'label' as const, label: CATEGORY_LABELS[category] }] : []),
-    ...ITEM_LOOK_KINDS.filter(kind => ITEM_SPECS[kind].category === category).map(kind => ({ label: ITEM_SPECS[kind].label, value: kind })),
+    ...(categories.length > 1 ? [{ type: 'label' as const, label: category.title }] : []),
+    ...ITEM_LOOK_KINDS.filter(kind => ITEM_SPECS[kind].category === category.key).map(kind => ({ label: ITEM_SPECS[kind].label, value: kind })),
   ])
 })
 
 const firstKind = ITEM_LOOK_KINDS.find(kind => !props.category || ITEM_SPECS[kind].category === props.category) ?? ITEM_LOOK_KINDS[0]
 const source: ItemLookSource = props.look
-  ? { kind: props.look.kind, finishes: props.look.finishes, width: props.look.defaultWidth, depth: props.look.defaultDepth }
-  : props.from ?? { kind: firstKind, finishes: {}, width: ITEM_SPECS[firstKind].width, depth: ITEM_SPECS[firstKind].depth }
+  ? { kind: props.look.kind, finishes: props.look.finishes, width: props.look.defaultWidth, depth: props.look.defaultDepth, height: props.look.defaultHeight }
+  : props.from ?? { kind: firstKind, finishes: {}, width: ITEM_SPECS[firstKind].width, depth: ITEM_SPECS[firstKind].depth, height: ITEM_HEIGHTS[firstKind].default }
 
 /** Every slot of the kind with a finish: the kind's default where `finishes` has none. */
 function slotFinishes(kind: ItemLookKind, finishes: Partial<Record<string, Finish>>): Record<string, Finish> {
@@ -56,6 +56,7 @@ const state = reactive({
   kind: source.kind,
   width: source.width,
   depth: source.depth,
+  height: source.height,
   finishes: slotFinishes(source.kind, source.finishes),
   photoId: props.look?.photo?.id,
   photoUrl: props.look?.photo?.url,
@@ -75,6 +76,7 @@ watch(() => state.kind, (kind) => {
   state.finishes = slotFinishes(kind, {})
   state.width = ITEM_SPECS[kind].width
   state.depth = ITEM_SPECS[kind].depth
+  state.height = ITEM_HEIGHTS[kind].default
 })
 
 /** What is saved: the kind's slots only, a round piece as deep as it is wide. */
@@ -84,6 +86,7 @@ const body = computed<CreateItemLookInput>(() => ({
   finishes: { ...state.finishes },
   defaultWidth: state.width,
   defaultDepth: round.value ? state.width : state.depth,
+  defaultHeight: state.height,
   photoId: state.photoId ?? null,
 }))
 
@@ -98,16 +101,19 @@ const sizeIssue = (size: number) =>
   (!Number.isInteger(size) || size < ITEM_SIZE_MIN_CM || size > ITEM_SIZE_MAX_CM ? `${ITEM_SIZE_MIN_CM} to ${ITEM_SIZE_MAX_CM} cm` : undefined)
 const widthIssue = computed(() => sizeIssue(state.width))
 const depthIssue = computed(() => (round.value ? undefined : sizeIssue(state.depth)))
+const heightIssue = computed(() => (Number.isInteger(state.height) && heightFits(state.kind, state.height) ? undefined : heightRangeMessage(state.kind)))
 /** The server's answers, until the name or the photo changes. */
 const serverNameIssue = ref<string>()
 const serverPhotoIssue = ref<string>()
+const serverHeightIssue = ref<string>()
+watch(() => state.height, () => (serverHeightIssue.value = undefined))
 const serverError = ref<string>()
 watch(() => state.name, () => (serverNameIssue.value = undefined))
 watch(() => state.photoId, () => (serverPhotoIssue.value = undefined))
 
 async function save() {
   touched.value = true
-  if (nameIssue.value || widthIssue.value || depthIssue.value || saving.value || uploading.value) return
+  if (nameIssue.value || widthIssue.value || depthIssue.value || heightIssue.value || saving.value || uploading.value) return
   saving.value = true
   serverError.value = undefined
   const { kind: _kind, ...fields } = body.value
@@ -122,9 +128,10 @@ async function save() {
   }
   if (result.status !== 'error') return
   serverNameIssue.value = result.error.fieldErrors?.name?.[0]
+  serverHeightIssue.value = result.error.fieldErrors?.defaultHeight?.[0]
   // A photo used meanwhile, or cleaned up after a day unsaved: upload it again.
   serverPhotoIssue.value = result.error.fieldErrors?.photoId?.[0]
-  if (!serverNameIssue.value && !serverPhotoIssue.value) serverError.value = result.error.message
+  if (!serverNameIssue.value && !serverPhotoIssue.value && !serverHeightIssue.value) serverError.value = result.error.message
 }
 
 async function removeLook() {
@@ -145,10 +152,10 @@ let viewer: StudioViewer | null = null
 let builders: typeof import('../designer/scene/furniture') | null = null
 
 function render() {
-  if (!viewer || !builders || widthIssue.value || depthIssue.value) return
+  if (!viewer || !builders || widthIssue.value || depthIssue.value || heightIssue.value) return
   const { buildItem } = builders
-  const { kind, finishes, defaultWidth, defaultDepth } = body.value
-  viewer.show(context => buildItem(context, { kind, width: defaultWidth, depth: defaultDepth, finishes }))
+  const { kind, finishes, defaultWidth, defaultDepth, defaultHeight } = body.value
+  viewer.show(context => buildItem(context, { kind, width: defaultWidth, depth: defaultDepth, height: defaultHeight ?? undefined, finishes }))
 }
 
 onMounted(async () => {
@@ -170,7 +177,7 @@ watch(() => colorMode.value, value => viewer?.setTheme(value === 'dark'))
 watch(view, value => viewer?.setView(value))
 
 const resetView = () => viewer?.reset()
-const noun = computed(() => (spec.value.category === 'chairs' ? 'chair' : 'fixture'))
+const noun = computed(() => LOOK_CATEGORIES.find(category => category.key === spec.value.category)?.noun ?? 'fixture')
 </script>
 
 <template>
@@ -315,6 +322,19 @@ const noun = computed(() => (spec.value.category === 'chairs' ? 'chair' : 'fixtu
                 v-model="state.depth"
                 :min="ITEM_SIZE_MIN_CM"
                 :max="ITEM_SIZE_MAX_CM"
+                :step="5"
+                :disabled="saving"
+              />
+            </UFormField>
+            <UFormField
+              label="Height (cm)"
+              :help="heightIssue || serverHeightIssue ? undefined : heightRangeMessage(state.kind)"
+              :error="(touched && heightIssue) || serverHeightIssue"
+            >
+              <UInputNumber
+                v-model="state.height"
+                :min="ITEM_HEIGHTS[state.kind].min"
+                :max="ITEM_HEIGHTS[state.kind].max"
                 :step="5"
                 :disabled="saving"
               />

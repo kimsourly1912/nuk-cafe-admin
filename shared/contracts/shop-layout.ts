@@ -67,6 +67,11 @@ export const isFigureKind = (kind: string): kind is FigureKind => Object.hasOwn(
 export const ITEM_KINDS = [
   'cafe-chair', 'bentwood-chair', 'bar-stool', 'dining-bench',
   'service-counter', 'display-shelf', 'planter', 'plant', 'room-divider', 'stairs',
+  // Step 3f: lounge seating, bar and service, decor and lighting, outdoor.
+  'armchair', 'sofa', 'coffee-table',
+  'coffee-station', 'pastry-case', 'menu-board',
+  'pendant-lamp', 'floor-lamp', 'water-jar',
+  'parasol', 'bicycle',
   ...FIGURE_KINDS,
 ] as const
 export type ItemKind = typeof ITEM_KINDS[number]
@@ -77,9 +82,58 @@ export type ItemKind = typeof ITEM_KINDS[number]
 export const ITEM_LOOK_KINDS = [
   'cafe-chair', 'bentwood-chair', 'bar-stool', 'dining-bench',
   'service-counter', 'display-shelf', 'planter', 'plant', 'room-divider',
+  'armchair', 'sofa', 'coffee-table',
+  'coffee-station', 'pastry-case', 'menu-board',
+  'pendant-lamp', 'floor-lamp', 'water-jar',
+  'parasol', 'bicycle',
 ] as const satisfies readonly ItemKind[]
 export type ItemLookKind = typeof ITEM_LOOK_KINDS[number]
 export const isItemLookKind = (kind: string): kind is ItemLookKind => (ITEM_LOOK_KINDS as readonly string[]).includes(kind)
+
+/**
+ * How tall each chair and fixture is, and how tall the owner can make it (step 3e, QS2), in cm: a
+ * piece or a look without its own height has `default`. The range is what the kind's model can
+ * draw well (a bar stool from a low stool to bar height). Stairs take their floor's height; people
+ * and pets keep their own.
+ */
+export const ITEM_HEIGHTS = {
+  'cafe-chair': { default: 82, min: 70, max: 115 },
+  'bentwood-chair': { default: 88, min: 75, max: 115 },
+  'bar-stool': { default: 75, min: 45, max: 90 },
+  'dining-bench': { default: 46, min: 35, max: 80 },
+  'service-counter': { default: 92, min: 75, max: 120 },
+  'display-shelf': { default: 190, min: 80, max: 260 },
+  // A planter's and a plant's height is to the top of the leaves.
+  'planter': { default: 75, min: 45, max: 135 },
+  'plant': { default: 125, min: 50, max: 220 },
+  'room-divider': { default: 180, min: 80, max: 250 },
+  'armchair': { default: 80, min: 65, max: 100 },
+  'sofa': { default: 82, min: 65, max: 100 },
+  'coffee-table': { default: 42, min: 30, max: 60 },
+  // A coffee station's is its counter's: the machine and grinder stand on it.
+  'coffee-station': { default: 92, min: 80, max: 110 },
+  'pastry-case': { default: 125, min: 95, max: 150 },
+  'menu-board': { default: 105, min: 70, max: 140 },
+  // A pendant lamp's is how low its shade hangs; its cord goes up to the ceiling.
+  'pendant-lamp': { default: 200, min: 140, max: 260 },
+  'floor-lamp': { default: 160, min: 120, max: 190 },
+  'water-jar': { default: 75, min: 45, max: 110 },
+  'parasol': { default: 230, min: 200, max: 280 },
+  'bicycle': { default: 100, min: 90, max: 115 },
+} as const satisfies Record<ItemLookKind, { default: number, min: number, max: number }>
+/** The database's bound for any kind's height; each kind's own range is narrower. */
+export const ITEM_HEIGHT_MIN_CM = 20
+export const ITEM_HEIGHT_MAX_CM = 300
+
+/** Whether `height` is in the kind's range (false for a kind with no height of its own). */
+export function heightFits(kind: string, height: number): boolean {
+  if (!isItemLookKind(kind)) return false
+  const range = ITEM_HEIGHTS[kind]
+  return height >= range.min && height <= range.max
+}
+
+/** The kind's height range, as a message. */
+export const heightRangeMessage = (kind: ItemLookKind) => `${ITEM_HEIGHTS[kind].min} to ${ITEM_HEIGHTS[kind].max} cm`
 
 /** A table look's top (D273): round, rectangle (square is a rectangle) or a booth with benches. */
 export const TABLE_SHAPES = ['round', 'rect', 'booth'] as const
@@ -132,7 +186,7 @@ const finishesSchema = v.pipe(
 export const ITEM_SIZE_MIN_CM = 10
 export const ITEM_SIZE_MAX_CM = 2_000
 
-/** Furniture or a fixture: its centre, turn and footprint. Height is the kind's own. */
+/** Furniture or a fixture: its centre, turn, footprint and, for a chair or fixture, its height. */
 export const itemSchema = v.pipe(
   v.strictObject({
     id: idSchema,
@@ -150,8 +204,15 @@ export const itemSchema = v.pipe(
      * A look that isn't the cafe's, or is of another kind, is 409 `LAYOUT_LOOK_UNAVAILABLE`.
      */
     lookId: v.optional(idSchema),
+    /**
+     * Its own height (step 3e), in the kind's range (`ITEM_HEIGHTS`). Left out: the kind's
+     * default. Stairs and people and pets have none.
+     */
+    height: v.optional(sizeSchema(ITEM_HEIGHT_MIN_CM, ITEM_HEIGHT_MAX_CM)),
   }),
   v.check(item => item.lookId === undefined || isItemLookKind(item.kind), 'Stairs, people and pets have no custom look'),
+  v.forward(v.check(item => item.height === undefined || isItemLookKind(item.kind), 'Stairs, people and pets keep their own height'), ['height']),
+  v.forward(v.check(item => item.height === undefined || !isItemLookKind(item.kind) || heightFits(item.kind, item.height), 'Out of this kind\'s height range'), ['height']),
   v.check(item => !isFigureKind(item.kind) || (item.width === FIGURE_SIZES[item.kind].width && item.depth === FIGURE_SIZES[item.kind].depth), 'People and pets keep their own size'),
   v.check(item => !isFigureKind(item.kind) || Object.keys(item.finishes).length === 0, 'People and pets have no finishes'),
 )
@@ -336,6 +397,8 @@ export interface ItemLook {
   finishes: Record<string, Finish>
   defaultWidth: number
   defaultDepth: number
+  /** The height a newly placed piece starts with (step 3e); each piece keeps its own. */
+  defaultHeight: number
   photo?: LookImage | null
 }
 
@@ -345,15 +408,27 @@ const itemLookFields = {
   finishes: finishesSchema,
   defaultWidth: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
   defaultDepth: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
+  /**
+   * In the kind's range (`ITEM_HEIGHTS`, step 3e); `null` or left out: the kind's default. Out of
+   * range is a 400 on `defaultHeight` (a create checks it here; an edit, whose body has no kind,
+   * in the service against the look's kind).
+   */
+  defaultHeight: v.optional(v.nullable(sizeSchema(ITEM_HEIGHT_MIN_CM, ITEM_HEIGHT_MAX_CM)), null),
   /** As a table look's `photoId`: one upload is one look's photo only. */
   photoId: lookFields.photoId,
 }
 
 /** `POST …/admin/item-looks`: a new chair or fixture look for the whole cafe (every branch). */
-export const createItemLookSchema = v.strictObject({
-  kind: v.picklist(ITEM_LOOK_KINDS),
-  ...itemLookFields,
-})
+export const createItemLookSchema = v.pipe(
+  v.strictObject({
+    kind: v.picklist(ITEM_LOOK_KINDS),
+    ...itemLookFields,
+  }),
+  v.forward(
+    v.check(look => look.defaultHeight === null || heightFits(look.kind, look.defaultHeight), 'Out of this kind\'s height range'),
+    ['defaultHeight'],
+  ),
+)
 export type CreateItemLookInput = v.InferOutput<typeof createItemLookSchema>
 
 /**

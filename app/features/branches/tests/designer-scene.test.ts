@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { Box3, ExtrudeGeometry, Raycaster, Vector3 } from 'three'
 import type { Object3D } from 'three'
 import { describe, expect, it } from 'vitest'
-import { FIGURE_KINDS, FIGURE_SIZES, isFigureKind, ITEM_KINDS } from '#shared/contracts/shop-layout'
+import { FIGURE_KINDS, FIGURE_SIZES, isFigureKind, ITEM_HEIGHTS, ITEM_KINDS, ITEM_LOOK_KINDS } from '#shared/contracts/shop-layout'
 import type { FigureKind, ItemLook, LayoutItem } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, BUILT_IN_PHOTO, findLook, ITEM_SPECS, pieceFinishes } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
@@ -39,6 +39,49 @@ describe('2D and 3D agree on size', () => {
     const legs = (table: Object3D) => table.children.filter(child => child.userData.part !== 'top' && child.position.y < 0.5)
     const radius = (table: Object3D) => new Box3().setFromObject(legs(table)[0]!).getSize(new Vector3()).x
     expect(radius(large)).toBeCloseTo(radius(small), 5)
+  })
+})
+
+describe('heights (step 3e, QS2)', () => {
+  // A plant's and a planter's height is to the top of their leaves, which are soft clusters.
+  const slack = (kind: string) => (kind === 'plant' || kind === 'planter' ? 5 : 3)
+  it.each(ITEM_LOOK_KINDS)('a %s stands as tall as asked across its range, on the same footprint', (kind) => {
+    const spec = ITEM_SPECS[kind]
+    const range = ITEM_HEIGHTS[kind]
+    for (const height of [range.min, range.default, range.max]) {
+      const object = buildItem(context(), { kind, width: spec.width, depth: spec.depth, height, finishes: {} })
+      const box = new Box3().setFromObject(object)
+      // A pendant lamp's height is its shade's bottom (its cord goes up); a coffee station's is its
+      // counter's, with the machine and its cups 46 cm above it.
+      const measured = kind === 'pendant-lamp' ? box.min.y * 100 : box.max.y * 100 - (kind === 'coffee-station' ? 46 : 0)
+      expect(Math.abs(measured - height), `${kind} at ${height} cm`).toBeLessThanOrEqual(slack(kind))
+      expect(box.min.y).toBeGreaterThanOrEqual(-0.001)
+      // A plant's leaves spread past its pot, at any height (as in "2D and 3D agree on size").
+      if (kind === 'plant') continue
+      const size = box.getSize(new Vector3())
+      expect(Math.abs(size.x * 100 - spec.width)).toBeLessThanOrEqual(6)
+      expect(Math.abs(size.z * 100 - spec.depth)).toBeLessThanOrEqual(8)
+    }
+  })
+
+  it('a piece without its own height is the kind\'s default; a taller one keeps its legs\' thickness', () => {
+    const plain = buildItem(context(), { kind: 'bar-stool', width: 40, depth: 40, finishes: {} })
+    expect(Math.abs(sizeOf(plain).y * 100 - ITEM_HEIGHTS['bar-stool'].default)).toBeLessThan(1)
+    const low = buildItem(context(), { kind: 'bar-stool', width: 40, depth: 40, height: 45, finishes: {} })
+    // The legs are the thinnest rods; their length changes, their thickness doesn't.
+    const thinnest = (stool: Object3D) => Math.min(...meshesOf(stool).map(mesh => (mesh.geometry as { parameters?: { radiusTop?: number } }).parameters?.radiusTop ?? Infinity))
+    expect(thinnest(low)).toBe(thinnest(plain))
+    expect(sizeOf(low).y * 100).toBeLessThan(46)
+  })
+
+  it('the building draws a piece at its own height', () => {
+    const layout = demoLayout()
+    const ground = layout.floors[0]!
+    ground.items.push({ id: 'tall-shelf', kind: 'display-shelf', x: 200, y: 200, rotation: 0, width: 100, depth: 40, finishes: {}, height: 240 })
+    const scene = buildScene(context(), { layout, tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
+    let shelf: Object3D | undefined
+    scene.root.traverse(object => (object.userData.itemId === 'tall-shelf' ? (shelf = object) : undefined))
+    expect(sizeOf(shelf!).y * 100).toBeCloseTo(240, 0)
   })
 })
 
@@ -111,7 +154,7 @@ describe('the building from the layout', () => {
 })
 
 describe('chair and fixture looks (step 3d)', () => {
-  const look: ItemLook = { id: 'rattan', name: 'Rattan', kind: 'cafe-chair', finishes: { frame: 'pale-oak', seat: 'navy' }, defaultWidth: 46, defaultDepth: 52 }
+  const look: ItemLook = { id: 'rattan', name: 'Rattan', kind: 'cafe-chair', finishes: { frame: 'pale-oak', seat: 'navy' }, defaultWidth: 46, defaultDepth: 52, defaultHeight: 82 }
   const piece = (extra: Partial<LayoutItem>): LayoutItem => ({ id: 'chair', kind: 'cafe-chair', x: 0, y: 0, rotation: 0, width: 46, depth: 52, finishes: { frame: 'walnut', seat: 'olive' }, ...extra })
 
   it('a piece with one of the cafe\'s looks takes its finishes; without one, or its look gone or of another kind, its own', () => {

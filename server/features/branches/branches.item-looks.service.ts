@@ -1,11 +1,11 @@
-import { MAX_CUSTOM_ITEM_LOOKS } from '#shared/contracts/shop-layout'
+import { heightFits, heightRangeMessage, ITEM_HEIGHTS, MAX_CUSTOM_ITEM_LOOKS } from '#shared/contracts/shop-layout'
 import type { CreateItemLookInput, CustomItemLook, UpdateItemLookInput } from '#shared/contracts/shop-layout'
 import type { Db } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireAtMost, requireOneChange } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import type { Actor } from '#server/features/identity'
 import { mediaNotAvailable } from '#server/features/media'
-import { itemLookChanged, itemLookInUse, itemLookLimit, itemLookNameTaken, itemLookNotFound } from './branches.errors'
+import { itemLookChanged, itemLookHeightOutOfRange, itemLookInUse, itemLookLimit, itemLookNameTaken, itemLookNotFound } from './branches.errors'
 import * as repo from './branches.item-looks.repository'
 import type { ItemLookRow, ItemLookValues } from './branches.item-looks.repository'
 import { NAMED_USES, photoStatements, photoUrls } from './branches.looks.service'
@@ -20,7 +20,7 @@ import { audit } from './branches.service'
  */
 
 function toLook(row: ItemLookRow, pieces: number, photos: Map<string, string>): CustomItemLook {
-  const { id, name, kind, finishes, defaultWidthCm, defaultDepthCm, photoAssetId, version } = row
+  const { id, name, kind, finishes, defaultWidthCm, defaultDepthCm, defaultHeightCm, photoAssetId, version } = row
   const url = photoAssetId ? photos.get(photoAssetId) : undefined
   return {
     id,
@@ -29,6 +29,7 @@ function toLook(row: ItemLookRow, pieces: number, photos: Map<string, string>): 
     finishes,
     defaultWidth: defaultWidthCm,
     defaultDepth: defaultDepthCm,
+    defaultHeight: defaultHeightCm ?? ITEM_HEIGHTS[kind].default,
     photo: photoAssetId && url ? { id: photoAssetId, url } : null,
     version,
     pieces,
@@ -36,8 +37,8 @@ function toLook(row: ItemLookRow, pieces: number, photos: Map<string, string>): 
 }
 
 function toValues(input: Omit<CreateItemLookInput, 'kind'>): Omit<ItemLookValues, 'kind'> {
-  const { name, finishes, defaultWidth, defaultDepth, photoId } = input
-  return { name, finishes, defaultWidthCm: defaultWidth, defaultDepthCm: defaultDepth, photoAssetId: photoId ?? null }
+  const { name, finishes, defaultWidth, defaultDepth, defaultHeight, photoId } = input
+  return { name, finishes, defaultWidthCm: defaultWidth, defaultDepthCm: defaultDepth, defaultHeightCm: defaultHeight ?? null, photoAssetId: photoId ?? null }
 }
 
 /** The cafe's chair and fixture looks by name, each with how many placed pieces use it and its photo. */
@@ -91,6 +92,8 @@ export async function updateItemLook(db: Db, actor: Actor, id: string, input: Up
   const { tenantId } = actor
   const { version, ...fields } = input
   const current = await openItemLook(db, tenantId, id, version)
+  // The edit has no kind (it never changes), so its height is checked against the look's here.
+  if (fields.defaultHeight !== null && !heightFits(current.kind, fields.defaultHeight)) throw itemLookHeightOutOfRange(heightRangeMessage(current.kind))
   const values = toValues(fields)
   const photoChanging = values.photoAssetId !== current.photoAssetId
   try {

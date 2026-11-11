@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import * as v from 'valibot'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { floorSchema, MAX_CUSTOM_ITEM_LOOKS, updateItemLookSchema } from '#shared/contracts/shop-layout'
+import { createItemLookSchema, floorSchema, ITEM_HEIGHTS, MAX_CUSTOM_ITEM_LOOKS, updateItemLookSchema } from '#shared/contracts/shop-layout'
 import type { CreateItemLookInput, Floor, LayoutItem } from '#shared/contracts/shop-layout'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
@@ -49,6 +49,7 @@ const chair = (name: string, extra: Partial<CreateItemLookInput> = {}): CreateIt
   finishes: { frame: 'walnut', seat: 'navy' },
   defaultWidth: 46,
   defaultDepth: 52,
+  defaultHeight: null,
   photoId: null,
   ...extra,
 })
@@ -324,12 +325,66 @@ describe('tenants', () => {
     expect(await itemLookUse(db, TEST_TENANT, theirLook, 5)).toEqual({ total: 0, places: [] })
     const before = await findItemLook(db, OTHER, theirLook)
     await db.batch([
-      updateItemLookStatement(db, TEST_TENANT, theirLook, 1, { name: 'Taken', finishes: {}, defaultWidthCm: 60, defaultDepthCm: 60, photoAssetId: null }, new Date()),
+      updateItemLookStatement(db, TEST_TENANT, theirLook, 1, { name: 'Taken', finishes: {}, defaultWidthCm: 60, defaultDepthCm: 60, defaultHeightCm: null, photoAssetId: null }, new Date()),
       deleteItemLookStatement(db, TEST_TENANT, theirLook, 1),
       // Our branch's replace never touches their floors' uses.
       ...replaceLayoutStatements(db, TEST_TENANT, theirBranch, [], []),
     ])
     expect(await findItemLook(db, OTHER, theirLook)).toEqual(before)
     expect(await itemLookUse(db, OTHER, theirLook, 5)).toEqual({ total: 1, places: [{ floor: 'Ground', branch: 'Their branch', pieces: 1 }] })
+  })
+})
+
+describe('heights (step 3e, QS2)', () => {
+  it('a look keeps the height it is made with; without one, the kind\'s default (a look from before 3e too)', async () => {
+    const tall = await createItemLook(db, actor, chair('Tall chair', { defaultHeight: 105 }))
+    const plain = await createItemLook(db, actor, chair('Plain chair'))
+    expect([tall.defaultHeight, plain.defaultHeight]).toEqual([105, ITEM_HEIGHTS['cafe-chair'].default])
+    expect((await findItemLook(db, TEST_TENANT, plain.id))!.defaultHeightCm).toBeNull()
+    const edited = await updateItemLook(db, actor, tall.id, edit(chair('Tall chair', { defaultHeight: 110 }), 1))
+    expect(edited).toMatchObject({ defaultHeight: 110, version: 2 })
+  })
+
+  it('refuses a height out of the kind\'s range: the create in the contract, the edit (no kind) against the look\'s kind', async () => {
+    const issues = (input: unknown) => v.safeParse(createItemLookSchema, input).issues?.map(issue => v.getDotPath(issue))
+    expect(issues(chair('Short stool', { kind: 'bar-stool', defaultHeight: 44 }))).toEqual(['defaultHeight'])
+    expect(issues(chair('Bar stool', { kind: 'bar-stool', defaultHeight: 90 }))).toBeUndefined()
+    // 160 fits a display shelf but not a chair: the edit is checked against the look's own kind.
+    const created = await createItemLook(db, actor, chair('Walnut chair'))
+    expect(v.safeParse(updateItemLookSchema, edit(chair('Walnut chair', { defaultHeight: 160 }), 1)).success).toBe(true)
+    await expectApiError(() => updateItemLook(db, actor, created.id, edit(chair('Walnut chair', { defaultHeight: 160 }), 1)), 400, 'VALIDATION_FAILED', ['defaultHeight'])
+    expect((await findItemLook(db, TEST_TENANT, created.id))!.version).toBe(1)
+  })
+
+  it('the database refuses a height outside 20 to 300 cm', async () => {
+    const insert = (defaultHeightCm: number) => db.insert(customItemLooks).values({ tenantId: TEST_TENANT, name: `H${defaultHeightCm}`, kind: 'plant', finishes: {}, defaultWidthCm: 50, defaultDepthCm: 50, defaultHeightCm })
+    const refused = { cause: { message: expect.stringMatching(/CHECK constraint failed: custom_item_looks_height_check/) } }
+    await expect(insert(19)).rejects.toMatchObject(refused)
+    await expect(insert(301)).rejects.toMatchObject(refused)
+    await insert(300)
+  })
+
+  it('a piece saves its own height in its kind\'s range; stairs and people and pets have none', async () => {
+    await furnish([floor('ground', [{ ...piece(), height: 110 }, { ...piece(undefined, 'display-shelf'), width: 100, depth: 40, height: 240 }])])
+    expect((await getLayout(db, TEST_TENANT, branch)).floors[0]!.items.map(item => item.height)).toEqual([110, 240])
+    const heightIssues = (item: LayoutItem) => v.safeParse(floorSchema, floor('ground', [item])).issues?.map(issue => v.getDotPath(issue))
+    expect(heightIssues({ ...piece(), height: 69 })).toEqual(['items.0.height'])
+    expect(heightIssues({ ...piece(undefined, 'bar-stool'), height: 91 })).toEqual(['items.0.height'])
+    expect(heightIssues({ ...piece(undefined, 'stairs'), width: 100, depth: 340, height: 300 })).toEqual(['items.0.height'])
+    expect(heightIssues({ ...piece(undefined, 'cat'), width: 25, depth: 40, height: 40 })).toEqual(['items.0.height'])
+    expect(heightIssues({ ...piece(undefined, 'bar-stool'), height: 45 })).toBeUndefined()
+  })
+})
+
+describe('more furniture (step 3f)', () => {
+  it('a new kind takes a look and saves on the plan, with its own height', async () => {
+    const parasol = await createItemLook(db, actor, chair('Terrace parasol', { kind: 'parasol', finishes: { canopy: 'terracotta', pole: 'walnut' }, defaultWidth: 260, defaultDepth: 260, defaultHeight: 250 }))
+    expect(parasol).toMatchObject({ kind: 'parasol', defaultHeight: 250 })
+    await furnish([floor('ground', [{ ...piece(parasol.id, 'parasol'), width: 260, depth: 260, height: 250 }, { ...piece(undefined, 'sofa'), width: 180, depth: 88 }])])
+    expect((await getLayout(db, TEST_TENANT, branch)).floors[0]!.items.map(item => item.kind)).toEqual(['parasol', 'sofa'])
+    expect((await listItemLooks(db, TEST_TENANT))[0]).toMatchObject({ pieces: 1 })
+    // Each kind has its own range: a 2 m sofa is refused.
+    const issues = v.safeParse(floorSchema, floor('ground', [{ ...piece(undefined, 'sofa'), height: 200 }])).issues?.map(issue => v.getDotPath(issue))
+    expect(issues).toEqual(['items.0.height'])
   })
 })

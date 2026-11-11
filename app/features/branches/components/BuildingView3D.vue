@@ -7,10 +7,10 @@
  * shows the same message, with Try again.
  */
 import type { DiningTable } from '#shared/contracts/branches'
-import { isFigureKind } from '#shared/contracts/shop-layout'
+import { isFigureKind, isItemLookKind } from '#shared/contracts/shop-layout'
 import type { ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { useClipboard } from '@vueuse/core'
-import { findLook } from '../designer/catalog'
+import { findItemLook, findLook, ITEM_SPECS, pieceHeight } from '../designer/catalog'
 import { formatReport, summarizeFrames } from '../designer/benchmark'
 import type { SurroundingsPreset } from '../designer/surroundings'
 import type { BuildingNavigation, BuildingViewer } from '../designer/scene/building-viewer'
@@ -34,10 +34,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   showOnPlan: [tableId: string]
+  /** A piece's Show on plan (step 3e). */
+  showItemOnPlan: [itemId: string]
   designShop: []
 }>()
 
 const selectedTable = defineModel<string | null>('selectedTable', { default: null })
+/** A piece picked in 3D or selected in Design shop (step 3e). One of the two at a time. */
+const selectedItem = defineModel<string | null>('selectedItem', { default: null })
 
 const colorMode = useColorMode()
 const dark = computed(() => colorMode.value === 'dark')
@@ -91,6 +95,29 @@ const selected = computed(() => {
   const details = props.diningTables.find(candidate => candidate.id === table.id)
   return { table, floor, look: findLook(props.looks, placement.lookId), area: details?.area ?? null, qrUrl: details?.qrUrl ?? null }
 })
+/** The selected piece's card: its name, what it is, its size and floor, its picture. */
+const selectedPiece = computed(() => {
+  const id = selectedItem.value
+  const floor = id ? props.layout.floors.find(candidate => candidate.items.some(item => item.id === id)) : undefined
+  const item = floor?.items.find(candidate => candidate.id === id)
+  if (!floor || !item) return null
+  const spec = ITEM_SPECS[item.kind]
+  const found = findItemLook(props.itemLooks ?? [], item.lookId)
+  const look = found && found.kind === item.kind ? found : undefined
+  const what = isFigureKind(item.kind) ? 'Decoration' : item.kind === 'stairs' ? 'Structure' : look ? spec.label : 'Furniture'
+  const size = isFigureKind(item.kind)
+    ? null
+    : spec.footprint === 'round'
+      ? `Ø ${item.width} cm`
+      : `${item.width} × ${item.depth}${isItemLookKind(item.kind) ? ` × ${pieceHeight(item)}` : ''} cm`
+  return {
+    item,
+    floor,
+    name: look?.name ?? spec.label,
+    details: [what, size, isItemLookKind(item.kind) && spec.footprint === 'round' ? `${pieceHeight(item)} cm high` : null, `${floor.name} floor`].filter(Boolean).join(' · '),
+    photo: look?.photo?.url ?? spec.photo,
+  }
+})
 const insideName = computed(() => props.layout.floors.find(floor => floor.id === insideFloor.value)?.name)
 
 function stopViewer() {
@@ -137,14 +164,16 @@ async function start() {
       onContextLost: graphicsUnavailable,
       onNavigationChange: next => (navigation.value = next),
       onSelectTable: id => (selectedTable.value = id),
+      onSelectItem: id => (selectedItem.value = id),
       onSelectFloor: id => void focusFloor(id),
     })
     viewer.setPlayback({ figures: showFigures.value, animate: animate.value })
     if (scenesEnabled) viewer.setSurroundings(surroundings.value, props.branchId)
     viewer.setScene({ layout: props.layout, tables: props.tables, looks: props.looks, itemLooks: props.itemLooks })
     status.value = 'ready'
-    // A table picked in Design shop, or before Try again.
-    if (selectedTable.value) void reveal(selectedTable.value)
+    // A table or piece picked in Design shop, or before Try again.
+    if (selectedTable.value) void reveal({ kind: 'table', id: selectedTable.value })
+    else if (selectedItem.value) void reveal({ kind: 'item', id: selectedItem.value })
   }
   catch (error) {
     if (request !== startup) return
@@ -196,6 +225,7 @@ function chooseAnimate(value: boolean) {
   animate.value = value
 }
 watch(selectedTable, id => viewer?.selectTable(id))
+watch(selectedItem, id => viewer?.selectItem(id))
 
 function setMode(next: 'exterior' | 'cutaway') {
   modeChange = viewer?.setMode(next)
@@ -238,29 +268,33 @@ async function fit() {
 const zoom = (direction: 1 | -1) => viewer?.zoom(direction)
 
 /**
- * Brings a table into view: on another floor when inside one, and in the cutaway when the
- * exterior hides it (under a roof or another floor), where only its label would show.
+ * Brings a table or a piece into view: on another floor when inside one, and in the cutaway when
+ * the exterior hides it (under a roof or another floor), where only its label would show.
  */
-async function reveal(tableId: string) {
+async function reveal(target: { kind: 'table' | 'item', id: string }) {
   const request = ++revealRequest
   const current = viewer
-  const placement = props.layout.placements.find(candidate => candidate.tableId === tableId)
-  if (!placement) return
-  const index = props.layout.floors.findIndex(floor => floor.id === placement.floorId)
+  const floorId = target.kind === 'table'
+    ? props.layout.placements.find(candidate => candidate.tableId === target.id)?.floorId
+    : props.layout.floors.find(floor => floor.items.some(item => item.id === target.id))?.id
+  if (!floorId) return
+  const index = props.layout.floors.findIndex(floor => floor.id === floorId)
   const covered = index < props.layout.floors.length - 1 || !!props.layout.floors[index]?.hasRoof
-  if (insideFloor.value && placement.floorId !== insideFloor.value) enterFloor(placement.floorId)
+  if (insideFloor.value && floorId !== insideFloor.value) enterFloor(floorId)
   else if (mode.value === 'exterior' && covered) setMode('cutaway')
   const transition = modeChange
   await transition
-  if (request === revealRequest && current === viewer && transition === modeChange && selectedTable.value === tableId) {
-    current?.selectTable(tableId, { focus: true })
+  const still = target.kind === 'table' ? selectedTable.value === target.id : selectedItem.value === target.id
+  if (request === revealRequest && current === viewer && transition === modeChange && still) {
+    if (target.kind === 'table') current?.selectTable(target.id, { focus: true })
+    else current?.selectItem(target.id, { focus: true })
   }
 }
 
 function selectFromList(tableId: string) {
   listsOpen.value = false
   selectedTable.value = tableId
-  void reveal(tableId)
+  void reveal({ kind: 'table', id: tableId })
 }
 </script>
 
@@ -333,9 +367,11 @@ function selectFromList(tableId: string) {
           data-testid="building-canvas"
           :data-drawn="drawn"
         />
+        <!-- Its own stacking context: CSS2DRenderer gives each label a z-index by distance, which
+             otherwise drew floor names over the cards and controls laid on top of the view. -->
         <div
           ref="labels"
-          class="pointer-events-none absolute inset-0"
+          class="pointer-events-none absolute inset-0 isolate"
         />
 
         <div
@@ -599,6 +635,50 @@ function selectFromList(tableId: string) {
             variant="outline"
             size="sm"
             @click="emit('showOnPlan', selected.table.id)"
+          />
+        </div>
+      </div>
+
+      <!-- A selected piece (step 3e): picked in 3D or in Design shop. Where the table card goes. -->
+      <div
+        v-else-if="selectedPiece"
+        class="absolute inset-x-3 bottom-24 rounded-lg border border-default bg-default p-3 shadow-lg sm:inset-x-auto sm:top-16 sm:right-3 sm:bottom-auto sm:w-64"
+        data-testid="piece-card"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex min-w-0 items-start gap-2">
+            <img
+              v-if="selectedPiece.photo"
+              :src="selectedPiece.photo"
+              :alt="`Picture of ${selectedPiece.name}`"
+              class="aspect-4/3 w-14 shrink-0 rounded-md bg-muted object-cover"
+            >
+            <div class="min-w-0">
+              <p class="text-lg font-semibold break-words text-highlighted">
+                {{ selectedPiece.name }}
+              </p>
+              <p class="text-sm text-muted">
+                {{ selectedPiece.details }}
+              </p>
+            </div>
+          </div>
+          <UButton
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            aria-label="Clear selection"
+            @click="selectedItem = null"
+          />
+        </div>
+        <div class="mt-3 flex gap-2">
+          <UButton
+            label="Show on plan"
+            icon="i-lucide-layout-dashboard"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            @click="emit('showItemOnPlan', selectedPiece.item.id)"
           />
         </div>
       </div>

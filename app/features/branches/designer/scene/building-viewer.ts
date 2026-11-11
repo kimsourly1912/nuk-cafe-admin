@@ -29,6 +29,8 @@ export type BuildingNavigation
 export interface BuildingViewerOptions extends StageOptions {
   onNavigationChange?: (navigation: BuildingNavigation) => void
   onSelectTable?: (tableId: string | null) => void
+  /** A piece tapped (step 3e): furniture, a fixture, stairs or a figure; null when the tap left it. */
+  onSelectItem?: (itemId: string | null) => void
   onSelectFloor?: (floorId: string) => void
 }
 
@@ -53,7 +55,10 @@ export interface BuildingViewer {
   setMode: (mode: 'exterior' | 'cutaway') => Promise<void>
   enterFloor: (floorId: string, viewpointId?: string) => Promise<void>
   leaveFloor: () => Promise<void>
+  /** Selects a table; null clears it (a selected piece stays). */
   selectTable: (tableId: string | null, options?: { focus?: boolean }) => void
+  /** Selects a piece (step 3e); null clears it (a selected table stays). */
+  selectItem: (itemId: string | null, options?: { focus?: boolean }) => void
   focusFloor: (floorId: string) => Promise<void>
   fit: () => Promise<void>
   zoom: (direction: 1 | -1) => void
@@ -71,14 +76,15 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   let built: BuiltScene | null = null
   let input: SceneInput | null = null
   let navigation: BuildingNavigation = { mode: 'exterior' }
-  let selected: string | null = null
+  /** One selection at a time: a table or a piece. */
+  let selection: { kind: 'table' | 'item', id: string } | null = null
   let explode = 0
   let overviewMaxDistance = 80
   let cameraFlight = 0
   let navigationRequest = 0
   let saved: { position: Vector3, target: Vector3, fov: number } | null = null
   const floorLabels: CSS2DObject[] = []
-  let tableLabel: CSS2DObject | null = null
+  let selectionLabel: CSS2DObject | null = null
   const highlighted = new Map<Mesh, Material | Material[]>()
   const models = createModelLibrary()
   let playback: Playback = { figures: true, animate: true }
@@ -104,7 +110,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     highlighted.clear()
     stage.clearContent()
     floorLabels.length = 0
-    tableLabel = null
+    selectionLabel = null
     built = buildScene(stage.context, next)
     ground = buildGround(stage.context, built.bounds)
     stage.scene.add(built.root, ground)
@@ -121,8 +127,8 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     attachFigures(built)
     // The street fits this layout: built again with it (clearContent took the old one off).
     placeSurroundings(layoutChanged || first)
-    if (selected && built.tables.has(selected)) selectTable(selected)
-    else selected = null
+    if (selection && (selection.kind === 'table' ? built.tables : built.items).has(selection.id)) select(selection)
+    else selection = null
     if (first) {
       placeCamera(new Vector3(0.9, 0.85, 1.35))
       stage.measure()
@@ -348,7 +354,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
       for (const roof of floor.roofs) roof.visible = navigation.mode === 'exterior'
     }
     for (const label of floorLabels) label.visible = navigation.mode === 'cutaway'
-    if (tableLabel) tableLabel.visible = true
+    if (selectionLabel) selectionLabel.visible = true
   }
 
   /** In the cutaway, walls facing the camera step aside so the floors show. */
@@ -456,25 +462,40 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   }
 
   function selectTable(tableId: string | null, selectOptions: { focus?: boolean } = {}) {
+    if (tableId) select({ kind: 'table', id: tableId }, selectOptions)
+    else if (selection?.kind === 'table') select(null)
+  }
+
+  function selectItem(itemId: string | null, selectOptions: { focus?: boolean } = {}) {
+    if (itemId) select({ kind: 'item', id: itemId }, selectOptions)
+    else if (selection?.kind === 'item') select(null)
+  }
+
+  /**
+   * Lights up the selection with its chip: a table's top, or a whole piece (step 3e; a figure's
+   * contact shadow stays as it is).
+   */
+  function select(next: { kind: 'table' | 'item', id: string } | null, selectOptions: { focus?: boolean } = {}) {
     for (const [mesh, material] of highlighted) mesh.material = material
     highlighted.clear()
-    tableLabel?.removeFromParent()
-    tableLabel = null
-    if (tableId !== selected && navigation.mode !== 'inside') cameraFlight++
-    selected = tableId
-    const node = tableId ? built?.tables.get(tableId) : undefined
-    if (!node) {
+    selectionLabel?.removeFromParent()
+    selectionLabel = null
+    const same = next?.kind === selection?.kind && next?.id === selection?.id
+    if (!same && navigation.mode !== 'inside') cameraFlight++
+    selection = next
+    const node = !next ? undefined : next.kind === 'table' ? built?.tables.get(next.id) : built?.items.get(next.id)
+    if (!next || !node) {
       stage.invalidate()
       return
     }
     for (const mesh of meshesOf(node.object)) {
-      if (mesh.userData.part !== 'top') continue
+      if (next.kind === 'table' ? mesh.userData.part !== 'top' : mesh.userData.part === 'contact-shadow') continue
       highlighted.set(mesh, mesh.material)
       mesh.material = stage.materials.surface('highlight')
     }
-    tableLabel = new CSS2DObject(labelElement(node.label, 'table'))
-    tableLabel.position.copy(node.labelAnchor)
-    node.object.parent?.add(tableLabel)
+    selectionLabel = new CSS2DObject(labelElement(node.label, 'table'))
+    selectionLabel.position.copy(node.labelAnchor)
+    node.object.parent?.add(selectionLabel)
     if (selectOptions.focus && navigation.mode !== 'inside') {
       const world = node.object.getWorldPosition(new Vector3())
       const offset = camera.position.clone().sub(controls.target)
@@ -520,10 +541,18 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
       options.onSelectTable?.(tableId)
       return
     }
+    // A piece (step 3e): its root carries its id, a figure's model included.
+    const itemId = hit && findUp(hit.object, 'itemId')
+    if (itemId && built.items.has(itemId)) {
+      selectItem(itemId)
+      options.onSelectItem?.(itemId)
+      return
+    }
     const floorId = hit && findUp(hit.object, 'floorId')
     if (floorId && navigation.mode !== 'inside') options.onSelectFloor?.(floorId)
-    selectTable(null)
+    select(null)
     options.onSelectTable?.(null)
+    options.onSelectItem?.(null)
   }
   canvas.addEventListener('pointerdown', taps.down)
   canvas.addEventListener('pointermove', taps.move)
@@ -559,6 +588,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     enterFloor,
     leaveFloor,
     selectTable,
+    selectItem,
     focusFloor,
     fit,
     zoom,
@@ -574,7 +604,7 @@ function isShown(object: Object3D): boolean {
   return true
 }
 
-function findUp(object: Object3D, key: 'tableId' | 'floorId'): string | undefined {
+function findUp(object: Object3D, key: 'tableId' | 'itemId' | 'floorId'): string | undefined {
   for (let current: Object3D | null = object; current; current = current.parent) {
     if (typeof current.userData[key] === 'string') return current.userData[key]
   }

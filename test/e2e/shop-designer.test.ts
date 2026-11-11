@@ -691,11 +691,13 @@ describe('the shop designer on saved layouts', () => {
     await form().getByRole('combobox', { name: 'Kind' }).click()
     await page.getByRole('option', { name: 'Bar stool' }).click()
     await form().getByRole('group', { name: 'Frame' }).getByRole('button', { name: 'Brass' }).click()
+    // A counter stool (step 3e): the height a new piece of this look starts with.
+    await form().getByLabel('Height (cm)').fill('65')
     await form().getByRole('button', { name: 'Save look' }).click()
     await page.getByText('Look "Rattan stool" saved').first().waitFor()
     await chairs.getByTestId('look-card-Rattan stool').getByText('Not used').waitFor()
     const [stool] = await itemLooks()
-    expect(stool).toMatchObject({ name: 'Rattan stool', kind: 'bar-stool', finishes: { frame: 'brass' }, defaultWidth: 40, defaultDepth: 40, pieces: 0 })
+    expect(stool).toMatchObject({ name: 'Rattan stool', kind: 'bar-stool', finishes: { frame: 'brass' }, defaultWidth: 40, defaultDepth: 40, defaultHeight: 65, pieces: 0 })
 
     // In Design shop it waits under Extra seating; placed, its panel names the look, not finishes.
     await openDesign(page)
@@ -710,7 +712,7 @@ describe('the shop designer on saved layouts', () => {
     expect(await panel.getByRole('group', { name: 'Upholstery' }).count()).toBe(0)
     await save(page)
     const placed = (await savedLayout(page)).floors.flatMap(floor => floor.items).filter(item => item.lookId === stool!.id)
-    expect(placed).toMatchObject([{ kind: 'bar-stool', width: 40, depth: 40 }])
+    expect(placed).toMatchObject([{ kind: 'bar-stool', width: 40, depth: 40, height: 65 }])
     expect((await itemLooks())[0]).toMatchObject({ pieces: 1 })
 
     // Editing it says who uses it and can't delete it; the rename shows in the library.
@@ -867,6 +869,76 @@ describe('the shop designer on saved layouts', () => {
     expect(await animate.isDisabled()).toBe(true)
     // Playback is this viewer's own: nothing to save.
     expect(await saveButton(page).isDisabled()).toBe(true)
+  })
+
+  it('a piece\'s own height (step 3e): typed in its panel, saved, and its card in 3D goes back to it on the plan', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).waitFor()
+    const stools = await plan(page).getByTestId('plan-item-bar-stool').count()
+    await page.getByTestId('catalog-bar-stool').click()
+    await expect.poll(() => plan(page).getByTestId('plan-item-bar-stool').count()).toBe(stools + 1)
+    const panel = page.getByRole('complementary', { name: 'Selected' })
+    const height = panel.getByLabel('Height (cm)')
+    // A built-in stool is bar height until changed; a counter stool is 65 cm.
+    expect(await height.inputValue()).toBe('75')
+    await panel.getByText('45 to 90 cm').waitFor()
+    await height.fill('65')
+    await height.press('Enter')
+    await save(page)
+    const stool = (await savedLayout(page)).floors.flatMap(floor => floor.items).filter(item => item.kind === 'bar-stool').at(-1)!
+    expect(stool.height).toBe(65)
+
+    // Still selected in View in 3D: its card names it, its height and floor.
+    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await drawn(page)
+    const card = page.getByTestId('piece-card')
+    await expect.poll(() => card.textContent()).toContain('Bar stool')
+    expect(await card.textContent()).toContain('65 cm high')
+    await shot(page, '3d-piece-card')
+    await card.getByRole('button', { name: 'Show on plan' }).click()
+    await plan(page).waitFor()
+    await expect.poll(() => panel.getByLabel('Height (cm)').inputValue()).toBe('65')
+    // Taken off again: the layout as the next test expects it.
+    await panel.getByRole('button', { name: 'Delete' }).click()
+    await save(page)
+  })
+
+  it('more furniture (step 3f): four new library sections, placed, saved, in 3D, and on the Looks page', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).waitFor()
+    const before = await savedLayout(page)
+    const library = page.getByRole('complementary', { name: 'Library' })
+    for (const heading of ['Lounge seating', 'Bar and service', 'Decor and lighting', 'Outdoor']) {
+      await library.getByRole('heading', { name: heading }).waitFor()
+    }
+    await library.getByRole('button', { name: 'New lounge look' }).waitFor()
+    const kinds = ['armchair', 'coffee-station', 'pendant-lamp', 'parasol'] as const
+    for (const kind of kinds) {
+      await page.getByTestId(`catalog-${kind}`).scrollIntoViewIfNeeded()
+      await page.getByTestId(`catalog-${kind}`).click()
+      await plan(page).getByTestId(`plan-item-${kind}`).first().waitFor()
+    }
+    // A parasol's height is its own, in its range.
+    const panel = page.getByRole('complementary', { name: 'Selected' })
+    await panel.getByText('200 to 280 cm').waitFor()
+    await save(page)
+    const saved = (await savedLayout(page)).floors.flatMap(floor => floor.items).map(item => item.kind)
+    for (const kind of kinds) expect(saved).toContain(kind)
+
+    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await drawn(page)
+    await shot(page, '3d-more-furniture')
+
+    await page.goto(url(`/c/${lab.slug}/admin/branches/looks`), { waitUntil: 'hydration' })
+    const lounge = page.getByTestId('looks-lounge')
+    await lounge.getByTestId('look-card-sofa').waitFor()
+    await page.getByTestId('looks-outdoor').getByTestId('look-card-bicycle').waitFor()
+
+    // The layout as it was, for the next test.
+    const { floors, placements } = before
+    expect(await saveElsewhere(page, { version: (await savedLayout(page)).version, layout: { floors, placements } })).toBe(200)
   })
 
   it('the Neighborhood lane (step 3h, internal): around the café, tables still found, Fit scene, and the benchmark panel', { timeout: 90_000 }, async () => {
