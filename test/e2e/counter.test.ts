@@ -604,11 +604,17 @@ describe('sold out at the counter (D105)', () => {
     await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}/sold-out`)
     await page.getByRole('heading', { name: 'Sold out', exact: true }).waitFor()
 
-    await page.getByRole('searchbox', { name: 'Find an item' }).fill('coconut')
+    // Enter applies the search at once. Without it the search lands 300 ms after typing, and a late
+    // one (clearing the box below) would land after the switch back on and empty `keep`: the row
+    // then leaves the sold-out list (seen on slow CI runners).
+    const search = page.getByRole('searchbox', { name: 'Find an item' })
+    await search.fill('coconut')
+    await search.press('Enter')
     const [first] = (await coconut()).variations
     const name = `Coconut Coffee · ${first!.label}`
     const row = page.getByRole('listitem', { name, exact: true })
     const available = row.getByRole('switch', { name: `${name}: available` })
+    await expect.poll(() => page.getByRole('listitem').filter({ hasText: 'Latte' }).count()).toBe(0)
     expect(await available.isChecked()).toBe(true)
 
     await available.click()
@@ -618,7 +624,8 @@ describe('sold out at the counter (D105)', () => {
     await expect.poll(async () => (await coconut()).variations.find(v => v.id === first!.id)!.soldOut).toBe(true)
 
     // Only the sold-out ones.
-    await page.getByRole('searchbox', { name: 'Find an item' }).fill('')
+    await search.fill('')
+    await search.press('Enter')
     await page.getByRole('button', { name: /^Sold out \d+$/ }).click()
     await row.waitFor()
     expect(await page.getByRole('listitem').filter({ hasText: 'Coconut Coffee' }).count()).toBe(1)
