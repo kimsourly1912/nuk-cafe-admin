@@ -253,7 +253,7 @@ describe('tenants', () => {
 
   it('the repository reads and writes none of their rows with our cafe\'s id', async () => {
     const ours = await layoutRows(db, TEST_TENANT, theirBranch)
-    expect(ours).toEqual({ layout: undefined, floors: [], placements: [], tables: [], lookIds: [] })
+    expect(ours).toEqual({ layout: undefined, floors: [], placements: [], tables: [], lookIds: [], itemLooks: [] })
     const found = await layoutRows(db, OTHER, theirBranch)
     expect(found.floors).toHaveLength(1)
     expect(found.placements).toHaveLength(1)

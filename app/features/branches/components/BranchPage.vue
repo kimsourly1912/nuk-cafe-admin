@@ -194,6 +194,15 @@ const title = computed(() => settings.value?.name ?? 'Branch')
               @click="view = option.value"
             />
           </UFieldGroup>
+          <UButton
+            :to="tenantPath('/admin/branches/looks')"
+            label="Looks"
+            icon="i-lucide-swatch-book"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :ui="{ label: 'max-md:sr-only' }"
+          />
         </div>
       </UDashboardToolbar>
     </template>
@@ -272,6 +281,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
             :layout="layout"
             :tables="editor.tables.value"
             :looks="editor.looks.value"
+            :item-looks="editor.itemLooks.value"
             :dining-tables="tables ?? []"
             :unsaved="editor.isDirty.value"
             @show-on-plan="showOnPlan"

@@ -1,6 +1,6 @@
 import { url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
-import type { BranchLayout, CustomLook, SaveLayoutInput } from '#shared/contracts/shop-layout'
+import type { BranchLayout, CustomItemLook, CustomLook, SaveLayoutInput } from '#shared/contracts/shop-layout'
 import { LAYOUT_MAX_BODY_BYTES } from '#shared/contracts/shop-layout'
 import { jsonBytes, largestLayout } from '../../server/tests/support/layouts'
 import { setupE2e } from './support/mock-api'
@@ -147,6 +147,57 @@ describe('the shop layout over HTTP', () => {
     // Off the plan again, it deletes.
     expect((await place(layout.version + 1, 'round-cafe')).status).toBe(200)
     expect((await send('DELETE', `${looks}/${look.id}?version=3`, owner)).status).toBe(204)
+    expect(await (await read(looks, owner)).json()).toEqual([])
+  })
+  it('chair and fixture looks (step 3d): an owner adds, edits and deletes one; one in use stays; another cafe reaches nothing', async () => {
+    const owner = await signIn(seed.customers.beanOwner)
+    const looks = url(`/api/c/${bean.slug}/admin/item-looks`)
+    const send = (method: string, path: string, cookie: string, body?: unknown) =>
+      fetch(path, { method, headers: { 'content-type': 'application/json', origin, cookie }, ...(body !== undefined && { body: JSON.stringify(body) }) })
+    const input = { name: 'HTTP stool', kind: 'bar-stool', finishes: { frame: 'brass', seat: 'navy' }, defaultWidth: 40, defaultDepth: 40 }
+    const { kind: _kind, ...fields } = input
+
+    const created = await send('POST', looks, owner, input)
+    expect(created.status).toBe(200)
+    const look = await created.json() as CustomItemLook
+    expect(look).toMatchObject({ ...input, photo: null, version: 1, pieces: 0 })
+    expect((await send('POST', looks, owner, { ...input, name: 'http STOOL' })).status).toBe(409)
+    // Stairs, a finish outside the palette or a kind on an edit never reach the service.
+    expect((await send('POST', looks, owner, { ...input, name: 'Bad', kind: 'stairs' })).status).toBe(400)
+    expect((await send('POST', looks, owner, { ...input, name: 'Bad', finishes: { frame: 'gold' } })).status).toBe(400)
+    expect((await send('PATCH', `${looks}/${look.id}`, owner, { version: 1, ...input })).status).toBe(400)
+
+    // On the plan, it can't be deleted; the answer names the floor.
+    const path = layoutOf(bean.slug, bean.branchId)
+    const layout = await (await read(path, owner)).json() as BranchLayout
+    const furnish = (version: number, lookId?: string, kind = 'bar-stool') => put(path, owner, { version, layout: { floors: [{ ...room('ground'), items: [{ id: 'stool', kind, x: 100, y: 100, rotation: 0, width: 40, depth: 40, finishes: {}, ...(lookId && { lookId }) }] }], placements: [] } })
+    const wrongKind = await furnish(layout.version, look.id, 'plant')
+    expect(wrongKind.status).toBe(409)
+    expect((await wrongKind.json()).data).toMatchObject({ code: 'LAYOUT_LOOK_UNAVAILABLE', fieldErrors: { 'layout.floors.0.items.0.lookId': [expect.any(String)] } })
+    const saved = await furnish(layout.version, look.id)
+    expect(saved.status).toBe(200)
+    expect((await saved.json() as BranchLayout).floors[0]!.items).toMatchObject([{ id: 'stool', lookId: look.id }])
+    expect(await (await read(looks, owner)).json()).toMatchObject([{ id: look.id, pieces: 1 }])
+    const refused = await send('DELETE', `${looks}/${look.id}?version=1`, owner)
+    expect(refused.status).toBe(409)
+    expect((await refused.json()).data).toMatchObject({ code: 'LOOK_IN_USE', message: expect.stringContaining('Ground floor') })
+    const renamed = await send('PATCH', `${looks}/${look.id}`, owner, { version: 1, ...fields, name: 'HTTP brass stool' })
+    expect(await renamed.json()).toMatchObject({ name: 'HTTP brass stool', kind: 'bar-stool', version: 2, pieces: 1 })
+
+    // Another cafe's owner: refused at our address, not found at theirs, and can't use it.
+    const lina = await signIn(seed.customers.layoutOwner)
+    expect((await read(looks, lina)).status).toBe(403)
+    const theirs = url(`/api/c/${seed.layoutLab.slug}/admin/item-looks`)
+    expect((await send('PATCH', `${theirs}/${look.id}`, lina, { version: 2, ...fields })).status).toBe(404)
+    expect((await send('DELETE', `${theirs}/${look.id}?version=2`, lina)).status).toBe(404)
+    expect((await read(theirs, lina)).status).toBe(200)
+    const manager = await signIn(seed.customers.manager)
+    expect((await read(url('/api/c/nuk/admin/item-looks'), manager)).status).toBe(403)
+    expect((await send('POST', url('/api/c/nuk/admin/item-looks'), manager, input)).status).toBe(403)
+
+    // Off the plan again (its own finishes), it deletes.
+    expect((await furnish(layout.version + 1)).status).toBe(200)
+    expect((await send('DELETE', `${looks}/${look.id}?version=2`, owner)).status).toBe(204)
     expect(await (await read(looks, owner)).json()).toEqual([])
   })
 })

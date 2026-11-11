@@ -4,7 +4,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { DiningTable } from '#shared/contracts/branches'
-import type { BranchLayout, CustomLook, Point } from '#shared/contracts/shop-layout'
+import type { BranchLayout, CustomItemLook, CustomLook, Point } from '#shared/contracts/shop-layout'
 import { setupE2e } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
 import { allowBrowserProblems } from './support/browser-problems'
@@ -618,6 +618,104 @@ describe('the shop designer on saved layouts', () => {
     const items = (await savedLayout(page)).floors.find(floor => floor.id === original.floorId)!.items.filter(item => item.kind === 'plant')
     expect(items).toHaveLength(plants + 2)
     expect((await savedLayout(page)).placements.map(placement => placement.tableId)).not.toContain(ids.L4)
+  })
+
+  it('chair and fixture looks (step 3d): made on the Looks page, placed from the library, shared, and deleted once no piece uses it', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    const itemLooks = () => page.evaluate(path => fetch(path).then(response => response.json()), `/api/c/${lab.slug}/admin/item-looks`) as Promise<CustomItemLook[]>
+    const form = () => page.getByRole('dialog', { name: /look$/i })
+    const looksPage = () => page.goto(url(`/c/${lab.slug}/admin/branches/looks`), { waitUntil: 'hydration' })
+
+    // The Looks page: every built-in look and piece with its picture, under its section.
+    await looksPage()
+    const tables = page.getByTestId('looks-tables')
+    const chairs = page.getByTestId('looks-chairs')
+    await tables.getByTestId('look-card-round-cafe').waitFor()
+    const pictureLoaded = (card: string) => page.getByTestId(card).locator('img').evaluate(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth === 480)
+    await expect.poll(() => pictureLoaded('look-card-round-cafe')).toBe(true)
+    await expect.poll(() => pictureLoaded('look-card-bar-stool')).toBe(true)
+    expect(await page.getByTestId('looks-fixtures').getByTestId('look-card-service-counter').isVisible()).toBe(true)
+    await shot(page, 'looks-page')
+
+    // A new chair look: a bar stool with a brass frame.
+    await chairs.getByRole('button', { name: 'New chair look' }).click()
+    await form().getByLabel('Name').fill('Rattan stool')
+    await form().getByRole('combobox', { name: 'Kind' }).click()
+    await page.getByRole('option', { name: 'Bar stool' }).click()
+    await form().getByRole('group', { name: 'Frame' }).getByRole('button', { name: 'Brass' }).click()
+    await form().getByRole('button', { name: 'Save look' }).click()
+    await page.getByText('Look "Rattan stool" saved').first().waitFor()
+    await chairs.getByTestId('look-card-Rattan stool').getByText('Not used').waitFor()
+    const [stool] = await itemLooks()
+    expect(stool).toMatchObject({ name: 'Rattan stool', kind: 'bar-stool', finishes: { frame: 'brass' }, defaultWidth: 40, defaultDepth: 40, pieces: 0 })
+
+    // In Design shop it waits under Extra seating; placed, its panel names the look, not finishes.
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').waitFor()
+    const library = page.getByRole('complementary', { name: 'Library' })
+    await library.getByTestId('item-look-Rattan stool').click()
+    const panel = page.getByRole('complementary', { name: 'Selected' })
+    await expect.poll(() => panel.getByRole('combobox', { name: 'Look' }).textContent()).toContain('Rattan stool')
+    // Its finishes are the look's: no swatches (a built-in stool shows Frame and Upholstery).
+    await panel.getByTestId('selected-item-photo').waitFor()
+    expect(await panel.getByRole('group', { name: 'Frame' }).count()).toBe(0)
+    expect(await panel.getByRole('group', { name: 'Upholstery' }).count()).toBe(0)
+    await save(page)
+    const placed = (await savedLayout(page)).floors.flatMap(floor => floor.items).filter(item => item.lookId === stool!.id)
+    expect(placed).toMatchObject([{ kind: 'bar-stool', width: 40, depth: 40 }])
+    expect((await itemLooks())[0]).toMatchObject({ pieces: 1 })
+
+    // Editing it says who uses it and can't delete it; the rename shows in the library.
+    await panel.getByRole('button', { name: 'Edit look' }).click()
+    await form().getByTestId('item-look-used').getByText('Used by 1 piece').waitFor()
+    expect(await form().getByRole('combobox', { name: 'Kind' }).isDisabled()).toBe(true)
+    expect(await form().getByRole('button', { name: 'Delete' }).isDisabled()).toBe(true)
+    await form().getByLabel('Name').fill('Brass stool')
+    await form().getByRole('button', { name: 'Save', exact: true }).click()
+    await library.getByTestId('item-look-Brass stool').waitFor()
+
+    // Back on its own finishes (the look's, kept) and saved, the look is free again.
+    await panel.getByRole('combobox', { name: 'Look' }).click()
+    await page.getByRole('option', { name: 'Own finishes' }).click()
+    await panel.getByRole('group', { name: 'Upholstery' }).waitFor()
+    await save(page)
+    const own = (await savedLayout(page)).floors.flatMap(floor => floor.items).find(item => item.id === placed[0]!.id)
+    expect(own).toMatchObject({ kind: 'bar-stool', finishes: { frame: 'brass' } })
+    expect(own?.lookId).toBeUndefined()
+
+    // On the Looks page it deletes after a confirmation.
+    await looksPage()
+    await chairs.getByTestId('look-card-Brass stool').getByText('Not used').waitFor()
+    await chairs.getByRole('button', { name: 'Actions for Brass stool' }).click()
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await page.getByRole('dialog', { name: 'Delete the look "Brass stool"?' }).getByRole('button', { name: 'Delete look' }).click()
+    await page.getByText('Look "Brass stool" deleted').first().waitFor()
+    await expect.poll(() => chairs.getByTestId('look-card-Brass stool').count()).toBe(0)
+    expect(await itemLooks()).toEqual([])
+  })
+
+  it('built-in looks show their pictures in the library and the table\'s panel', async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').waitFor()
+    const library = page.getByRole('complementary', { name: 'Library' })
+    const loaded = (image: ReturnType<Page['locator']>) => image.evaluate(element => (element as HTMLImageElement).complete && (element as HTMLImageElement).naturalWidth > 0)
+    await expect.poll(() => loaded(library.getByTestId('look-round-cafe').getByTestId('look-photo'))).toBe(true)
+    await library.getByTestId('catalog-plant').scrollIntoViewIfNeeded()
+    await expect.poll(() => loaded(library.getByTestId('catalog-plant').locator('img'))).toBe(true)
+    await plan(page).getByTestId('plan-table-L1').click()
+    await expect.poll(() => page.getByTestId('selected-look-photo').getAttribute('src')).toMatch(/^\/shop-designer\/looks\/[a-z-]+\.webp$/)
+  })
+
+  it('the Looks page on a phone: two cards a row, New look in reach, no sideways scrolling', async () => {
+    const page = await signedIn(390, 844)
+    await page.goto(url(`/c/${lab.slug}/admin/branches/looks`), { waitUntil: 'hydration' })
+    await page.getByTestId('look-card-round-cafe').waitFor()
+    const [first, second] = await Promise.all(['look-card-round-cafe', 'look-card-square-bistro'].map(card => page.getByTestId(card).boundingBox()))
+    expect(second!.y).toBeCloseTo(first!.y, 0)
+    expect(await page.getByRole('button', { name: 'New look' }).isVisible()).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await shot(page, 'phone-looks-page')
   })
 
   it('types a length on the plan\'s label, and walls and edges have quick actions too', { timeout: 60_000 }, async () => {

@@ -18,8 +18,8 @@ import { audit } from './branches.service'
  * the look replaces, removes or is deleted with it (the media feature's lifecycle).
  */
 
-/** How many of the tables using a look its delete refusal names. */
-const NAMED_TABLES = 5
+/** How many of the tables (or floors, for an item look) using a look its delete refusal names. */
+export const NAMED_USES = 5
 
 /** `photos`: each photo's URL by upload id; a photo whose upload is gone shows none. */
 function toLook(row: LookRow, tables: number, photos: Map<string, string>): CustomLook {
@@ -45,7 +45,7 @@ function toValues(input: CreateLookInput): LookValues {
   return { name, shape, base, chair, finishes, defaultWidthCm: defaultWidth, defaultDepthCm: defaultDepth, photoAssetId: photoId ?? null }
 }
 
-const photoUrls = (db: Db, tenantId: string, rows: LookRow[]) =>
+export const photoUrls = (db: Db, tenantId: string, rows: { photoAssetId: string | null }[]) =>
   assetUrls(db, tenantId, rows.flatMap(row => (row.photoAssetId ? [row.photoAssetId] : [])))
 
 /** The cafe's custom looks by name, each with how many placed tables use it and its photo. */
@@ -65,9 +65,10 @@ async function loadLook(db: Db, tenantId: string, id: string): Promise<CustomLoo
 /**
  * The statements that move the look from photo `from` to photo `to`: release the one it drops,
  * attach (and guard) the one it takes. Nothing when the photo stays. The attach checks the upload
- * now: another cafe's, a used one or one cleaned up is `mediaNotAvailable('photoId')`.
+ * now: another cafe's, a used one or one cleaned up is `mediaNotAvailable('photoId')`. Shared by
+ * table looks and item looks (step 3d): the same lifecycle.
  */
-async function photoStatements(db: Db, tenantId: string, from: string | null, to: string | null): Promise<Statement[]> {
+export async function photoStatements(db: Db, tenantId: string, from: string | null, to: string | null): Promise<Statement[]> {
   if (from === to) return []
   return [
     ...(from ? [releaseStatement(db, tenantId, from)] : []),
@@ -143,7 +144,7 @@ export async function updateLook(db: Db, actor: Actor, id: string, input: Update
 export async function deleteLook(db: Db, actor: Actor, id: string, input: { version: number }): Promise<void> {
   const { tenantId } = actor
   const current = await openLook(db, tenantId, id, input.version)
-  const use = await repo.lookUse(db, tenantId, id, NAMED_TABLES)
+  const use = await repo.lookUse(db, tenantId, id, NAMED_USES)
   if (use.total) throw lookInUse(use.tables, use.total)
   try {
     await db.batch([
@@ -156,7 +157,7 @@ export async function deleteLook(db: Db, actor: Actor, id: string, input: { vers
   }
   catch (error) {
     if (isForeignKeyError(error)) {
-      const now = await repo.lookUse(db, tenantId, id, NAMED_TABLES)
+      const now = await repo.lookUse(db, tenantId, id, NAMED_USES)
       throw lookInUse(now.tables, now.total)
     }
     if (!isStaleWrite(error)) throw error

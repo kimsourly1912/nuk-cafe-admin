@@ -1,10 +1,13 @@
+import { readdirSync, statSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { Box3, Vector3 } from 'three'
 import type { Object3D } from 'three'
 import { describe, expect, it } from 'vitest'
 import { ITEM_KINDS } from '#shared/contracts/shop-layout'
-import { BUILT_IN_LOOKS, findLook, ITEM_SPECS } from '../designer/catalog'
+import type { ItemLook, LayoutItem } from '#shared/contracts/shop-layout'
+import { BUILT_IN_LOOKS, BUILT_IN_PHOTO, findLook, ITEM_SPECS, pieceFinishes } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { buildItem, buildTable, createBuildContext } from '../designer/scene/furniture'
+import { buildItem, buildTable, createBuildContext, meshesOf } from '../designer/scene/furniture'
 import { createMaterialLibrary } from '../designer/scene/materials'
 import { buildScene } from '../designer/scene/scene'
 
@@ -79,5 +82,38 @@ describe('the building from the layout', () => {
     const scene = buildScene(context(), { layout: demoLayout(), tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
     expect(scene.floors.map(floor => floor.walls.length)).toEqual([6, 6, 8])
     expect(scene.floors.map(floor => floor.roofs.length)).toEqual([1, 1, 0])
+  })
+})
+
+describe('chair and fixture looks (step 3d)', () => {
+  const look: ItemLook = { id: 'rattan', name: 'Rattan', kind: 'cafe-chair', finishes: { frame: 'pale-oak', seat: 'navy' }, defaultWidth: 46, defaultDepth: 52 }
+  const piece = (extra: Partial<LayoutItem>): LayoutItem => ({ id: 'chair', kind: 'cafe-chair', x: 0, y: 0, rotation: 0, width: 46, depth: 52, finishes: { frame: 'walnut', seat: 'olive' }, ...extra })
+
+  it('a piece with one of the cafe\'s looks takes its finishes; without one, or its look gone or of another kind, its own', () => {
+    expect(pieceFinishes(piece({ lookId: 'rattan' }), [look])).toEqual({ frame: 'pale-oak', seat: 'navy' })
+    expect(pieceFinishes(piece({}), [look])).toEqual({ frame: 'walnut', seat: 'olive' })
+    expect(pieceFinishes(piece({ lookId: 'gone' }), [look])).toEqual({ frame: 'walnut', seat: 'olive' })
+    expect(pieceFinishes(piece({ kind: 'bar-stool', lookId: 'rattan' }), [look])).toEqual({ frame: 'walnut', seat: 'olive' })
+  })
+
+  it('the building draws a piece in its look\'s finishes', () => {
+    const build = context()
+    const layout = demoLayout()
+    layout.floors[0]!.items = [piece({ lookId: 'rattan' })]
+    const scene = buildScene(build, { layout, tables: DEMO_TABLES, looks: BUILT_IN_LOOKS, itemLooks: [look] })
+    const chair = scene.floors[0]!.group.children.find(child => child.userData.itemId === 'chair')!
+    const materials = new Set(meshesOf(chair).map(mesh => mesh.material))
+    expect(materials.has(build.materials.finish('pale-oak'))).toBe(true)
+    expect(materials.has(build.materials.finish('walnut'))).toBe(false)
+  })
+})
+
+describe('built-in pictures (step 3d)', () => {
+  it('every built-in look and piece but stairs ships its picture, and nothing else is in the folder', () => {
+    const folder = fileURLToPath(new URL('../../../../public/shop-designer/looks/', import.meta.url))
+    const expected = [...BUILT_IN_LOOKS.map(builtIn => builtIn.photo!.url), ...ITEM_KINDS.flatMap(kind => ITEM_SPECS[kind].photo ?? [])]
+    expect(expected).toHaveLength(BUILT_IN_LOOKS.length + ITEM_KINDS.length - 1)
+    expect(readdirSync(folder).map(file => BUILT_IN_PHOTO(file.replace(/\.webp$/, ''))).sort()).toEqual([...expected].sort())
+    for (const url of expected) expect(statSync(`${folder}${url.split('/').at(-1)}`).size).toBeLessThan(60_000)
   })
 })

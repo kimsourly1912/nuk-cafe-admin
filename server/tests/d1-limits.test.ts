@@ -29,8 +29,9 @@ import { dueMessages } from '#server/features/platform/platform.outbox.repositor
 import { listAuditEvents } from '#server/features/platform/platform.audit.repository'
 import { auditEvents, outboxMessages } from '#server/features/platform/platform.schema'
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
-import { getLayout, saveLayout } from '#server/features/branches'
-import { diningTables } from '#server/features/branches/branches.schema'
+import { LAYOUT_MAX_FLOORS, MAX_CUSTOM_ITEM_LOOKS } from '#shared/contracts/shop-layout'
+import { createItemLook, getLayout, listItemLooks, saveLayout } from '#server/features/branches'
+import { branchLayoutItemLooks, diningTables } from '#server/features/branches/branches.schema'
 import { largestLayout } from '#server/tests/support/layouts'
 import { addBranchStaff, createAdmin, createTestDb, createUser, D1_MAX_PARAMS, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 
@@ -224,6 +225,20 @@ describe('the shop layout at its limits (D273)', () => {
     expect(saved.floors).toEqual(input.layout.floors)
     expect(saved.placements).toHaveLength(MAX_BRANCH_TABLES)
     expect(await getLayout(db, TEST_TENANT, branchId)).toEqual(saved)
+    expect((await saveLayout(db, owner, branchId, { ...input, version: 1 })).version).toBe(2)
+  })
+
+  it(`with ${MAX_CUSTOM_ITEM_LOOKS} item looks used on every floor (step 3d): every use row saved`, async () => {
+    const branchId = newId()
+    await insertBranch(db, { id: branchId, name: 'Look house', timezone: 'Asia/Phnom_Penh' })
+    const owner: Actor = { ...actor, userId: (await createUser(db)).id }
+    const lookIds: string[] = []
+    for (let n = 0; n < MAX_CUSTOM_ITEM_LOOKS; n++) lookIds.push((await createItemLook(db, owner, { name: `Counter ${n}`, kind: 'service-counter', finishes: {}, defaultWidth: 180, defaultDepth: 65, photoId: null })).id)
+    const input = largestLayout([], 0, lookIds)
+    const saved = await saveLayout(db, owner, branchId, input)
+    expect(saved.floors).toEqual(input.layout.floors)
+    expect(await db.$count(branchLayoutItemLooks)).toBe(LAYOUT_MAX_FLOORS * MAX_CUSTOM_ITEM_LOOKS)
+    expect((await listItemLooks(db, TEST_TENANT)).reduce((sum, look) => sum + look.pieces, 0)).toBe(input.layout.floors.reduce((sum, floor) => sum + floor.items.length, 0))
     expect((await saveLayout(db, owner, branchId, { ...input, version: 1 })).version).toBe(2)
   })
 })

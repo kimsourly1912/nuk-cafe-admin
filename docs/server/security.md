@@ -64,7 +64,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | menu | set sold out (own branch) | ✔ | ✔ | ✔ |
 | media | upload | ✔ | | |
 | branch | create (at most 10 active per cafe, D197) / read / update | ✔ | read | read |
-| furniture | manage: the cafe's own table looks for the shop designer (tenant permission, D273) | ✔ | | |
+| furniture | manage: the cafe's own table, chair and fixture looks for the shop designer (tenant permission, D273; chairs and fixtures since step 3d) | ✔ | | |
 | branch | pause and resume online orders (on the counter, D199) | ✔ | ✔ | |
 | staff | list, create / change role / disable | ✔ | | |
 | table | manage, rotate QR (managers on the counter, D198) | ✔ | ✔ | |

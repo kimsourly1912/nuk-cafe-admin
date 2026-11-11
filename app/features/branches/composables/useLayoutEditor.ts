@@ -1,9 +1,9 @@
 import * as v from 'valibot'
 import { layoutSchema } from '#shared/contracts/shop-layout'
-import type { BranchLayout, LayoutTable, Placement, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import type { BranchLayout, ItemLook, LayoutItem, LayoutTable, Placement, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, NEW_TABLE_LOOK } from '../designer/catalog'
 import type { PlanSelection } from '../designer/plan'
-import { fetchBranchLayout, useBranchLayout, useLayoutMutations, useLooks } from './useBranches'
+import { fetchBranchLayout, useBranchLayout, useItemLooks, useLayoutMutations, useLooks } from './useBranches'
 import { useLayoutDraft } from './useLayoutDraft'
 import type { LayoutDraft } from './useLayoutDraft'
 
@@ -24,7 +24,9 @@ import type { LayoutDraft } from './useLayoutDraft'
  * - **Looks** are the built-in ones and the cafe's own (step 3a), loaded with the layout. A placed
  *   table whose look is neither (deleted elsewhere while this draft used it) is listed in
  *   `unknownLooks`; the server refuses the save (409 `LAYOUT_LOOK_UNAVAILABLE`), and
- *   `resetUnknownLooks` gives those tables the default look.
+ *   `resetUnknownLooks` gives those tables the default look. The same for a piece of furniture
+ *   whose chair or fixture look is gone (step 3d, `unknownItemLooks`): it goes back to its own
+ *   finishes.
  * - **Leaving with unsaved changes asks first** (`useUnsavedChanges`, the app's guard); Discard
  *   puts the saved layout back.
  *
@@ -41,6 +43,7 @@ export interface LayoutConflict {
 export function useLayoutEditor(branchId: string) {
   const query = useBranchLayout(branchId, { immediate: false })
   const looksQuery = useLooks({ immediate: false })
+  const itemLooksQuery = useItemLooks({ immediate: false })
   const { save: saveMutation } = useLayoutMutations()
   const confirm = useConfirm()
   const draft: LayoutDraft = useLayoutDraft({ floors: [], placements: [] })
@@ -74,9 +77,18 @@ export function useLayoutEditor(branchId: string) {
     const known = new Set(looks.value.map(look => look.id))
     return draft.layout.value.placements.filter(placement => !known.has(placement.lookId))
   })
-  /** The layout and the looks are both here: the editor and the 3D view draw only then. */
-  const ready = computed(() => !!query.data.value && !!looksQuery.data.value)
-  const error = computed(() => (query.data.value ? null : query.error.value) ?? (looksQuery.data.value ? null : looksQuery.error.value))
+  /** The cafe's chair and fixture looks by name (step 3d). */
+  const itemLooks = computed<readonly ItemLook[]>(() => itemLooksQuery.data.value ?? [])
+  /** Pieces whose look is no longer one of the cafe's of their kind (deleted elsewhere under this draft). */
+  const unknownItemLooks = computed<LayoutItem[]>(() => {
+    if (!itemLooksQuery.data.value) return []
+    const kinds = new Map(itemLooks.value.map(look => [look.id, look.kind]))
+    return draft.layout.value.floors.flatMap(floor => floor.items.filter(item => item.lookId !== undefined && kinds.get(item.lookId) !== item.kind))
+  })
+  const sources = [query, looksQuery, itemLooksQuery]
+  /** The layout and the looks are all here: the editor and the 3D view draw only then. */
+  const ready = computed(() => sources.every(source => !!source.data.value))
+  const error = computed(() => sources.map(source => (source.data.value ? null : source.error.value)).find(Boolean) ?? null)
 
   function start(layout: BranchLayout) {
     applied = layout
@@ -121,8 +133,9 @@ export function useLayoutEditor(branchId: string) {
       // What was sent is saved; anything changed while it was on its way is still unsaved.
       unsaved.markClean(sent)
       query.data.value = result.data
-      // Which looks the saved tables use changed with it (a look in use can't be deleted).
+      // Which looks the saved tables and pieces use changed with it (a look in use can't be deleted).
       if (looksQuery.data.value?.length) void looksQuery.refresh()
+      if (itemLooksQuery.data.value?.length) void itemLooksQuery.refresh()
       return true
     }
     if (result.status !== 'error') return false
@@ -133,21 +146,26 @@ export function useLayoutEditor(branchId: string) {
     }
     // A placed table left the branch: refetch its tables, so the editor names it.
     if (result.error.code === 'LAYOUT_TABLE_UNAVAILABLE') void query.refresh()
-    // A look was deleted: refetch the looks, so the editor names the tables that used it.
-    if (result.error.code === 'LAYOUT_LOOK_UNAVAILABLE') void looksQuery.refresh()
+    // A look was deleted: refetch the looks, so the editor names the tables and pieces that used it.
+    if (result.error.code === 'LAYOUT_LOOK_UNAVAILABLE') {
+      void looksQuery.refresh()
+      void itemLooksQuery.refresh()
+    }
     return false
   }
 
   /** Loads the layout and the looks the first time they're needed. */
   function load() {
-    if (query.status.value === 'idle') void query.execute()
-    if (looksQuery.status.value === 'idle') void looksQuery.execute()
+    for (const source of sources) {
+      if (source.status.value === 'idle') void source.execute()
+    }
   }
 
-  /** Loads again whichever of the two failed. */
+  /** Loads again whichever of them failed. */
   function retry() {
-    if (!query.data.value) void query.refresh()
-    if (!looksQuery.data.value) void looksQuery.refresh()
+    for (const source of sources) {
+      if (!source.data.value) void source.refresh()
+    }
   }
 
   function save() {
@@ -198,13 +216,20 @@ export function useLayoutEditor(branchId: string) {
     })
   }
 
-  /** Gives the tables whose look is gone the default look, at their own size. */
+  /**
+   * Gives the tables whose look is gone the default look, at their own size, and the pieces whose
+   * look is gone their own finishes again.
+   */
   function resetUnknownLooks() {
     const gone = new Set(unknownLooks.value.map(placement => placement.tableId))
-    if (!gone.size) return
+    const goneItems = new Set(unknownItemLooks.value.map(item => item.id))
+    if (!gone.size && !goneItems.size) return
     draft.change((layout) => {
       for (const placement of layout.placements) {
         if (gone.has(placement.tableId)) placement.lookId = NEW_TABLE_LOOK
+      }
+      for (const item of layout.floors.flatMap(floor => floor.items)) {
+        if (goneItems.has(item.id)) delete item.lookId
       }
     })
   }
@@ -232,6 +257,8 @@ export function useLayoutEditor(branchId: string) {
     version: readonly(version),
     tables,
     looks,
+    itemLooks,
+    unknownItemLooks,
     ready,
     error,
     retry,

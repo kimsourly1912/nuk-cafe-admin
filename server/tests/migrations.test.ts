@@ -563,3 +563,38 @@ describe('0059_custom_looks', () => {
     for (const file of files.slice(at + 1)) await applyMigration(client, file)
   })
 })
+
+describe('0061_item_looks', () => {
+  it('adds item looks next to saved layouts, and enforces a use\'s cafe, kind, count and floor', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0061_item_looks.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    await client.batch([
+      `insert into organization (id, name, slug, created_at) values ('t1', 'NUK Cafe', 'nuk', 1), ('t2', 'Brown Bean', 'brown-bean', 1)`,
+      `insert into branches (id, tenant_id, name, timezone) values ('b1', 't1', 'Riverside', 'Asia/Phnom_Penh')`,
+      `insert into branch_layouts (tenant_id, branch_id) values ('t1', 'b1')`,
+      `insert into branch_layout_floors (tenant_id, branch_id, id, position, name, height_cm, has_roof, geometry) values ('t1', 'b1', 'ground', 0, 'Ground', 300, 1, '{"items":[]}')`,
+    ])
+    await applyMigration(client, files[at]!)
+    // The saved floor is untouched; it uses no item look yet.
+    expect((await client.execute('select geometry from branch_layout_floors')).rows[0]!.geometry).toBe('{"items":[]}')
+
+    const look = (id: string, tenant: string, name = 'Walnut chair') => `insert into custom_item_looks (id, tenant_id, name, kind, finishes, default_width_cm, default_depth_cm) values ('${id}', '${tenant}', '${name}', 'cafe-chair', '{}', 46, 52)`
+    await client.batch([look('ours', 't1'), look('theirs', 't2')])
+    await expect(client.execute(look('again', 't1', 'WALNUT CHAIR'))).rejects.toThrow(/UNIQUE/)
+    await expect(client.execute(`insert into custom_item_looks (id, tenant_id, name, kind, finishes, default_width_cm, default_depth_cm) values ('big', 't1', 'Big', 'plant', '{}', 2001, 50)`)).rejects.toThrow(/CHECK/)
+    const use = (lookId: string, kind = 'cafe-chair', pieces = 2) => client.execute(`insert into branch_layout_item_looks (tenant_id, branch_id, floor_id, look_id, kind, pieces) values ('t1', 'b1', 'ground', '${lookId}', '${kind}', ${pieces})`)
+    // Our cafe's look, of its own kind, 1 to 200 pieces; a look in use stays; the floor takes its uses.
+    await expect(use('theirs')).rejects.toThrow(/FOREIGN KEY/)
+    await expect(use('ours', 'bar-stool')).rejects.toThrow(/FOREIGN KEY/)
+    await expect(use('ours', 'cafe-chair', 0)).rejects.toThrow(/CHECK/)
+    await use('ours')
+    await expect(client.execute(`delete from custom_item_looks where id = 'ours'`)).rejects.toThrow(/FOREIGN KEY/)
+    await client.execute(`delete from branch_layout_floors where id = 'ground'`)
+    expect((await client.execute('select count(*) as n from branch_layout_item_looks')).rows[0]!.n).toBe(0)
+    await client.execute(`delete from custom_item_looks where id = 'ours'`)
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+})

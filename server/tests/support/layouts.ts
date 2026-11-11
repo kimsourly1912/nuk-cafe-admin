@@ -10,7 +10,7 @@ export const jsonBytes = (value: unknown) => new TextEncoder().encode(JSON.strin
 
 const longId = (prefix: string, n: number) => `${prefix}-${String(n).padStart(4, '0')}`.padEnd(40, 'x')
 
-function item(floorId: string, n: number): LayoutItem {
+function item(floorId: string, n: number, lookIds: readonly string[]): LayoutItem {
   return {
     id: longId(`${floorId}i`, n),
     kind: 'service-counter',
@@ -20,11 +20,15 @@ function item(floorId: string, n: number): LayoutItem {
     width: 2000,
     depth: 2000,
     finishes: { frame: 'white-marble', seat: 'taupe-stone', top: 'black-stone', base: 'terracotta', accent: 'chocolate', cushion: 'limestone' },
+    ...(lookIds.length && { lookId: lookIds[n % lookIds.length] }),
   }
 }
 
-/** A 64-corner floor (a circle of 40 m) with doors and windows on every edge, inside walls and furniture. */
-export function largestFloor(id: string): Floor {
+/**
+ * A 64-corner floor (a circle of 40 m) with doors and windows on every edge, inside walls and
+ * furniture; with `lookIds` (service-counter looks), the pieces take them in turn (step 3d).
+ */
+export function largestFloor(id: string, lookIds: readonly string[] = []): Floor {
   const outline = Array.from({ length: LAYOUT_MAX_CORNERS }, (_, i) => {
     const angle = (2 * Math.PI * i) / LAYOUT_MAX_CORNERS
     // `+ 0`: JSON has no negative zero, so a saved -0 reads back as 0.
@@ -41,15 +45,18 @@ export function largestFloor(id: string): Floor {
       openings: [0, 1, 2].map(n => ({ id: longId(`${id}o${edge}`, n), kind: n === 1 ? 'window' as const : 'door' as const, offset: n * 125, width: 120 })),
     })),
     walls: Array.from({ length: LAYOUT_MAX_WALLS_PER_FLOOR }, (_, n) => ({ id: longId(`${id}w`, n), from: { x: -2000, y: n * 10 }, to: { x: 2000, y: n * 10 } })),
-    items: Array.from({ length: LAYOUT_MAX_ITEMS_PER_FLOOR }, (_, n) => item(id, n)),
+    items: Array.from({ length: LAYOUT_MAX_ITEMS_PER_FLOOR }, (_, n) => item(id, n, lookIds)),
   }
   while (jsonBytes(floor) > LAYOUT_MAX_FLOOR_BYTES) floor.items.pop()
   return floor
 }
 
-/** Every floor at its largest, every table placed (pass the branch's active tables). */
-export function largestLayout(tableIds: string[], version = 0): SaveLayoutInput {
-  const floors = Array.from({ length: LAYOUT_MAX_FLOORS }, (_, n) => largestFloor(`f${n}`))
+/**
+ * Every floor at its largest, every table placed (pass the branch's active tables); with
+ * `itemLookIds`, every floor's pieces use all of those looks (the most item looks' uses a save writes).
+ */
+export function largestLayout(tableIds: string[], version = 0, itemLookIds: readonly string[] = []): SaveLayoutInput {
+  const floors = Array.from({ length: LAYOUT_MAX_FLOORS }, (_, n) => largestFloor(`f${n}`, itemLookIds))
   const placements: Placement[] = tableIds.map((tableId, n) => ({
     tableId,
     floorId: floors[n % floors.length]!.id,
