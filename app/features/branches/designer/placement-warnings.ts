@@ -32,10 +32,11 @@ function footprint(piece: Sized, round: boolean): Point[] {
 
 /**
  * A piece's footprint for the warnings. People and pets (step 3g) have none: a customer on a chair
- * or a cat under a table is where they belong, so they neither warn nor make others warn.
+ * or a cat under a table is where they belong, so they neither warn nor make others warn. Nor do
+ * overhead pieces (step 3f): a pendant lamp or a parasol over a table is where it belongs.
  */
 export function itemFootprint(item: Pick<LayoutItem, 'id' | 'kind'> & Sized): PlanFootprint {
-  if (isFigureKind(item.kind)) return { id: item.id, parts: [] }
+  if (isFigureKind(item.kind) || ITEM_SPECS[item.kind].overhead) return { id: item.id, parts: [] }
   return { id: item.id, parts: [footprint(item, ITEM_SPECS[item.kind].footprint === 'round')] }
 }
 

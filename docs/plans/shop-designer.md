@@ -108,6 +108,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 | 3d. Chairs and fixtures (**built**) | Custom chair and fixture looks that save, their photo, pictures on the built-in looks, a Looks page | Make a chair look on the Looks page, place it in two branches, edit it, delete it once unused; built-in pictures in the library |
 | 2d. Editor finish (**built**, 2b's deferred items) | Frame 2B's quick actions beside the selection (tables, furniture, walls, edges), corner handles to resize, lengths typed on the plan's labels (3A), "Saved by" in the stale-save message (6A) | Resize, turn and duplicate tables and type a length without the panel, on a tablet and a phone |
 | 3e. Heights and picking pieces (**built**, one PR with 3f at the owner's choice) | A chair's or fixture's own height (QS2), on pieces and looks, in each kind's range; a piece picked in 3D with its card and Show on plan | Make a counter stool (65 cm) look, place it, raise a shelf; tap a chair in 3D and go back to it on the plan |
+| 3f. More furniture (**built**, with 3e) | Lounge seating, bar and service, decor and lighting, outdoor: 11 kinds generated from code, with looks, heights and pictures; overhead pieces never warn | Furnish a lounge corner and a terrace; a parasol over a table and a pendant lamp over the bar give no warning |
 | 3c. Pilot | Pilot with a real café; prioritize more furniture from what the owner reaches for | The owner recreates part of their café and explores it without help |
 | 3g, 3h, 4a–4d. Scenes | People and pets (3g), the Neighborhood lane test scene and benchmark (3h) before the pilot; the saved scene preset and Neighborhood lane (4a), then Riverside, Seaside and City street (4b–4d) after it. [Scenes plan](shop-designer-scenes.md) | Per step, in that plan |
 
@@ -417,3 +418,29 @@ One PR with step 3f at the owner's choice (2026-11-11: "collect all the steps th
   - `app/features/branches/tests/designer-viewer.test.ts` (+4): a tap on a piece selects and lights it, a tap on nothing clears it; a figure's contact shadow not lit; one selection at a time; kept across a rebuild, dropped once gone.
   - `test/e2e/shop-designer.test.ts` (20): a chair look made at 65 cm, placed at 65; a bar stool's height typed (75 → 65), saved, its card in 3D ("65 cm high"), **Show on plan** back to it.
 - **Review on staging:** Dining tables → **Looks** → **New chair look**: a Bar stool at 65 cm. Place it in Design shop: its panel says 65. Select a display shelf and make it 240: it gets more shelves in 3D. In View in 3D tap a chair: its card shows it; **Show on plan** selects it on the plan.
+
+## Step 3f: more furniture (built 2026-11-11)
+
+In the same PR as step 3e (owner's choice), its own commit.
+
+- **Where:** contract `ITEM_KINDS`, `ITEM_LOOK_KINDS`, `ITEM_HEIGHTS` (no migration: kinds are text, checked by the contract); `designer/catalog.ts` (`ITEM_SPECS`, `CATEGORIES` and `LOOK_CATEGORIES`, an `overhead` flag); `scene/furniture.ts` (11 builders), `scene/materials.ts` (`pastry`, `chalkboard`); `placement-warnings.ts`; `FloorPlanCanvas.vue` (round pieces drawn round, overhead ones dashed); `DesignShopEditor.vue`, `LooksPage.vue`, `ItemLookFormModal.vue` (sections from `CATEGORIES`); `public/shop-designer/looks/` (11 pictures).
+- **What (the plan's four groups, generated from code like the rest):**
+
+  | Section | Kinds (default size, height range) |
+  |---|---|
+  | Lounge seating | Armchair (76 × 80, 65–100), Sofa (180 × 88, cushions every ~60 cm, 65–100), Coffee table (100 × 60, 30–60) |
+  | Bar and service | Coffee station (160 × 70: a counter, 80–110, with an espresso machine, grinder and cups on it), Pastry case (120 × 65, a glass case on a cabinet, 95–150), Menu board (60 × 50, a sandwich board, 70–140) |
+  | Decor and lighting | Pendant lamp (Ø 45, its shade hanging at 140–260, its cord to the ceiling), Floor lamp (Ø 45, 120–190), Water jar (Ø 60, a Khmer glazed jar, 45–110) |
+  | Outdoor | Parasol (Ø 240, 200–280), Bicycle (175 × 58, 90–115) |
+- **Decided while building:**
+  - **Every new kind takes a cafe's own look**, a height and finishes by part, like 3d's chairs and fixtures. The library, the Looks page and the look form list their sections from one `CATEGORIES` list in the catalog (each with **New … look**: lounge, bar, decor, outdoor), instead of the chairs-or-fixtures choice written in three components.
+  - **Overhead pieces** (pendant lamp, parasol) have no footprint for the warnings, like people and pets: a parasol over a table or a lamp over the bar is where it belongs. The plan draws them as a dashed outline with a small middle to grab, so the table under them stays visible and clickable. A floor lamp still warns.
+  - **A pendant lamp's height is how low its shade hangs**, its cord going up to its floor's height (at most 40 cm under the ceiling); a coffee station's is its counter's, its machine standing on it. No light is added: the bulb glows (a real light per lamp would cost a shadow map each on a phone).
+  - **No rug yet:** its height (1–2 cm) is outside the database's bound for a look's height (20–300), and a look kind with no height would need the contract's height to be optional per kind. Left for the pilot to ask for.
+- **Tests:**
+  - `designer-scene.test.ts`: every new kind fills the footprint the plan draws, stands as tall as asked across its range (the pendant measured at its shade, the coffee station at its counter), and ships its picture.
+  - `designer-geometry.test.ts`: a parasol and a pendant lamp over a table give no warning; a floor lamp in a chair's place does.
+  - `branches.item-looks.service.test.ts`: a parasol look with its height, placed and saved with a sofa; a 2 m sofa refused.
+  - `test/e2e/shop-designer.test.ts`: the four sections and **New lounge look**; an armchair, a coffee station, a pendant lamp and a parasol placed, the parasol's range shown, saved, drawn in 3D; the Looks page's Lounge seating and Outdoor sections.
+- **Review on staging:** in Design shop, furnish a lounge corner (sofa, armchair, coffee table, floor lamp) and a terrace (parasol over a table, bicycle); put a pendant lamp over the counter. No warnings for the parasol or the lamp. Make a **New outdoor look** (a terracotta parasol) on the Looks page. View in 3D.
+

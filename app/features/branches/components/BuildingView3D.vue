@@ -367,9 +367,11 @@ function selectFromList(tableId: string) {
           data-testid="building-canvas"
           :data-drawn="drawn"
         />
+        <!-- Its own stacking context: CSS2DRenderer gives each label a z-index by distance, which
+             otherwise drew floor names over the cards and controls laid on top of the view. -->
         <div
           ref="labels"
-          class="pointer-events-none absolute inset-0"
+          class="pointer-events-none absolute inset-0 isolate"
         />
 
         <div

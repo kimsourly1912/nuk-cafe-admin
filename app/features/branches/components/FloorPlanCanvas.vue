@@ -810,8 +810,25 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             />
           </template>
         </g>
+        <!-- Overhead (step 3f: a pendant lamp, a parasol): a dashed outline over what stands below,
+             grabbed by its middle. -->
+        <g v-else-if="ITEM_SPECS[item.kind].overhead">
+          <circle
+            :r="item.width / 2"
+            fill="none"
+            stroke="var(--ui-border-accented)"
+            stroke-width="3"
+            stroke-dasharray="12 8"
+          />
+          <circle
+            :r="Math.min(14, item.width / 4)"
+            fill="var(--ui-bg-elevated)"
+            stroke="var(--ui-border-accented)"
+            stroke-width="3"
+          />
+        </g>
         <circle
-          v-else-if="item.kind === 'bar-stool'"
+          v-else-if="ITEM_SPECS[item.kind].footprint === 'round'"
           :r="item.width / 2"
           fill="var(--ui-bg-elevated)"
           stroke="var(--ui-border-accented)"

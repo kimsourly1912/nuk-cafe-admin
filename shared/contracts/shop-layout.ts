@@ -67,6 +67,11 @@ export const isFigureKind = (kind: string): kind is FigureKind => Object.hasOwn(
 export const ITEM_KINDS = [
   'cafe-chair', 'bentwood-chair', 'bar-stool', 'dining-bench',
   'service-counter', 'display-shelf', 'planter', 'plant', 'room-divider', 'stairs',
+  // Step 3f: lounge seating, bar and service, decor and lighting, outdoor.
+  'armchair', 'sofa', 'coffee-table',
+  'coffee-station', 'pastry-case', 'menu-board',
+  'pendant-lamp', 'floor-lamp', 'water-jar',
+  'parasol', 'bicycle',
   ...FIGURE_KINDS,
 ] as const
 export type ItemKind = typeof ITEM_KINDS[number]
@@ -77,6 +82,10 @@ export type ItemKind = typeof ITEM_KINDS[number]
 export const ITEM_LOOK_KINDS = [
   'cafe-chair', 'bentwood-chair', 'bar-stool', 'dining-bench',
   'service-counter', 'display-shelf', 'planter', 'plant', 'room-divider',
+  'armchair', 'sofa', 'coffee-table',
+  'coffee-station', 'pastry-case', 'menu-board',
+  'pendant-lamp', 'floor-lamp', 'water-jar',
+  'parasol', 'bicycle',
 ] as const satisfies readonly ItemKind[]
 export type ItemLookKind = typeof ITEM_LOOK_KINDS[number]
 export const isItemLookKind = (kind: string): kind is ItemLookKind => (ITEM_LOOK_KINDS as readonly string[]).includes(kind)
@@ -98,6 +107,19 @@ export const ITEM_HEIGHTS = {
   'planter': { default: 75, min: 45, max: 135 },
   'plant': { default: 125, min: 50, max: 220 },
   'room-divider': { default: 180, min: 80, max: 250 },
+  'armchair': { default: 80, min: 65, max: 100 },
+  'sofa': { default: 82, min: 65, max: 100 },
+  'coffee-table': { default: 42, min: 30, max: 60 },
+  // A coffee station's is its counter's: the machine and grinder stand on it.
+  'coffee-station': { default: 92, min: 80, max: 110 },
+  'pastry-case': { default: 125, min: 95, max: 150 },
+  'menu-board': { default: 105, min: 70, max: 140 },
+  // A pendant lamp's is how low its shade hangs; its cord goes up to the ceiling.
+  'pendant-lamp': { default: 200, min: 140, max: 260 },
+  'floor-lamp': { default: 160, min: 120, max: 190 },
+  'water-jar': { default: 75, min: 45, max: 110 },
+  'parasol': { default: 230, min: 200, max: 280 },
+  'bicycle': { default: 100, min: 90, max: 115 },
 } as const satisfies Record<ItemLookKind, { default: number, min: number, max: number }>
 /** The database's bound for any kind's height; each kind's own range is narrower. */
 export const ITEM_HEIGHT_MIN_CM = 20

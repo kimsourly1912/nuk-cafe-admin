@@ -904,6 +904,43 @@ describe('the shop designer on saved layouts', () => {
     await save(page)
   })
 
+  it('more furniture (step 3f): four new library sections, placed, saved, in 3D, and on the Looks page', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).waitFor()
+    const before = await savedLayout(page)
+    const library = page.getByRole('complementary', { name: 'Library' })
+    for (const heading of ['Lounge seating', 'Bar and service', 'Decor and lighting', 'Outdoor']) {
+      await library.getByRole('heading', { name: heading }).waitFor()
+    }
+    await library.getByRole('button', { name: 'New lounge look' }).waitFor()
+    const kinds = ['armchair', 'coffee-station', 'pendant-lamp', 'parasol'] as const
+    for (const kind of kinds) {
+      await page.getByTestId(`catalog-${kind}`).scrollIntoViewIfNeeded()
+      await page.getByTestId(`catalog-${kind}`).click()
+      await plan(page).getByTestId(`plan-item-${kind}`).first().waitFor()
+    }
+    // A parasol's height is its own, in its range.
+    const panel = page.getByRole('complementary', { name: 'Selected' })
+    await panel.getByText('200 to 280 cm').waitFor()
+    await save(page)
+    const saved = (await savedLayout(page)).floors.flatMap(floor => floor.items).map(item => item.kind)
+    for (const kind of kinds) expect(saved).toContain(kind)
+
+    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await drawn(page)
+    await shot(page, '3d-more-furniture')
+
+    await page.goto(url(`/c/${lab.slug}/admin/branches/looks`), { waitUntil: 'hydration' })
+    const lounge = page.getByTestId('looks-lounge')
+    await lounge.getByTestId('look-card-sofa').waitFor()
+    await page.getByTestId('looks-outdoor').getByTestId('look-card-bicycle').waitFor()
+
+    // The layout as it was, for the next test.
+    const { floors, placements } = before
+    expect(await saveElsewhere(page, { version: (await savedLayout(page)).version, layout: { floors, placements } })).toBe(200)
+  })
+
   it('the Neighborhood lane (step 3h, internal): around the café, tables still found, Fit scene, and the benchmark panel', { timeout: 90_000 }, async () => {
     const page = await signedIn()
     await page.goto(url(`${branchPath(lab.branchId, '3d')}&bench=orbit`), { waitUntil: 'hydration' })

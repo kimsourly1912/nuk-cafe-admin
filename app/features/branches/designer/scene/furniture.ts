@@ -147,6 +147,39 @@ export function buildItem(context: BuildContext, item: ItemBuild): Group {
     case 'room-divider':
       roomDivider(context, group, item.width, item.depth, height, finish('frame'))
       break
+    case 'armchair':
+      armchair(context, group, item.width, item.depth, height, finish('frame'), finish('seat'))
+      break
+    case 'sofa':
+      sofa(context, group, item.width, item.depth, height, finish('frame'), finish('seat'))
+      break
+    case 'coffee-table':
+      coffeeTable(context, group, item.width, item.depth, height, finish('top'), finish('base'))
+      break
+    case 'coffee-station':
+      coffeeStation(context, group, item.width, item.depth, height, finish('cabinet'), finish('top'), finish('machine'))
+      break
+    case 'pastry-case':
+      pastryCase(context, group, item.width, item.depth, height, finish('cabinet'), finish('frame'))
+      break
+    case 'menu-board':
+      menuBoard(context, group, item.width, item.depth, height, finish('frame'))
+      break
+    case 'pendant-lamp':
+      pendantLamp(context, group, item.width, height, item.floorHeight ?? height + 60, finish('shade'))
+      break
+    case 'floor-lamp':
+      floorLamp(context, group, item.width, height, finish('base'), finish('shade'))
+      break
+    case 'water-jar':
+      waterJar(context, group, item.width, height, finish('jar'))
+      break
+    case 'parasol':
+      parasol(context, group, item.width, height, finish('canopy'), finish('pole'))
+      break
+    case 'bicycle':
+      bicycle(context, group, height, finish('frame'))
+      break
     case 'stairs':
       stairs(context, group, item.width, item.depth, item.floorHeight ?? 300, finish('tread'))
       break
@@ -406,6 +439,196 @@ function roomDivider(context: BuildContext, group: Group, width: number, depth: 
     return merged
   })
   group.add(part(slats, frame, { x: 0, y: height / 2, z: 0 }))
+}
+
+// --- Step 3f: lounge seating, bar and service, decor and lighting, outdoor ---
+
+/** A lathe from a profile in centimetres (x out from the axis, y up), cached by `key`. */
+function lathe(context: BuildContext, key: string, profile: [number, number][], segments = 32): BufferGeometry {
+  return cached(context, `lathe:${key}`, () => new LatheGeometry(profile.map(([x, y]) => new Vector2(cm(x), cm(y))), segments))
+}
+
+/**
+ * A lounge chair: a low seat (half its height), a thick cushion, arms and a cushioned back. The
+ * back's top is `height`.
+ */
+function armchair(context: BuildContext, group: Group, width: number, depth: number, height: number, frame: Material, seat: Material) {
+  const seatHeight = Math.round(height * 0.5)
+  const base = seatHeight - 14
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+    group.add(part(cylinder(context, 2, 1.4, base, 12), frame, { x: sx * (width / 2 - 7), y: base / 2, z: sz * (depth / 2 - 7) }))
+  }
+  group.add(part(box(context, width, 6, depth, 1.5), frame, { x: 0, y: base + 3, z: 0 }))
+  group.add(part(box(context, width - 18, 12, depth - 16, 4), seat, { x: 0, y: seatHeight, z: 3 }))
+  for (const side of [1, -1]) group.add(part(box(context, 8, 36, depth - 4, 2), frame, { x: side * (width / 2 - 4), y: base + 18, z: 0 }))
+  const backHeight = height - base
+  group.add(part(box(context, width, backHeight, 6, 2), frame, { x: 0, y: base + backHeight / 2, z: -(depth / 2 - 3) }))
+  group.add(part(box(context, width - 18, backHeight - 22, 10, 4), seat, { x: 0, y: seatHeight + (backHeight - 22) / 2 - 2, z: -(depth / 2 - 11) }))
+}
+
+/** A sofa: as an armchair, with a cushion every 60 cm or so. */
+function sofa(context: BuildContext, group: Group, width: number, depth: number, height: number, frame: Material, seat: Material) {
+  const seatHeight = Math.round(height * 0.52)
+  const base = seatHeight - 16
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+    group.add(part(cylinder(context, 2.2, 1.6, base, 12), frame, { x: sx * (width / 2 - 8), y: base / 2, z: sz * (depth / 2 - 8) }))
+  }
+  group.add(part(box(context, width, 10, depth, 2), seat, { x: 0, y: base + 5, z: 0 }))
+  const arm = 14
+  for (const side of [1, -1]) group.add(part(box(context, arm, 40, depth, 4), seat, { x: side * (width / 2 - arm / 2), y: base + 20, z: 0 }))
+  const inner = width - 2 * arm
+  const cushions = Math.max(1, Math.round(inner / 60))
+  const each = inner / cushions
+  const backHeight = height - base
+  group.add(part(box(context, width, backHeight, 14, 4), seat, { x: 0, y: base + backHeight / 2, z: -(depth / 2 - 7) }))
+  for (let index = 0; index < cushions; index++) {
+    const x = -inner / 2 + each * (index + 0.5)
+    group.add(part(box(context, Math.round(each - 2), 12, depth - 22, 5), seat, { x, y: seatHeight, z: 4 }))
+    group.add(part(box(context, Math.round(each - 4), backHeight - 26, 12, 5), seat, { x, y: seatHeight + (backHeight - 26) / 2 - 2, z: -(depth / 2 - 19) }))
+  }
+  group.add(part(box(context, width - 4, 3, depth - 4, 1), frame, { x: 0, y: base - 1.5, z: 0 }))
+}
+
+/** A low table: a top, four legs and a shelf underneath. */
+function coffeeTable(context: BuildContext, group: Group, width: number, depth: number, height: number, top: Material, base: Material) {
+  group.add(part(box(context, width, 4, depth, 1.2), top, { x: 0, y: height - 2, z: 0 }))
+  const legHeight = height - 4
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+    group.add(part(cylinder(context, 1.8, 1.8, legHeight, 12), base, { x: sx * (width / 2 - 5), y: legHeight / 2, z: sz * (depth / 2 - 5) }))
+  }
+  group.add(part(box(context, width - 12, 2, depth - 12, 0.6), base, { x: 0, y: Math.round(height * 0.25), z: 0 }))
+}
+
+/**
+ * A coffee bar: a counter (`height` is its top) with an espresso machine, a grinder and cups on
+ * it, the machine's front towards +z (where the barista stands is the back).
+ */
+function coffeeStation(context: BuildContext, group: Group, width: number, depth: number, height: number, cabinet: Material, top: Material, machine: Material) {
+  serviceCounter(context, group, width, depth, height, cabinet, top)
+  const body = Math.min(62, width * 0.45)
+  const x = -width / 2 + body / 2 + 10
+  group.add(part(box(context, body, 38, 42, 3), machine, { x, y: height + 19, z: -2 }))
+  const dark = context.materials.surface('plinth')
+  group.add(part(box(context, body - 8, 2, 16), dark, { x, y: height + 2, z: 14 }))
+  for (const side of [-1, 1]) {
+    group.add(part(cylinder(context, 4, 4, 6, 16), machine, { x: x + side * body / 5, y: height + 15, z: 20 }))
+    group.add(rod(context, { x: x + side * body / 5, y: height + 13, z: 23 }, { x: x + side * body / 5, y: height + 11, z: 33 }, 1, dark))
+  }
+  const ceramic = context.materials.surface('ceramic')
+  for (let cup = 0; cup < 4; cup++) group.add(part(cylinder(context, 3.5, 3, 6, 16), ceramic, { x: x - body / 2 + 8 + cup * 10, y: height + 41, z: -6 }))
+  const grinderX = x + body / 2 + 22
+  group.add(part(box(context, 20, 30, 22, 2), machine, { x: grinderX, y: height + 15, z: -4 }))
+  group.add(part(lathe(context, 'hopper', [[2, 0], [9, 16], [8, 16], [1, 0.5]], 24), context.materials.surface('glass'), { x: grinderX, y: height + 30, z: -4 }))
+}
+
+/** A glass pastry case on a cabinet, pastries on two glass shelves; its top is `height`. */
+function pastryCase(context: BuildContext, group: Group, width: number, depth: number, height: number, cabinet: Material, frame: Material) {
+  const caseHeight = 45
+  const base = height - caseHeight
+  group.add(part(box(context, width, base, depth, 1), cabinet, { x: 0, y: base / 2, z: 0 }))
+  group.add(part(box(context, width - 4, caseHeight - 3, depth - 6), context.materials.surface('glass'), { x: 0, y: base + (caseHeight - 3) / 2, z: 0 }))
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+    group.add(part(box(context, 2, caseHeight - 3, 2), frame, { x: sx * (width / 2 - 3), y: base + (caseHeight - 3) / 2, z: sz * (depth / 2 - 4) }))
+  }
+  group.add(part(box(context, width - 2, 3, depth - 4, 0.6), frame, { x: 0, y: height - 1.5, z: 0 }))
+  const pastry = context.materials.surface('pastry')
+  const count = Math.max(2, Math.floor((width - 16) / 18))
+  for (const [row, y] of [[0, base + 2], [1, base + 22]] as const) {
+    for (let index = 0; index < count; index++) {
+      const pastryMesh = part(cached(context, 'pastry', () => new IcosahedronGeometry(cm(6), 1)), pastry, { x: -((count - 1) * 18) / 2 + index * 18, y: y + 3, z: row ? -8 : 6 })
+      pastryMesh.scale.set(1, 0.5, 0.8)
+      group.add(pastryMesh)
+    }
+  }
+}
+
+/** A sandwich board: two framed slates leaning together, their feet `depth` apart. */
+function menuBoard(context: BuildContext, group: Group, width: number, depth: number, height: number, frame: Material) {
+  const lean = Math.atan((depth / 2 - 4) / height)
+  const length = Math.round(height / Math.cos(lean))
+  const slate = context.materials.surface('chalkboard')
+  for (const side of [1, -1]) {
+    const board = new Group()
+    board.add(part(box(context, width, length, 3, 0.6), frame, { x: 0, y: 0, z: 0 }))
+    board.add(part(box(context, width - 10, length - 12, 1), slate, { x: 0, y: 2, z: side * 1.6 }))
+    // Lifted by its thickness's tilt, so its feet stand on the floor rather than in it.
+    board.position.set(0, cm(height / 2 + 1), cm(side * (depth / 4)))
+    board.rotation.x = -side * lean
+    group.add(board)
+  }
+}
+
+/**
+ * A lamp hung from the ceiling: its shade's bottom at `height`, its cord up to `ceiling` (the
+ * floor's height; a little above the shade where there is none, for its picture).
+ */
+function pendantLamp(context: BuildContext, group: Group, width: number, height: number, ceiling: number, shade: Material) {
+  const radius = width / 2
+  const bottom = Math.min(height, ceiling - 40)
+  // A closed profile, so the shade has an inside when seen from below.
+  group.add(part(lathe(context, `shade:${width}`, [[5, 22], [radius, 0], [radius - 0.8, 0], [4.2, 21.2]], 40), shade, { x: 0, y: bottom, z: 0 }))
+  group.add(part(cached(context, 'bulb', () => new IcosahedronGeometry(cm(4), 2)), context.materials.surface('lamp'), { x: 0, y: bottom + 12, z: 0 }))
+  const cord = Math.round(ceiling - bottom - 22)
+  group.add(part(cylinder(context, 0.4, 0.4, cord, 6), context.materials.surface('frame'), { x: 0, y: bottom + 22 + cord / 2, z: 0 }))
+  group.add(part(cylinder(context, 6, 6, 2, 16), context.materials.surface('frame'), { x: 0, y: ceiling - 1, z: 0 }))
+}
+
+/** A standing lamp: a round foot, a pole and a drum shade at the top. */
+function floorLamp(context: BuildContext, group: Group, width: number, height: number, base: Material, shade: Material) {
+  const radius = width / 2
+  group.add(part(disc(context, Math.round(radius * 0.7), 2.5, 0.8), base, { x: 0, y: 1.25, z: 0 }))
+  const pole = height - 30
+  group.add(part(cylinder(context, 1.2, 1.2, pole, 10), base, { x: 0, y: pole / 2, z: 0 }))
+  group.add(part(lathe(context, `drum:${width}`, [[radius - 6, 30], [radius, 0], [radius - 0.8, 0], [radius - 6.8, 29.2]], 40), shade, { x: 0, y: height - 30, z: 0 }))
+  group.add(part(cached(context, 'bulb', () => new IcosahedronGeometry(cm(4), 2)), context.materials.surface('lamp'), { x: 0, y: height - 16, z: 0 }))
+}
+
+/** A Khmer water jar (a pāng): a wide glazed belly, a narrow neck and a wooden lid. */
+function waterJar(context: BuildContext, group: Group, width: number, height: number, jar: Material) {
+  const r = width / 2
+  const h = height - 2
+  group.add(part(lathe(context, `jar:${width}:${h}`, [[0, 0], [r * 0.55, 0], [r * 0.92, h * 0.3], [r, h * 0.5], [r * 0.86, h * 0.76], [r * 0.52, h * 0.94], [r * 0.56, h], [r * 0.48, h]], 40), jar, { x: 0, y: 0, z: 0 }))
+  group.add(part(disc(context, Math.round(r * 0.56 + 1), 2, 0.6), context.materials.finish('dark-wood'), { x: 0, y: h + 1, z: 0 }))
+}
+
+/** A market parasol: a weighted foot, a pole and a canopy with a short valance; its top is `height`. */
+function parasol(context: BuildContext, group: Group, width: number, height: number, canopy: Material, pole: Material) {
+  const radius = width / 2
+  group.add(part(cylinder(context, 24, 26, 8, 24), context.materials.surface('concrete'), { x: 0, y: 4, z: 0 }))
+  group.add(part(cylinder(context, 2.2, 2.2, height - 4, 12), pole, { x: 0, y: (height - 4) / 2, z: 0 }))
+  const rise = Math.round(radius * 0.32)
+  group.add(part(lathe(context, `canopy:${width}`, [[1, rise], [radius, 0], [radius, -8], [radius - 1, -8], [radius - 1, 0], [1, rise - 1]], 48), canopy, { x: 0, y: height - rise - 2, z: 0 }))
+  group.add(part(cached(context, 'finial', () => new IcosahedronGeometry(cm(2.5), 1)), pole, { x: 0, y: height - 2, z: 0 }))
+}
+
+/** A city bicycle along x (175 cm), its saddle and bars at `height`. */
+function bicycle(context: BuildContext, group: Group, height: number, frame: Material) {
+  const rubber = context.materials.surface('rubber')
+  const chrome = context.materials.surface('chrome')
+  const wheel = 33
+  for (const x of [-53, 53]) {
+    group.add(part(torus(context, wheel, 2), rubber, { x, y: wheel + 2, z: 0 }))
+    group.add(part(torus(context, wheel - 2.5, 0.6), chrome, { x, y: wheel + 2, z: 0 }))
+    const hub = part(cylinder(context, 2, 2, 8, 12), chrome, { x, y: wheel + 2, z: 0 })
+    hub.rotation.x = Math.PI / 2
+    group.add(hub)
+  }
+  const rear = { x: -53, y: wheel + 2, z: 0 }
+  const front = { x: 53, y: wheel + 2, z: 0 }
+  const crank = { x: -8, y: 30, z: 0 }
+  const seat = { x: -22, y: height - 28, z: 0 }
+  const head = { x: 38, y: height - 22, z: 0 }
+  const fork = { x: 42, y: height - 40, z: 0 }
+  for (const [from, to] of [[rear, crank], [rear, seat], [crank, seat], [seat, head], [crank, fork], [head, fork], [fork, front]] as const) {
+    group.add(rod(context, from, to, 1.6, frame))
+  }
+  group.add(rod(context, seat, { x: -25, y: height - 6, z: 0 }, 1.1, chrome))
+  group.add(part(box(context, 24, 5, 13, 2.4), context.materials.surface('plinth'), { x: -26, y: height - 3, z: 0 }))
+  group.add(rod(context, head, { x: 36, y: height - 4, z: 0 }, 1.1, chrome))
+  group.add(rod(context, { x: 36, y: height - 4, z: -24 }, { x: 36, y: height - 4, z: 24 }, 1.1, chrome))
+  for (const side of [-1, 1]) group.add(rod(context, { x: 36, y: height - 4, z: side * 20 }, { x: 36, y: height - 4, z: side * 27 }, 1.8, rubber))
+  const chainring = part(torus(context, 9, 1), chrome, { x: -8, y: 30, z: 4 })
+  group.add(chainring)
 }
 
 /** Straight stairs rising towards −z (the plan's top), up to the floor above. */

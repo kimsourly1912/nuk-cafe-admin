@@ -10,7 +10,7 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import type { CustomItemLook, CustomLook, TableLook } from '#shared/contracts/shop-layout'
 import { ITEM_LOOK_KINDS } from '#shared/contracts/shop-layout'
 import type { ItemCategory, ItemSpec } from '../designer/catalog'
-import { BUILT_IN_LOOKS, ITEM_SPECS } from '../designer/catalog'
+import { BUILT_IN_LOOKS, ITEM_SPECS, LOOK_CATEGORIES } from '../designer/catalog'
 import { useItemLookMutations, useItemLooks, useLookMutations, useLooks } from '../composables/useBranches'
 import ItemLookFormModal from './ItemLookFormModal.vue'
 import LookFormModal from './LookFormModal.vue'
@@ -122,14 +122,14 @@ const sections = computed<Section[]>(() => [
     newLabel: 'New table look',
     create: () => void lookModal.open({}),
   },
-  ...(['chairs', 'fixtures'] as const).map(category => ({
-    key: category,
-    title: category === 'chairs' ? 'Chairs' : 'Fixtures',
-    intro: category === 'chairs' ? 'Stools, benches and chairs placed on their own, not around a table.' : 'Counters, shelves, plants and dividers.',
-    builtIn: pieceSpecs(category).map(spec => pieceCard(spec)),
-    own: ownPieces(category).map(look => pieceCard(ITEM_SPECS[look.kind], look)),
-    newLabel: category === 'chairs' ? 'New chair look' : 'New fixture look',
-    create: () => void itemLookModal.open({ category }),
+  ...LOOK_CATEGORIES.map(({ key, title, intro, noun }) => ({
+    key,
+    title,
+    intro,
+    builtIn: pieceSpecs(key).map(spec => pieceCard(spec)),
+    own: ownPieces(key).map(look => pieceCard(ITEM_SPECS[look.kind], look)),
+    newLabel: `New ${noun} look`,
+    create: () => void itemLookModal.open({ category: key }),
   })),
 ])
 

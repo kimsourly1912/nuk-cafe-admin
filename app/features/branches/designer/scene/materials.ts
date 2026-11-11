@@ -10,7 +10,7 @@ import { FINISH_SWATCHES } from '../catalog'
  * are plain colors.
  */
 
-export type SurfaceKey = 'plaster' | 'plaster-outside' | 'floor-wood' | 'floor-tiles' | 'slab' | 'roof' | 'glass' | 'frame' | 'leaf' | 'leaf-dark' | 'soil' | 'ground' | 'highlight' | 'lamp' | 'plinth' | 'ceramic' | 'contact-shadow'
+export type SurfaceKey = 'plaster' | 'plaster-outside' | 'floor-wood' | 'floor-tiles' | 'slab' | 'roof' | 'glass' | 'frame' | 'leaf' | 'leaf-dark' | 'soil' | 'ground' | 'highlight' | 'lamp' | 'plinth' | 'ceramic' | 'contact-shadow' | 'pastry' | 'chalkboard'
   | FigureSurface | LaneSurface
 
 /** People and pets (step 3g): skin tones, hair, fur and the red-check krama. */
@@ -115,6 +115,9 @@ function makeSurface(key: SurfaceKey, pattern: (key: Pattern) => Texture | null)
     case 'lamp': return new MeshStandardMaterial({ color: '#fff3d6', emissive: new Color('#ffcf85'), emissiveIntensity: 1.6 })
     case 'plinth': return new MeshStandardMaterial({ color: '#1f1b18', roughness: 0.7 })
     case 'ceramic': return new MeshStandardMaterial({ color: '#f4f1ec', roughness: 0.3 })
+    // Step 3f: the pastry case's pastries and the menu board's slate.
+    case 'pastry': return new MeshStandardMaterial({ color: '#c98a45', roughness: 0.75 })
+    case 'chalkboard': return new MeshStandardMaterial({ color: '#2b2f2c', roughness: 0.95 })
     // A soft dark spot under a figure (step 3g): no light, no depth writes, drawn over the floor.
     case 'contact-shadow': return new MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.35, depthWrite: false, alphaMap: pattern('shadow') })
     case 'skin-light': return new MeshStandardMaterial({ color: '#e0b48f', roughness: 0.7 })

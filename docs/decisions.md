@@ -3121,6 +3121,9 @@ Verification: migrated SQLite forced interleavings, populated local workerd/D1 r
   - **One selection for both views, a table or a piece**; clearing one kind never clears the other. The lists stay tables only.
 
   [Plan → Step 3e](plans/shop-designer.md#step-3e-heights-and-picking-a-piece-in-3d-built-2026-11-11).
+- **Step 3f (2026-11-11, with 3e):** **more furniture**: lounge seating (armchair, sofa, coffee table), bar and service (coffee station, pastry case, menu board), decor and lighting (pendant lamp, floor lamp, water jar), outdoor (parasol, bicycle), each with looks, a height range and a picture; no migration (kinds are text). Decided: the library's sections come from one catalog list; **overhead pieces** (pendant lamp, parasol) never warn and are drawn dashed; lamps glow without adding lights; no rug until a look kind can have no height.
+
+  [Plan → Step 3f](plans/shop-designer.md#step-3f-more-furniture-built-2026-11-11).
 
 ### D274: Shop designer scenes: generated surroundings, CC0 models and a saved preset per branch (2026-11-11)
 

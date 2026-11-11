@@ -51,7 +51,10 @@ describe('heights (step 3e, QS2)', () => {
     for (const height of [range.min, range.default, range.max]) {
       const object = buildItem(context(), { kind, width: spec.width, depth: spec.depth, height, finishes: {} })
       const box = new Box3().setFromObject(object)
-      expect(Math.abs(box.max.y * 100 - height), `${kind} at ${height} cm`).toBeLessThanOrEqual(slack(kind))
+      // A pendant lamp's height is its shade's bottom (its cord goes up); a coffee station's is its
+      // counter's, with the machine and its cups 46 cm above it.
+      const measured = kind === 'pendant-lamp' ? box.min.y * 100 : box.max.y * 100 - (kind === 'coffee-station' ? 46 : 0)
+      expect(Math.abs(measured - height), `${kind} at ${height} cm`).toBeLessThanOrEqual(slack(kind))
       expect(box.min.y).toBeGreaterThanOrEqual(-0.001)
       // A plant's leaves spread past its pot, at any height (as in "2D and 3D agree on size").
       if (kind === 'plant') continue

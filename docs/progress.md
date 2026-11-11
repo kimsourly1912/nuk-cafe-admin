@@ -3,6 +3,14 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 3f: more furniture (D273, 2026-11-11)
+
+- In the same PR as 3e (owner's choice), its own commit. **Built:** 11 kinds in four new library sections: **Lounge seating** (armchair, sofa, coffee table), **Bar and service** (coffee station, pastry case, menu board), **Decor and lighting** (pendant lamp, floor lamp, water jar), **Outdoor** (parasol, bicycle), each generated from code with finishes, the cafe's own looks, a height range and a picture; overhead pieces (pendant lamp, parasol) never warn and are drawn dashed on the plan; the library, Looks page and look form list their sections from one catalog list. No migration. [Plan → Step 3f](plans/shop-designer.md#step-3f-more-furniture-built-2026-11-11).
+- **Also fixed:** View in 3D's floor names drew over the table and piece cards (CSS2DRenderer gives each label a z-index; the labels layer is now its own stacking context).
+- **Evidence (2026-11-11, Linux container, Chromium at `/opt/pw-browsers/chromium`):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2844 passed, 1 skipped (184 files); `test/e2e/shop-designer.test.ts` 21 passed (with screenshots: the parasol's card no longer under the floor name); `drizzle-kit generate` says "No schema changes". Guard removed and failing a test: overhead pieces never warn.
+- **Not in 3f:** a rug (a look kind with no height needs the contract's height optional per kind; left for the pilot to ask for); real lights for lamps (a glowing bulb only: each light would cost a phone a shadow map).
+- **Owner review on staging (3e and 3f together):** the plan's two "Review on staging" items.
+
 ### Shop designer step 3e: heights and picking a piece in 3D (D273, 2026-11-11)
 
 - Step 3h merged (PR #290); the branch restarted from `main`. **Owner's choice (2026-11-11):** build the small and medium steps that are ready (3e and 3f) in **one PR**, one commit per step, one review on staging (an exception to "one step per PR", not a rule change). 3c (the pilot), 4a (waits for the pilot and the benchmark), 4b–4d (large, each benchmarked) and the owner's CC0 models (waiting for files) stay separate.

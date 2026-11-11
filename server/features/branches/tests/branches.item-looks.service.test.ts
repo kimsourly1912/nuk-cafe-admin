@@ -375,3 +375,16 @@ describe('heights (step 3e, QS2)', () => {
     expect(heightIssues({ ...piece(undefined, 'bar-stool'), height: 45 })).toBeUndefined()
   })
 })
+
+describe('more furniture (step 3f)', () => {
+  it('a new kind takes a look and saves on the plan, with its own height', async () => {
+    const parasol = await createItemLook(db, actor, chair('Terrace parasol', { kind: 'parasol', finishes: { canopy: 'terracotta', pole: 'walnut' }, defaultWidth: 260, defaultDepth: 260, defaultHeight: 250 }))
+    expect(parasol).toMatchObject({ kind: 'parasol', defaultHeight: 250 })
+    await furnish([floor('ground', [{ ...piece(parasol.id, 'parasol'), width: 260, depth: 260, height: 250 }, { ...piece(undefined, 'sofa'), width: 180, depth: 88 }])])
+    expect((await getLayout(db, TEST_TENANT, branch)).floors[0]!.items.map(item => item.kind)).toEqual(['parasol', 'sofa'])
+    expect((await listItemLooks(db, TEST_TENANT))[0]).toMatchObject({ pieces: 1 })
+    // Each kind has its own range: a 2 m sofa is refused.
+    const issues = v.safeParse(floorSchema, floor('ground', [{ ...piece(undefined, 'sofa'), height: 200 }])).issues?.map(issue => v.getDotPath(issue))
+    expect(issues).toEqual(['items.0.height'])
+  })
+})

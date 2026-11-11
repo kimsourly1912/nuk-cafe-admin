@@ -10,8 +10,8 @@
  */
 import type { CreateItemLookInput, CustomItemLook, Finish, ItemLookKind } from '#shared/contracts/shop-layout'
 import { heightFits, heightRangeMessage, ITEM_HEIGHTS, ITEM_LOOK_KINDS, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, LOOK_NAME_MAX } from '#shared/contracts/shop-layout'
-import type { ItemCategory } from '../designer/catalog'
-import { FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
+import type { LookCategory } from '../designer/catalog'
+import { FINISH_SWATCHES, ITEM_SPECS, itemFinish, LOOK_CATEGORIES } from '../designer/catalog'
 import type { StudioViewer } from '../designer/scene/studio-viewer'
 import { useItemLookMutations } from '../composables/useBranches'
 
@@ -29,16 +29,15 @@ const props = defineProps<{
   look?: CustomItemLook
   from?: ItemLookSource
   /** A new look's kinds: only this category's (Extra seating or Fixtures); every one without it. */
-  category?: ItemCategory
+  category?: LookCategory
 }>()
 const emit = defineEmits<{ 'close': [saved?: CustomItemLook], 'update:open': [open: boolean] }>()
 
-const CATEGORY_LABELS: Partial<Record<ItemCategory, string>> = { chairs: 'Chairs', fixtures: 'Fixtures' }
 const kindItems = computed(() => {
-  const categories = (['chairs', 'fixtures'] as const).filter(category => !props.category || props.category === category)
+  const categories = LOOK_CATEGORIES.filter(category => !props.category || props.category === category.key)
   return categories.flatMap(category => [
-    ...(categories.length > 1 ? [{ type: 'label' as const, label: CATEGORY_LABELS[category] }] : []),
-    ...ITEM_LOOK_KINDS.filter(kind => ITEM_SPECS[kind].category === category).map(kind => ({ label: ITEM_SPECS[kind].label, value: kind })),
+    ...(categories.length > 1 ? [{ type: 'label' as const, label: category.title }] : []),
+    ...ITEM_LOOK_KINDS.filter(kind => ITEM_SPECS[kind].category === category.key).map(kind => ({ label: ITEM_SPECS[kind].label, value: kind })),
   ])
 })
 
@@ -178,7 +177,7 @@ watch(() => colorMode.value, value => viewer?.setTheme(value === 'dark'))
 watch(view, value => viewer?.setView(value))
 
 const resetView = () => viewer?.reset()
-const noun = computed(() => (spec.value.category === 'chairs' ? 'chair' : 'fixture'))
+const noun = computed(() => LOOK_CATEGORIES.find(category => category.key === spec.value.category)?.noun ?? 'fixture')
 </script>
 
 <template>

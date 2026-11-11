@@ -12,8 +12,8 @@ import type { DiningTable } from '#shared/contracts/branches'
 import { edgeLength, heightRangeMessage, ITEM_HEIGHTS, isFigureKind, isItemLookKind } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
-import type { ItemCategory } from '../designer/catalog'
-import { FINISH_SWATCHES, findItemLook, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
+import type { ItemCategory, LookCategory } from '../designer/catalog'
+import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
 import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, placementExtent, snap } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
@@ -79,6 +79,17 @@ const ITEM_ICONS: Record<ItemKind, string> = {
   'planter': 'i-lucide-sprout',
   'plant': 'i-lucide-flower-2',
   'room-divider': 'i-lucide-columns-3',
+  'armchair': 'i-lucide-armchair',
+  'sofa': 'i-lucide-sofa',
+  'coffee-table': 'i-lucide-table-2',
+  'coffee-station': 'i-lucide-coffee',
+  'pastry-case': 'i-lucide-croissant',
+  'menu-board': 'i-lucide-presentation',
+  'pendant-lamp': 'i-lucide-lamp-ceiling',
+  'floor-lamp': 'i-lucide-lamp-floor',
+  'water-jar': 'i-lucide-amphora',
+  'parasol': 'i-lucide-umbrella',
+  'bicycle': 'i-lucide-bike',
   'stairs': 'i-lucide-chevrons-up',
   'person': 'i-lucide-person-standing',
   'girl': 'i-lucide-person-standing',
@@ -91,13 +102,8 @@ const ITEM_ICONS: Record<ItemKind, string> = {
   'dog': 'i-lucide-dog',
 }
 const LOOK_ICONS = { round: 'i-lucide-circle', rect: 'i-lucide-rectangle-horizontal', booth: 'i-lucide-sofa' } as const
-const CATEGORIES: { key: ItemCategory, label: string }[] = [
-  { key: 'chairs', label: 'Extra seating' },
-  { key: 'fixtures', label: 'Fixtures' },
-  { key: 'structure', label: 'Structure' },
-  { key: 'figures', label: 'People and pets' },
-]
 const catalog = CATEGORIES.map(category => ({ ...category, specs: Object.values(ITEM_SPECS).filter(spec => spec.category === category.key) }))
+const isLookCategory = (key: ItemCategory): key is LookCategory => LOOK_CATEGORIES.some(category => category.key === key)
 /** The cafe's own chair and fixture looks (step 3d), by category: shown after the built-in pieces. */
 const itemLooks = computed(() => props.editor.itemLooks.value)
 const itemLooksIn = (category: ItemCategory) => itemLooks.value.filter(look => ITEM_SPECS[look.kind].category === category)
@@ -469,7 +475,7 @@ function setItemLook(itemId: string, lookId: string) {
 }
 
 /** A new chair or fixture look; with `forItem`, that piece gets it at once (at its own size). */
-async function newItemLook(options: { category?: ItemCategory, from?: ItemLookSource, forItem?: string } = {}) {
+async function newItemLook(options: { category?: LookCategory, from?: ItemLookSource, forItem?: string } = {}) {
   const { category, from, forItem } = options
   const saved = await itemLookModal.open({ category, from }).result
   if (!saved || !forItem) return
@@ -771,7 +777,7 @@ function chooseStarter(starter: Starter) {
         class="flex flex-col gap-2"
       >
         <h2 class="text-xs font-semibold tracking-wide text-muted uppercase">
-          {{ category.label }}
+          {{ category.library }}
         </h2>
         <div class="grid grid-cols-2 gap-2">
           <button
@@ -844,8 +850,8 @@ function chooseStarter(starter: Starter) {
           </div>
         </div>
         <UButton
-          v-if="category.key === 'chairs' || category.key === 'fixtures'"
-          :label="category.key === 'chairs' ? 'New chair look' : 'New fixture look'"
+          v-if="isLookCategory(category.key)"
+          :label="`New ${category.noun} look`"
           icon="i-lucide-plus"
           color="neutral"
           variant="outline"

@@ -46,7 +46,26 @@ export interface FinishSlot {
   default: Finish
 }
 
-export type ItemCategory = 'chairs' | 'fixtures' | 'structure' | 'figures'
+export type ItemCategory = 'chairs' | 'lounge' | 'fixtures' | 'service' | 'decor' | 'outdoor' | 'structure' | 'figures'
+
+/** The categories a cafe can make its own looks in (not structure, nor people and pets). */
+export type LookCategory = Exclude<ItemCategory, 'structure' | 'figures'>
+
+/**
+ * The library's sections in order (step 3f added lounge seating, bar and service, decor and
+ * lighting, outdoor), and how the Looks page and the look form name each.
+ */
+export const CATEGORIES: { key: ItemCategory, library: string, title: string, intro: string, noun: string }[] = [
+  { key: 'chairs', library: 'Extra seating', title: 'Chairs', intro: 'Stools, benches and chairs placed on their own, not around a table.', noun: 'chair' },
+  { key: 'lounge', library: 'Lounge seating', title: 'Lounge seating', intro: 'Armchairs, sofas and coffee tables.', noun: 'lounge' },
+  { key: 'fixtures', library: 'Fixtures', title: 'Fixtures', intro: 'Counters, shelves, plants and dividers.', noun: 'fixture' },
+  { key: 'service', library: 'Bar and service', title: 'Bar and service', intro: 'A coffee station, a pastry case and a menu board.', noun: 'bar' },
+  { key: 'decor', library: 'Decor and lighting', title: 'Decor and lighting', intro: 'Lamps and a water jar.', noun: 'decor' },
+  { key: 'outdoor', library: 'Outdoor', title: 'Outdoor', intro: 'A parasol and a bicycle for the terrace or the pavement.', noun: 'outdoor' },
+  { key: 'structure', library: 'Structure', title: 'Structure', intro: '', noun: '' },
+  { key: 'figures', library: 'People and pets', title: 'People and pets', intro: '', noun: '' },
+]
+export const LOOK_CATEGORIES = CATEGORIES.filter((category): category is typeof category & { key: LookCategory } => category.key !== 'structure' && category.key !== 'figures')
 
 export interface ItemSpec {
   kind: ItemKind
@@ -63,6 +82,11 @@ export interface ItemSpec {
   photo: string | null
   /** People and pets (step 3g): how the plan draws one from above. */
   figure?: FigureShape
+  /**
+   * It hangs or reaches over other pieces (a pendant lamp, a parasol, step 3f): the plan draws its
+   * outline only, and it neither warns about nor is warned for overlapping.
+   */
+  overhead?: true
 }
 
 export type FigureShape = 'person' | 'animal' | 'hammock'
@@ -90,6 +114,21 @@ export const ITEM_SPECS: Record<ItemKind, ItemSpec> = {
   'planter': { kind: 'planter', label: 'Planter', category: 'fixtures', footprint: 'rect', width: 100, depth: 40, height: ITEM_HEIGHTS['planter'].default, slots: [{ key: 'box', label: 'Box', options: WOODS, default: 'warm-oak' }], photo: BUILT_IN_PHOTO('planter') },
   'plant': { kind: 'plant', label: 'Plant', category: 'fixtures', footprint: 'round', width: 50, depth: 50, height: ITEM_HEIGHTS['plant'].default, slots: [{ key: 'pot', label: 'Pot', options: ['terracotta', ...STONES], default: 'terracotta' }], photo: BUILT_IN_PHOTO('plant') },
   'room-divider': { kind: 'room-divider', label: 'Room divider', category: 'fixtures', footprint: 'rect', width: 120, depth: 20, height: ITEM_HEIGHTS['room-divider'].default, slots: [frame('warm-oak')], photo: BUILT_IN_PHOTO('room-divider') },
+  // Step 3f: lounge seating.
+  'armchair': { kind: 'armchair', label: 'Armchair', category: 'lounge', footprint: 'rect', width: 76, depth: 80, height: ITEM_HEIGHTS['armchair'].default, slots: [frame('pale-oak'), seat('linen')], photo: BUILT_IN_PHOTO('armchair') },
+  'sofa': { kind: 'sofa', label: 'Sofa', category: 'lounge', footprint: 'rect', width: 180, depth: 88, height: ITEM_HEIGHTS['sofa'].default, slots: [frame('walnut'), seat('olive')], photo: BUILT_IN_PHOTO('sofa') },
+  'coffee-table': { kind: 'coffee-table', label: 'Coffee table', category: 'lounge', footprint: 'rect', width: 100, depth: 60, height: ITEM_HEIGHTS['coffee-table'].default, slots: [{ key: 'top', label: 'Top', options: [...WOODS, ...STONES], default: 'walnut' }, { key: 'base', label: 'Base', options: [...METALS, ...WOODS], default: 'graphite' }], photo: BUILT_IN_PHOTO('coffee-table') },
+  // Bar and service.
+  'coffee-station': { kind: 'coffee-station', label: 'Coffee station', category: 'service', footprint: 'rect', width: 160, depth: 70, height: ITEM_HEIGHTS['coffee-station'].default, slots: [{ key: 'cabinet', label: 'Cabinet', options: WOODS, default: 'dark-wood' }, { key: 'top', label: 'Countertop', options: STONES, default: 'white-marble' }, { key: 'machine', label: 'Machine', options: METALS, default: 'steel' }], photo: BUILT_IN_PHOTO('coffee-station') },
+  'pastry-case': { kind: 'pastry-case', label: 'Pastry case', category: 'service', footprint: 'rect', width: 120, depth: 65, height: ITEM_HEIGHTS['pastry-case'].default, slots: [{ key: 'cabinet', label: 'Cabinet', options: WOODS, default: 'warm-oak' }, { key: 'frame', label: 'Frame', options: METALS, default: 'brass' }], photo: BUILT_IN_PHOTO('pastry-case') },
+  'menu-board': { kind: 'menu-board', label: 'Menu board', category: 'service', footprint: 'rect', width: 60, depth: 50, height: ITEM_HEIGHTS['menu-board'].default, slots: [frame('warm-oak')], photo: BUILT_IN_PHOTO('menu-board') },
+  // Decor and lighting.
+  'pendant-lamp': { kind: 'pendant-lamp', label: 'Pendant lamp', category: 'decor', footprint: 'round', width: 45, depth: 45, height: ITEM_HEIGHTS['pendant-lamp'].default, slots: [{ key: 'shade', label: 'Shade', options: [...METALS, 'terracotta', 'linen'], default: 'brass' }], photo: BUILT_IN_PHOTO('pendant-lamp'), overhead: true },
+  'floor-lamp': { kind: 'floor-lamp', label: 'Floor lamp', category: 'decor', footprint: 'round', width: 45, depth: 45, height: ITEM_HEIGHTS['floor-lamp'].default, slots: [{ key: 'base', label: 'Stand', options: METALS, default: 'graphite' }, { key: 'shade', label: 'Shade', options: FABRICS, default: 'linen' }], photo: BUILT_IN_PHOTO('floor-lamp') },
+  'water-jar': { kind: 'water-jar', label: 'Water jar', category: 'decor', footprint: 'round', width: 60, depth: 60, height: ITEM_HEIGHTS['water-jar'].default, slots: [{ key: 'jar', label: 'Jar', options: ['terracotta', ...STONES], default: 'terracotta' }], photo: BUILT_IN_PHOTO('water-jar') },
+  // Outdoor.
+  'parasol': { kind: 'parasol', label: 'Parasol', category: 'outdoor', footprint: 'round', width: 240, depth: 240, height: ITEM_HEIGHTS['parasol'].default, slots: [{ key: 'canopy', label: 'Canopy', options: FABRICS, default: 'linen' }, { key: 'pole', label: 'Pole', options: [...WOODS, ...METALS], default: 'warm-oak' }], photo: BUILT_IN_PHOTO('parasol'), overhead: true },
+  'bicycle': { kind: 'bicycle', label: 'Bicycle', category: 'outdoor', footprint: 'rect', width: 175, depth: 58, height: ITEM_HEIGHTS['bicycle'].default, slots: [{ key: 'frame', label: 'Frame', options: [...METALS, 'navy', 'terracotta', 'olive'], default: 'navy' }], photo: BUILT_IN_PHOTO('bicycle') },
   'stairs': { kind: 'stairs', label: 'Stairs', category: 'structure', footprint: 'rect', width: 100, depth: 340, height: 300, slots: [{ key: 'tread', label: 'Treads', options: WOODS, default: 'warm-oak' }], photo: null },
   // People and pets (step 3g, D274): a fixed size (the contract's), no finishes. A seated customer
   // sits at chair height, so it goes on a chair; someone lazing lies in a hammock on its stand.
