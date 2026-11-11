@@ -364,10 +364,10 @@ describe('the shop designer on saved layouts', () => {
     expect(await saveButton(page).isEnabled()).toBe(true)
   })
 
-  it('without 3D graphics: a calm message, the lists and the table card still work, Try again draws it', { timeout: 60_000 }, async () => {
+  it('on a phone, the lists and QR work before WebGL starts and after graphics are lost inside a floor', { timeout: 120_000 }, async () => {
     // three.js reports the missing context itself before the view shows its message.
     allowBrowserProblems(/THREE\.WebGLRenderer: Error creating WebGL context/, /THREE\.WebGLRenderer: A WebGL context could not be created/)
-    const page = await signedIn()
+    const page = await signedIn(390, 844)
     await page.addInitScript(() => {
       const original = HTMLCanvasElement.prototype.getContext
       Object.assign(window, { webglOff: true })
@@ -381,7 +381,9 @@ describe('the shop designer on saved layouts', () => {
     await view.getByText('3D view is not available here').waitFor()
     await shot(page, '3d-unavailable')
 
-    const lists = page.getByRole('complementary', { name: 'Navigate the building' })
+    const openLists = () => view.getByRole('button', { name: 'Floors and tables' }).click()
+    const lists = page.getByRole('dialog', { name: 'Floors and tables' })
+    await openLists()
     await lists.getByTestId('list-table-L1').click()
     const card = page.getByTestId('table-card')
     await expect.poll(() => card.textContent()).toContain('Ground floor')
@@ -395,6 +397,27 @@ describe('the shop designer on saved layouts', () => {
     await view.getByRole('button', { name: 'Try again' }).click()
     await drawn(page)
     expect(await view.getByText('3D view is not available here').count()).toBe(0)
+    await expect.poll(() => card.textContent()).toContain('L1')
+
+    await page.getByTestId('quality').waitFor({ timeout: 45_000 })
+    await openLists()
+    await lists.getByRole('button', { name: 'Ground floor' }).click()
+    await lists.getByRole('button', { name: 'Enter floor' }).click()
+    await view.getByRole('button', { name: 'Back to building' }).waitFor()
+    await page.getByTestId('building-canvas').evaluate((canvas) => {
+      const extension = (canvas as HTMLCanvasElement).getContext('webgl2')?.getExtension('WEBGL_lose_context')
+      if (!extension) throw new Error('The browser cannot simulate WebGL context loss')
+      extension.loseContext()
+    })
+    await view.getByText('3D view is not available here').waitFor()
+    await openLists()
+    await lists.getByRole('heading', { name: 'Tables', exact: true }).waitFor()
+    await lists.getByTestId('list-table-L1').click()
+    await card.getByRole('button', { name: 'View QR' }).click()
+    await page.getByRole('dialog', { name: 'QR code: L1' }).waitFor()
+    await page.keyboard.press('Escape')
+    await view.getByRole('button', { name: 'Try again' }).click()
+    await drawn(page)
     await expect.poll(() => card.textContent()).toContain('L1')
   })
 

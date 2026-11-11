@@ -8,6 +8,7 @@ import type { BuiltScene, SceneInput } from './scene'
 import { buildGround, buildScene } from './scene'
 import type { StageOptions } from './stage'
 import { createStage, tween } from './stage'
+import { createTapTracker } from './tap-tracker'
 import { cm, fitDistance } from './units'
 
 /**
@@ -16,9 +17,12 @@ import { cm, fitDistance } from './units'
  * from its layout. A tap selects; a drag only turns the view.
  */
 
-export type ViewMode = 'exterior' | 'cutaway' | 'inside'
+export type BuildingNavigation
+  = | { mode: 'exterior' | 'cutaway' }
+    | { mode: 'inside', floorId: string, viewpointId: string, viewpoints: Viewpoint[] }
 
 export interface BuildingViewerOptions extends StageOptions {
+  onNavigationChange?: (navigation: BuildingNavigation) => void
   onSelectTable?: (tableId: string | null) => void
   onSelectFloor?: (floorId: string) => void
 }
@@ -28,7 +32,6 @@ export interface BuildingViewer {
   setMode: (mode: 'exterior' | 'cutaway') => Promise<void>
   enterFloor: (floorId: string, viewpointId?: string) => Promise<void>
   leaveFloor: () => Promise<void>
-  viewpoints: (floorId: string) => Viewpoint[]
   selectTable: (tableId: string | null, options?: { focus?: boolean }) => void
   focusFloor: (floorId: string) => Promise<void>
   fit: () => Promise<void>
@@ -40,21 +43,19 @@ export interface BuildingViewer {
 /** Extra height between floors in the cutaway. */
 const EXPLODE_GAP = 1.5
 const EYE_HEIGHT = 1.5
-/** A tap moves less than this many pixels. */
-const TAP_SLOP = 6
 
 export function createBuildingViewer(options: BuildingViewerOptions): BuildingViewer {
   const stage = createStage(options)
   const { camera, controls } = stage
   let built: BuiltScene | null = null
   let input: SceneInput | null = null
-  let mode: ViewMode = 'exterior'
-  let insideFloor: string | null = null
+  let navigation: BuildingNavigation = { mode: 'exterior' }
   let selected: string | null = null
   let explode = 0
   let overviewMaxDistance = 80
   let cameraFlight = 0
-  let saved: { position: Vector3, target: Vector3 } | null = null
+  let navigationRequest = 0
+  let saved: { position: Vector3, target: Vector3, fov: number } | null = null
   const floorLabels: CSS2DObject[] = []
   let tableLabel: CSS2DObject | null = null
   const highlighted = new Map<Mesh, Material | Material[]>()
@@ -63,6 +64,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
 
   function setScene(next: SceneInput) {
     const first = !built
+    const layoutChanged = input?.layout !== next.layout
     input = next
     highlighted.clear()
     stage.clearContent()
@@ -85,6 +87,11 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     if (first) {
       placeCamera(new Vector3(0.9, 0.85, 1.35))
       stage.measure()
+    }
+    else if (layoutChanged && navigation.mode === 'inside') {
+      const points = viewpoints(navigation.floorId)
+      if (points.length) void enterFloor(navigation.floorId, navigation.viewpointId)
+      else void setMode('cutaway')
     }
     stage.shadowsChanged()
   }
@@ -133,12 +140,13 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
 
   function applyVisibility() {
     if (!built) return
-    const inside = mode === 'inside' ? built.floors.find(floor => floor.id === insideFloor) : undefined
+    const insideId = navigation.mode === 'inside' ? navigation.floorId : null
+    const inside = built.floors.find(floor => floor.id === insideId)
     for (const floor of built.floors) {
       floor.group.visible = !inside || floor.index <= inside.index
-      for (const roof of floor.roofs) roof.visible = mode === 'exterior'
+      for (const roof of floor.roofs) roof.visible = navigation.mode === 'exterior'
     }
-    for (const label of floorLabels) label.visible = mode === 'cutaway'
+    for (const label of floorLabels) label.visible = navigation.mode === 'cutaway'
     if (tableLabel) tableLabel.visible = true
   }
 
@@ -147,7 +155,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     if (!built) return
     for (const floor of built.floors) {
       for (const wall of floor.walls) {
-        if (mode !== 'cutaway') {
+        if (navigation.mode !== 'cutaway') {
           wall.object.visible = true
           continue
         }
@@ -157,14 +165,28 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     }
   }
 
-  async function setMode(next: 'exterior' | 'cutaway') {
-    if (mode === 'inside') await leaveFloor()
-    mode = next
+  function beginNavigation(next: BuildingNavigation) {
+    const request = ++navigationRequest
+    cameraFlight++
+    navigation = next
     applyVisibility()
+    options.onNavigationChange?.(navigation)
+    return () => request === navigationRequest
+  }
+
+  async function setMode(next: 'exterior' | 'cutaway') {
+    const restore = saved
+    const current = beginNavigation({ mode: next })
+    exteriorLimits()
+    if (restore) {
+      camera.fov = restore.fov
+      camera.updateProjectionMatrix()
+    }
     const from = explode
     const to = next === 'cutaway' ? 1 : 0
-    await tween(stage, 520, progress => applyExplode(from + (to - from) * progress))
-    stage.shadowsChanged()
+    if (!await tween(stage, from === to ? 0 : 520, progress => applyExplode(from + (to - from) * progress), current) || !current()) return
+    if (restore) await flyTo(restore.position, restore.target, 600, current)
+    if (current()) saved = null
   }
 
   function viewpoints(floorId: string): Viewpoint[] {
@@ -177,13 +199,13 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   async function enterFloor(floorId: string, viewpointId?: string) {
     if (!built) return
     const floor = built.floors.find(candidate => candidate.id === floorId)
-    const point = viewpoints(floorId).find(candidate => candidate.id === viewpointId) ?? viewpoints(floorId)[0]
+    const points = viewpoints(floorId)
+    const point = points.find(candidate => candidate.id === viewpointId) ?? points[0]
     if (!floor || !point) return
-    if (mode !== 'inside') saved = { position: camera.position.clone(), target: controls.target.clone() }
-    mode = 'inside'
-    insideFloor = floorId
-    applyVisibility()
-    if (explode !== 0) await tween(stage, 300, progress => applyExplode(explode * (1 - progress)))
+    saved ??= { position: camera.position.clone(), target: controls.target.clone(), fov: camera.fov }
+    const current = beginNavigation({ mode: 'inside', floorId, viewpointId: point.id, viewpoints: points })
+    const from = explode
+    if (from !== 0 && (!await tween(stage, 300, progress => applyExplode(from * (1 - progress)), current) || !current())) return
     applyExplode(0)
     const base = floor.elevation
     const eye = new Vector3(cm(point.eye.x), base + EYE_HEIGHT, cm(point.eye.y))
@@ -196,36 +218,28 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     controls.minPolarAngle = 0.25 * Math.PI
     controls.maxPolarAngle = 0.7 * Math.PI
     controls.rotateSpeed = -0.35
-    await flyTo(eye, target, 700)
-    stage.shadowsChanged()
+    await flyTo(eye, target, 700, current)
   }
 
   async function leaveFloor() {
-    if (mode !== 'inside') return
-    mode = 'cutaway'
-    insideFloor = null
-    exteriorLimits()
-    applyVisibility()
-    await tween(stage, 400, progress => applyExplode(progress))
-    if (saved) await flyTo(saved.position, saved.target, 600)
-    saved = null
+    if (navigation.mode === 'inside') await setMode('cutaway')
   }
 
-  async function flyTo(position: Vector3, target: Vector3, duration: number) {
+  async function flyTo(position: Vector3, target: Vector3, duration: number, isCurrent: () => boolean = () => true) {
     const flight = ++cameraFlight
+    const current = () => flight === cameraFlight && isCurrent()
     const fromPosition = camera.position.clone()
     const fromTarget = controls.target.clone()
     await tween(stage, duration, (progress) => {
-      if (flight !== cameraFlight) return
       camera.position.lerpVectors(fromPosition, position, progress)
       controls.target.lerpVectors(fromTarget, target, progress)
-    })
-    if (flight === cameraFlight) controls.update()
+    }, current)
+    if (current()) controls.update()
   }
 
   async function focusFloor(floorId: string) {
     const floor = built?.floors.find(candidate => candidate.id === floorId)
-    if (!floor || mode === 'inside') return
+    if (!floor || navigation.mode === 'inside') return
     const center = floor.center.clone().add(new Vector3(0, floor.group.position.y + floor.height / 2, 0))
     const offset = camera.position.clone().sub(controls.target)
     await flyTo(center.clone().add(offset), center, 450)
@@ -236,7 +250,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     highlighted.clear()
     tableLabel?.removeFromParent()
     tableLabel = null
-    if (tableId !== selected) cameraFlight++
+    if (tableId !== selected && navigation.mode !== 'inside') cameraFlight++
     selected = tableId
     const node = tableId ? built?.tables.get(tableId) : undefined
     if (!node) {
@@ -251,7 +265,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     tableLabel = new CSS2DObject(labelElement(node.label, 'table'))
     tableLabel.position.copy(node.labelAnchor)
     node.object.parent?.add(tableLabel)
-    if (selectOptions.focus && mode !== 'inside') {
+    if (selectOptions.focus && navigation.mode !== 'inside') {
       const world = node.object.getWorldPosition(new Vector3())
       const offset = camera.position.clone().sub(controls.target)
       void flyTo(world.clone().add(offset), world, 450)
@@ -260,7 +274,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   }
 
   async function fit() {
-    if (mode === 'inside') return
+    if (navigation.mode === 'inside') return
     const sphere = currentBounds().getBoundingSphere(new Sphere())
     const direction = camera.position.clone().sub(controls.target).normalize()
     const distance = distanceToFit(sphere.radius)
@@ -268,7 +282,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   }
 
   function zoom(direction: 1 | -1) {
-    if (mode === 'inside') {
+    if (navigation.mode === 'inside') {
       camera.fov = Math.min(60, Math.max(20, camera.fov - direction * 6))
       camera.updateProjectionMatrix()
       stage.invalidate()
@@ -281,18 +295,12 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
 
   // A tap selects; a drag turns the view (touch and mouse alike).
   const raycaster = new Raycaster()
-  let down: { x: number, y: number } | null = null
+  const taps = createTapTracker()
   const canvas = options.canvas
-  const onDown = (event: PointerEvent) => {
-    down = { x: event.clientX, y: event.clientY }
-  }
   const onUp = (event: PointerEvent) => {
-    if (!down || Math.hypot(event.clientX - down.x, event.clientY - down.y) > TAP_SLOP || !built) {
-      down = null
-      return
-    }
-    down = null
+    if (!taps.up(event) || !built) return
     const rect = canvas.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
     const pointer = new Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
     raycaster.setFromCamera(pointer, camera)
     const hit = raycaster.intersectObject(built.root, true).find(intersection => isShown(intersection.object))
@@ -303,16 +311,24 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
       return
     }
     const floorId = hit && findUp(hit.object, 'floorId')
-    if (floorId && mode !== 'inside') options.onSelectFloor?.(floorId)
+    if (floorId && navigation.mode !== 'inside') options.onSelectFloor?.(floorId)
     selectTable(null)
     options.onSelectTable?.(null)
   }
-  canvas.addEventListener('pointerdown', onDown)
+  canvas.addEventListener('pointerdown', taps.down)
+  canvas.addEventListener('pointermove', taps.move)
   canvas.addEventListener('pointerup', onUp)
+  canvas.addEventListener('pointercancel', taps.cancel)
+  canvas.addEventListener('lostpointercapture', taps.cancel)
 
   function dispose() {
-    canvas.removeEventListener('pointerdown', onDown)
+    navigationRequest++
+    cameraFlight++
+    canvas.removeEventListener('pointerdown', taps.down)
+    canvas.removeEventListener('pointermove', taps.move)
     canvas.removeEventListener('pointerup', onUp)
+    canvas.removeEventListener('pointercancel', taps.cancel)
+    canvas.removeEventListener('lostpointercapture', taps.cancel)
     stage.dispose()
   }
 
@@ -321,7 +337,6 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     setMode,
     enterFloor,
     leaveFloor,
-    viewpoints,
     selectTable,
     focusFloor,
     fit,

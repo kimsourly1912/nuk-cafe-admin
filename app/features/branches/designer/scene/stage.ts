@@ -43,8 +43,8 @@ export interface Stage {
   quality: () => Quality
   /** Draws the next frame (once). */
   invalidate: () => void
-  /** Runs `step` every frame until it returns false. */
-  animate: (step: (now: number) => boolean) => void
+  /** Runs `step` every frame until it returns false. Settles pending work on disposal. */
+  animate: (step: (now: number) => boolean, cancel: () => void) => void
   /** Called before each frame is drawn. */
   onBeforeRender: (callback: () => void) => void
   /** The scene's objects moved or changed: draw the shadows again. */
@@ -76,9 +76,21 @@ export function createStage(options: StageOptions): Stage {
 
   const scene = new Scene()
   const pmrem = new PMREMGenerator(renderer)
-  const environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
-  pmrem.dispose()
-  scene.environment = environment
+  const room = new RoomEnvironment()
+  const environment = (() => {
+    try {
+      return pmrem.fromScene(room, 0.04)
+    }
+    catch (error) {
+      renderer.dispose()
+      throw error
+    }
+    finally {
+      room.dispose()
+      pmrem.dispose()
+    }
+  })()
+  scene.environment = environment.texture
   scene.environmentIntensity = 0.55
 
   const camera = new PerspectiveCamera(32, 1, 0.05, 400)
@@ -101,7 +113,7 @@ export function createStage(options: StageOptions): Stage {
   const materials = createMaterialLibrary()
   const context = createBuildContext(materials)
   const contentStart = scene.children.length
-  const tasks = new Set<(now: number) => boolean>()
+  const tasks = new Map<(now: number) => boolean, () => void>()
   const beforeRender: (() => void)[] = []
   let pointLights: PointLight[] = []
   let quality: Quality = 'high'
@@ -145,7 +157,7 @@ export function createStage(options: StageOptions): Stage {
   function loop(now: number) {
     frame = 0
     let again = controls.update()
-    for (const task of [...tasks]) {
+    for (const task of [...tasks.keys()]) {
       if (task(now)) again = true
       else tasks.delete(task)
     }
@@ -207,12 +219,16 @@ export function createStage(options: StageOptions): Stage {
   function clearContent() {
     for (const child of scene.children.slice(contentStart)) scene.remove(child)
     disposeBuildContext(context)
+    labels?.domElement.replaceChildren()
     pointLights = []
   }
 
   function dispose() {
+    if (disposed) return
     disposed = true
     cancelAnimationFrame(frame)
+    for (const cancel of tasks.values()) cancel()
+    tasks.clear()
     observer.disconnect()
     canvas.removeEventListener('webglcontextlost', contextLost)
     controls.dispose()
@@ -221,7 +237,6 @@ export function createStage(options: StageOptions): Stage {
     environment.dispose()
     sun.shadow.map?.dispose()
     renderer.dispose()
-    labels?.domElement.replaceChildren()
   }
 
   applyQuality('high')
@@ -235,8 +250,12 @@ export function createStage(options: StageOptions): Stage {
     context,
     quality: () => quality,
     invalidate,
-    animate: (step) => {
-      tasks.add(step)
+    animate: (step, cancel) => {
+      if (disposed) {
+        cancel()
+        return
+      }
+      tasks.set(step, cancel)
       invalidate()
     },
     onBeforeRender: callback => beforeRender.push(callback),
@@ -260,26 +279,31 @@ export function createStage(options: StageOptions): Stage {
 }
 
 /** Eases a value from 0 to 1 over `duration` ms; instant when the person prefers less motion. */
-export function tween(stage: Stage, duration: number, step: (progress: number) => void): Promise<void> {
+export function tween(stage: Stage, duration: number, step: (progress: number) => void, isCurrent: () => boolean = () => true): Promise<boolean> {
   const instant = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   return new Promise((resolve) => {
+    if (!isCurrent()) return resolve(false)
     if (instant || duration <= 0) {
       step(1)
       stage.shadowsChanged()
-      resolve()
+      resolve(true)
       return
     }
     let start = -1
     stage.animate((now) => {
+      if (!isCurrent()) {
+        resolve(false)
+        return false
+      }
       if (start < 0) start = now
       const linear = Math.min(1, (now - start) / duration)
       step(1 - (1 - linear) ** 3)
       if (linear >= 1) {
         stage.shadowsChanged()
-        resolve()
+        resolve(true)
         return false
       }
       return true
-    })
+    }, () => resolve(false))
   })
 }

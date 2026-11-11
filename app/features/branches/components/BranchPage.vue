@@ -264,7 +264,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
             />
           </div>
           <div
-            v-else-if="!layout.floors.length"
+            v-else-if="!layout.floors.some(floor => floor.outline.length >= 3)"
             class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center"
           >
             <UIcon

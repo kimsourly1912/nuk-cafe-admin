@@ -1,6 +1,5 @@
 import type { Edge, Floor, Opening, Placement, Point, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, signedArea } from '#shared/contracts/shop-layout'
-import { ITEM_SPECS } from './catalog'
 
 /**
  * Layout geometry shared by the 2D editor and the 3D builders (D273). Pure functions in layout
@@ -179,9 +178,36 @@ export function boundsOf(points: readonly Point[]): Bounds {
   }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity })
 }
 
-export function centroid(points: readonly Point[]): Point {
-  const sum = points.reduce((total, point) => ({ x: total.x + point.x, y: total.y + point.y }), { x: 0, y: 0 })
-  return { x: sum.x / points.length, y: sum.y / points.length }
+export function floorInteriorPoint(outline: readonly Point[]): Point | undefined {
+  if (outline.length < 3) return undefined
+  const sum = outline.reduce((total, point) => ({ x: total.x + point.x, y: total.y + point.y }), { x: 0, y: 0 })
+  const average = { x: sum.x / outline.length, y: sum.y / outline.length }
+  if (pointInPolygon(average, outline)) return average
+
+  // A concave outline's average can land outside. Between vertex heights, choose the
+  // midpoint of the widest span inside the floor.
+  const heights = [...new Set(outline.map(point => point.y))].sort((a, b) => a - b)
+  let best: Point | undefined
+  let widest = 0
+  for (let index = 1; index < heights.length; index++) {
+    const y = (heights[index - 1]! + heights[index]!) / 2
+    const crossings: number[] = []
+    for (let side = 0; side < outline.length; side++) {
+      const from = outline[side]!
+      const to = outline[(side + 1) % outline.length]!
+      if ((from.y > y) === (to.y > y)) continue
+      crossings.push(from.x + (to.x - from.x) * (y - from.y) / (to.y - from.y))
+    }
+    crossings.sort((a, b) => a - b)
+    for (let edge = 1; edge < crossings.length; edge += 2) {
+      const left = crossings[edge - 1]!
+      const right = crossings[edge]!
+      if (right - left <= widest) continue
+      widest = right - left
+      best = { x: (left + right) / 2, y }
+    }
+  }
+  return best
 }
 
 /** The unit vector pointing out of the floor from edge `index`, whichever way the outline runs. */
@@ -245,7 +271,8 @@ export interface Viewpoint {
  * no Entrance.
  */
 export function floorViewpoints(floor: Floor, floorBelow?: Floor): Viewpoint[] {
-  const middle = centroid(floor.outline)
+  const middle = floorInteriorPoint(floor.outline)
+  if (!middle) return []
   const points: Viewpoint[] = []
   const inside = (index: number, along: number, inward: number): Point => {
     const point = pointOnEdge(floor.outline, index, along)
@@ -256,7 +283,7 @@ export function floorViewpoints(floor: Floor, floorBelow?: Floor): Viewpoint[] {
   if (door) points.push({ id: 'entrance', label: 'Entrance', eye: inside(door.index, door.opening.offset + door.opening.width / 2, 120), target: middle })
   const stairs = [...(floorBelow?.items ?? []), ...floor.items].find(item => item.kind === 'stairs' && pointInPolygon(item, floor.outline))
   if (stairs) {
-    const top = rotatePoint({ x: 0, y: -ITEM_SPECS.stairs.depth / 2 + 40 }, stairs.rotation)
+    const top = rotatePoint({ x: 0, y: -stairs.depth / 2 + 40 }, stairs.rotation)
     points.push({ id: 'stairs', label: 'Top of stairs', eye: { x: stairs.x + top.x + 60, y: stairs.y + top.y + 60 }, target: middle })
   }
   const window = findOpening(floor.edges, 'window', true)
@@ -264,8 +291,9 @@ export function floorViewpoints(floor: Floor, floorBelow?: Floor): Viewpoint[] {
     const eye = inside(window.index, window.opening.offset + window.opening.width / 2, 90)
     points.push({ id: 'window', label: 'Window side', eye, target: { x: 2 * middle.x - eye.x, y: 2 * middle.y - eye.y } })
   }
-  if (!points.length) points.push({ id: 'centre', label: 'Middle', eye: middle, target: { x: middle.x, y: middle.y - 100 } })
-  return points
+  const usable = points.filter(point => pointInPolygon(point.eye, floor.outline))
+  if (!usable.length) usable.push({ id: 'centre', label: 'Middle', eye: middle, target: { x: middle.x, y: middle.y - 100 } })
+  return usable
 }
 
 function findOpening(edges: readonly Edge[], kind: Opening['kind'], longest = false): { index: number, opening: Opening } | undefined {
