@@ -4,7 +4,8 @@ import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { chairPoses, floorViewpoints, outsideOutline, outwardNormal, pointInPolygon, rotatePoint, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, floorViewpoints, outsideOutline, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, snap, wallPieces } from '../designer/geometry'
+import type { Sized } from '../designer/geometry'
 
 const messages = (layout: unknown) => (v.safeParse(layoutSchema, layout).issues ?? []).map(issue => issue.message)
 const round = { shape: 'round', chair: 'cafe-chair' } as const
@@ -142,5 +143,44 @@ describe('the plan', () => {
 
   it('falls back to the first built-in look for an unknown id', () => {
     expect(findLook(BUILT_IN_LOOKS, 'gone')).toBe(BUILT_IN_LOOKS[0])
+  })
+})
+
+describe('corner handles and Duplicate (2B)', () => {
+  const table: Sized = { x: 100, y: 100, rotation: 0, width: 120, depth: 80 }
+  const limits = { round: false, min: 40, max: 600 }
+  const corner = (piece: Sized, index: number) => rectCorners(piece, piece.width, piece.depth, piece.rotation)[index]!
+
+  it('grows from the dragged corner in 5 cm steps while the opposite corner stays put', () => {
+    const grown = resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 33, y: 12 } })
+    expect(grown).toMatchObject({ width: 155, depth: 90, rotation: 0 })
+    // The centre is whole centimetres, so the fixed corner may move by half a centimetre.
+    expect(Math.abs(corner(grown, 0).x - corner(table, 0).x)).toBeLessThanOrEqual(0.5)
+    expect(Math.abs(corner(grown, 0).y - corner(table, 0).y)).toBeLessThanOrEqual(0.5)
+    const fromTopLeft = resizeFromCorner(table, { ...limits, corner: 0, delta: { x: -20, y: -20 } })
+    expect(fromTopLeft).toEqual({ x: 90, y: 90, rotation: 0, width: 140, depth: 100 })
+    expect(corner(fromTopLeft, 2)).toEqual(corner(table, 2))
+  })
+
+  it('follows the piece\'s turn: on a table turned 90°, dragging down the screen widens it', () => {
+    const turned = { ...table, rotation: 90 }
+    const grown = resizeFromCorner(turned, { ...limits, corner: 2, delta: { x: 0, y: 40 } })
+    expect(grown).toEqual({ x: 100, y: 120, rotation: 90, width: 160, depth: 80 })
+    const fixed = corner(turned, 0)
+    expect(corner(grown, 0).x).toBeCloseTo(fixed.x)
+    expect(corner(grown, 0).y).toBeCloseTo(fixed.y)
+  })
+
+  it('keeps within the size limits, and a round piece round', () => {
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: -500, y: -500 } })).toMatchObject({ width: 40, depth: 40 })
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 900, y: 900 } })).toMatchObject({ width: 600, depth: 600 })
+    const round = { ...table, width: 70, depth: 70 }
+    expect(resizeFromCorner(round, { ...limits, round: true, corner: 2, delta: { x: 30, y: 10 } })).toMatchObject({ width: 100, depth: 100, x: 115, y: 115 })
+    expect(resizeFromCorner(round, { ...limits, round: true, corner: 1, delta: { x: 2, y: 25 } })).toMatchObject({ width: 45, depth: 45 })
+  })
+
+  it('puts a copy beside the original, clear of it, turned the same way', () => {
+    expect(besideOf({ x: 0, y: 40, rotation: 0 }, 100, 60)).toEqual({ x: 125, y: 40 })
+    expect(besideOf({ x: 0, y: 40, rotation: 90 }, 200, 60)).toEqual({ x: 75, y: 40 })
   })
 })

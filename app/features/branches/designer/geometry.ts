@@ -107,6 +107,52 @@ export function rectCorners(center: Point, width: number, depth: number, rotatio
   })
 }
 
+/** A piece on the plan: where it stands, how it's turned and its size. */
+export interface Sized extends Pose {
+  width: number
+  depth: number
+}
+
+export interface ResizeOptions {
+  /** Which corner is dragged, in `rectCorners` order (0 top-left before turning, then clockwise). */
+  corner: number
+  /** How far the pointer moved, in plan centimetres. */
+  delta: Point
+  /** Round pieces stay round: width and depth change together. */
+  round: boolean
+  min: number
+  max: number
+}
+
+/**
+ * A corner handle dragged on the plan (D273, frame 2B): the opposite corner stays where it is, so
+ * the centre moves by half the change. Sizes snap to 5 cm (the panel's step) within the limits; the
+ * centre is rounded to whole centimetres, as the layout stores it.
+ */
+export function resizeFromCorner(start: Sized, options: ResizeOptions): Sized {
+  const { corner, delta, min, max } = options
+  const sx = corner === 1 || corner === 2 ? 1 : -1
+  const sy = corner >= 2 ? 1 : -1
+  // The pointer's move in the piece's own (unturned) directions, outwards from the centre.
+  const local = rotatePoint(delta, -start.rotation)
+  const along = { x: sx * local.x, y: sy * local.y }
+  const fit = (value: number) => Math.min(max, Math.max(min, snap(value, FINE_GRID_CM)))
+  let width = fit(start.width + along.x)
+  let depth = fit(start.depth + along.y)
+  if (options.round) width = depth = fit(start.width + (Math.abs(along.x) >= Math.abs(along.y) ? along.x : along.y))
+  const shift = rotatePoint({ x: (sx * (width - start.width)) / 2, y: (sy * (depth - start.depth)) / 2 }, start.rotation)
+  return { x: Math.round(start.x + shift.x), y: Math.round(start.y + shift.y), rotation: start.rotation, width, depth }
+}
+
+/**
+ * Where a copy of a piece goes (Duplicate): beside it on the right, clear of it by about one grid
+ * step, turned the same way. `width` and `depth` are what it takes up (a table's chairs included).
+ */
+export function besideOf(pose: Pose, width: number, depth: number): Point {
+  const xs = rectCorners({ x: 0, y: 0 }, width, depth, pose.rotation).map(corner => corner.x)
+  return { x: snap(pose.x + Math.max(...xs) - Math.min(...xs) + GRID_CM), y: pose.y }
+}
+
 export function pointInPolygon(point: Point, polygon: readonly Point[]): boolean {
   let inside = false
   for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {

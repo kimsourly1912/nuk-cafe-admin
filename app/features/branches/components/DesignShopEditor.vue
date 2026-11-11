@@ -7,13 +7,14 @@
  * from the library or with Place on map (then the move pad), so the editor works without dragging
  * on touch, with a keyboard and in the e2e tests.
  */
-import { createReusableTemplate } from '@vueuse/core'
+import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import type { DiningTable } from '#shared/contracts/branches'
 import type { CustomLook, Finish, Floor, InnerWall, ItemKind, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory } from '../designer/catalog'
 import { FINISH_SWATCHES, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK } from '../designer/catalog'
-import { FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, outsideOutline, snap } from '../designer/geometry'
+import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, outsideOutline, placementExtent, snap } from '../designer/geometry'
+import type { Sized } from '../designer/geometry'
 import { areaM2, edgeNames, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import { isMovable } from '../designer/plan'
@@ -47,7 +48,7 @@ const floorIndex = computed(() => (floor.value ? floors.value.indexOf(floor.valu
 const selection = props.editor.selection
 const showBelow = ref(true)
 const mode = ref<PlanMode>('select')
-const canvas = useTemplateRef('canvas')
+const canvas = useTemplateRef<InstanceType<typeof FloorPlanCanvas>>('canvas')
 const libraryOpen = ref(false)
 const detailsOpen = ref(false)
 const confirm = useConfirm()
@@ -174,6 +175,12 @@ function move(target: PlanSelection, position: Point) {
 function rotate(target: PlanSelection, rotation: number) {
   if (target.kind === 'table') updateTable(target.id, { rotation })
   else if (target.kind === 'item') updateItem(target.id, { rotation })
+}
+
+/** A corner handle on the plan: the new size and the centre that keeps the opposite corner. */
+function resize(target: PlanSelection, size: Omit<Sized, 'rotation'>) {
+  if (target.kind === 'table') updateTable(target.id, size)
+  else if (target.kind === 'item') updateItem(target.id, size)
 }
 
 /** A table leaves the map (back to Unplaced, its QR untouched); furniture and walls are deleted. */
@@ -328,6 +335,37 @@ async function placeLook(lookId: string, at: Point) {
   if (tableId && !placedIds.value.has(tableId)) placeTable(tableId, at, lookId)
 }
 
+/**
+ * Duplicate look (2B): the same look, size and turn for another real table, beside this one. It
+ * asks which table, as a look from the library does; it never copies this table or its QR code.
+ */
+async function duplicateLook(tableId: string) {
+  const source = layout.value.placements.find(placement => placement.tableId === tableId)
+  if (!source) return
+  const choice = await pickModal.open({ lookName: findLook(props.looks, source.lookId).name, tables: unplaced.value }).result
+  if (!choice) return
+  const copyId = choice === 'new' ? (await newTable())?.id : choice
+  // The dialog waited: read the original again (an undo may have taken it off the map meanwhile).
+  const original = layout.value.placements.find(placement => placement.tableId === tableId)
+  if (!copyId || !original || placedIds.value.has(copyId)) return
+  const extent = placementExtent(original, findLook(props.looks, original.lookId))
+  const at = besideOf(original, extent.width, extent.depth)
+  const { floorId, rotation, width, depth, lookId } = original
+  draft.change(next => next.placements.push({ tableId: copyId, floorId, ...at, rotation, width, depth, lookId }))
+  props.editor.showFloor(floorId)
+  selection.value = { kind: 'table', id: copyId }
+}
+
+/** Duplicate (furniture): a copy with the same size, turn and finishes, beside it. */
+function duplicateItem(itemId: string) {
+  const item = floor.value?.items.find(candidate => candidate.id === itemId)
+  if (!item) return
+  const id = newLayoutId('item')
+  const at = besideOf(item, item.width, item.depth)
+  changeFloor(target => target.items.push({ ...structuredClone(toRaw(item)), id, ...at }))
+  selection.value = { kind: 'item', id }
+}
+
 // --- The cafe's own looks (step 3a) ---
 
 const lookModal = overlay.create(LookFormModal)
@@ -424,6 +462,33 @@ defineShortcuts({
   meta_z: () => draft.undo(),
   meta_shift_z: () => draft.redo(),
   meta_y: () => draft.redo(),
+})
+
+// --- Quick actions beside the selection (2B) ---
+
+const planArea = useTemplateRef<HTMLElement>('planArea')
+const quickBar = useTemplateRef<HTMLElement>('quickBar')
+const { width: planWidth, height: planHeight } = useElementSize(planArea)
+const { width: barWidth, height: barHeight } = useElementSize(quickBar)
+
+/**
+ * Below the selection, or above it where there's no room, kept inside the plan. None while the
+ * selection is moved, turned or resized, or is off screen.
+ */
+const quickBarStyle = computed((): { left: string, top: string } | undefined => {
+  const box = canvas.value?.selectionBox
+  const area = { width: planWidth.value, height: planHeight.value }
+  if (!box || box.right < 0 || box.bottom < 0 || box.left > area.width || box.top > area.height) return undefined
+  // Clear of the corner handles' reach (16 px), and 8 px inside the plan's edges.
+  const clear = 20
+  const gap = 8
+  const within = (value: number, size: number, room: number) => Math.min(Math.max(gap, value), Math.max(gap, room - size - gap))
+  const below = box.bottom + clear
+  const top = below + barHeight.value <= area.height - gap ? below : box.top - clear - barHeight.value
+  return {
+    left: `${within((box.left + box.right) / 2 - barWidth.value / 2, barWidth.value, area.width)}px`,
+    top: `${within(top, barHeight.value, area.height)}px`,
+  }
 })
 
 const position = computed(() => {
@@ -966,6 +1031,7 @@ function chooseStarter(starter: Starter) {
 
     <!-- The plan -->
     <main
+      ref="planArea"
       aria-label="Floor plan"
       class="relative min-w-0 flex-1 bg-muted"
     >
@@ -982,10 +1048,69 @@ function chooseStarter(starter: Starter) {
         @select="selection = $event"
         @move="move"
         @rotate="rotate"
+        @resize="resize"
         @remove="remove"
         @shape="updateShape"
         @add-wall="addWall"
       />
+
+      <!-- Quick actions next to the selection (2B): the common moves without the panel. -->
+      <div
+        v-if="mode === 'select' && quickBarStyle && (selectedPlacement || selectedItem)"
+        ref="quickBar"
+        role="toolbar"
+        :aria-label="selectedPlacement ? `${tableLabel(selectedPlacement.tableId) ?? 'Table'} quick actions` : 'Furniture quick actions'"
+        class="absolute flex items-center gap-0.5 rounded-lg border border-default bg-default p-1 shadow-md"
+        :style="quickBarStyle"
+        data-testid="quick-actions"
+      >
+        <UButton
+          icon="i-lucide-rotate-cw"
+          color="neutral"
+          variant="ghost"
+          aria-label="Rotate 90°"
+          @click="turn(90)"
+        >
+          <span class="hidden sm:inline">Rotate 90°</span>
+        </UButton>
+        <USeparator
+          orientation="vertical"
+          class="h-5"
+        />
+        <UButton
+          v-if="selectedPlacement"
+          icon="i-lucide-copy"
+          color="neutral"
+          variant="ghost"
+          aria-label="Duplicate look"
+          @click="duplicateLook(selectedPlacement.tableId)"
+        >
+          <span class="hidden sm:inline">Duplicate look</span>
+        </UButton>
+        <UButton
+          v-else-if="selectedItem"
+          icon="i-lucide-copy"
+          color="neutral"
+          variant="ghost"
+          aria-label="Duplicate"
+          @click="duplicateItem(selectedItem.id)"
+        >
+          <span class="hidden sm:inline">Duplicate</span>
+        </UButton>
+        <USeparator
+          orientation="vertical"
+          class="h-5"
+        />
+        <UButton
+          :icon="selectedPlacement ? 'i-lucide-map-pin-off' : 'i-lucide-trash-2'"
+          color="neutral"
+          variant="ghost"
+          :aria-label="selectedPlacement ? 'Remove from map' : 'Delete'"
+          @click="remove(selection!)"
+        >
+          <span class="hidden sm:inline">{{ selectedPlacement ? 'Remove from map' : 'Delete' }}</span>
+        </UButton>
+      </div>
 
       <div class="pointer-events-none absolute inset-x-3 top-3 flex flex-col gap-2">
         <!-- A tool's bar replaces the floor bar while it's open (3A, 9A). -->

@@ -3096,3 +3096,8 @@ Verification: migrated SQLite forced interleavings, populated local workerd/D1 r
   - **A new look never copies another look's photo**: an upload is one record's at a time.
 
   [Plan → Step 3b](plans/shop-designer.md#step-3b-look-photos-built-2026-11-11).
+- **Step 2d (2026-11-11, built before the pilot at the owner's choice):** frame 2B's quick actions beside the selection (a table: Rotate 90°, Duplicate look, Remove from map; furniture: Rotate 90°, Duplicate, Delete) and corner handles that resize tables and furniture on the plan. Decided:
+  - **Duplicate look asks which table** (the library look's dialog) and copies only the look, size and turn: a placement is a real table, so a copy of the table itself would be a second QR code nobody asked for.
+  - **A corner keeps the opposite corner fixed** and sizes snap to 5 cm, the panel's step, not the 25 cm grid: café tables come in 70, 75 and 80 cm. The handles hide when the piece is small on screen, where they'd cover it and turn every drag into a resize.
+
+  [Plan → Step 2d](plans/shop-designer.md#step-2d-quick-actions-and-corner-handles-built-2026-11-11).

@@ -4,8 +4,9 @@
  *
  * - **select:** tap or click selects a table, furniture, an inside wall or an outline edge; a drag
  *   past a few pixels moves the selected piece, snapped to the 25 cm grid (5 cm with Shift); the
- *   round handle turns it in 15° steps (free with Shift). With the plan focused, arrow keys move
- *   the selection, R turns it, Delete removes it.
+ *   round handle turns it in 15° steps (free with Shift); a corner handle resizes it in 5 cm steps
+ *   with the opposite corner staying put (2B). With the plan focused, arrow keys move the
+ *   selection, R turns it, Delete removes it.
  * - **outline** (frame 3A): with no outline yet, clicks add corners and clicking the first corner,
  *   a double-click or Enter closes the shape; otherwise corners drag (keeping right angles unless
  *   Alt is held), a round edge handle adds a corner, a clicked corner moves with the arrow keys and
@@ -18,9 +19,10 @@
  */
 import { useElementSize } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength } from '#shared/contracts/shop-layout'
+import { edgeLength, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, ITEM_SPECS } from '../designer/catalog'
-import { boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outsideOutline, outwardNormal, placementExtent, pointOnEdge, rectCorners, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import { boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outsideOutline, outwardNormal, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import type { Sized } from '../designer/geometry'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, removeCorner } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
@@ -40,6 +42,8 @@ const emit = defineEmits<{
   select: [selection: PlanSelection | null]
   move: [selection: PlanSelection, position: Point]
   rotate: [selection: PlanSelection, rotation: number]
+  /** A corner handle was dragged: the new size, and the centre that keeps the opposite corner. */
+  resize: [selection: PlanSelection, size: Omit<Sized, 'rotation'>]
   remove: [selection: PlanSelection]
   /** The outline changed (Draw outline): corners and edges together. */
   shape: [shape: FloorShape]
@@ -47,7 +51,7 @@ const emit = defineEmits<{
 }>()
 
 const svg = useTemplateRef<SVGSVGElement>('svg')
-const { width: screenWidth } = useElementSize(svg)
+const { width: screenWidth, height: screenHeight } = useElementSize(svg)
 const floorIndex = computed(() => props.layout.floors.findIndex(floor => floor.id === props.floorId))
 const floor = computed(() => props.layout.floors[floorIndex.value] ?? props.layout.floors[0]!)
 const below = computed(() => (props.showBelow ? props.layout.floors[floorIndex.value - 1] : undefined))
@@ -71,7 +75,7 @@ function fit() {
 watch(() => props.floorId, fit, { immediate: true })
 
 /** A gesture's live result, drawn instead of the stored position until the gesture ends. */
-const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number } | null>(null)
+const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number } | null>(null)
 /** The outline while a corner is dragged. */
 const liveShape = shallowRef<FloorShape | null>(null)
 const shape = computed<FloorShape>(() => liveShape.value ?? { outline: floor.value.outline, edges: floor.value.edges })
@@ -124,9 +128,10 @@ const edges = computed(() => shape.value.edges.map((edge, index) => {
   }
 }))
 
-function posed<T extends { x: number, y: number, rotation: number }>(selection: PlanSelection, object: T): T {
+function posed<T extends Sized>(selection: PlanSelection, object: T): T {
   const live = preview.value
-  return live && live.selection.kind === selection.kind && live.selection.id === selection.id ? { ...object, x: live.x, y: live.y, rotation: live.rotation } : object
+  if (!live || live.selection.kind !== selection.kind || live.selection.id !== selection.id) return object
+  return { ...object, x: live.x, y: live.y, rotation: live.rotation, width: live.width ?? object.width, depth: live.depth ?? object.depth }
 }
 
 const items = computed(() => floor.value.items.map(item => posed({ kind: 'item', id: item.id }, item)))
@@ -170,6 +175,47 @@ const isSelected = (kind: PlanSelection['kind'], id: string) => props.selection?
 /** Tables and furniture take part in the select tool only; the other tools draw over them. */
 const piecesActive = computed(() => props.mode === 'select')
 
+/** A selected table's or piece's outline on the plan, its turn handle included (the selection's drawing). */
+const selectionFrames = computed(() => {
+  const selection = props.selection
+  if (props.mode !== 'select' || !selection) return null
+  const table = selection.kind === 'table' ? placed.value.find(candidate => candidate.tableId === selection.id) : undefined
+  if (table) return { pose: table, width: table.extent.width + 12, depth: table.extent.depth + 12, handle: 56 }
+  const item = selection.kind === 'item' ? items.value.find(candidate => candidate.id === selection.id) : undefined
+  return item ? { pose: item, width: item.width + 16, depth: item.depth + 16, handle: 50 } : null
+})
+
+/**
+ * Where the selection is on screen, in pixels from the plan's top-left corner, or null while it's
+ * moved, turned or resized: the editor puts its quick actions next to it (frame 2B).
+ */
+const selectionBox = computed(() => {
+  const frame = selectionFrames.value
+  const screen = { width: screenWidth.value, height: screenHeight.value }
+  if (!frame || preview.value || !screen.width || !screen.height) return null
+  const { pose, width, depth, handle } = frame
+  const turnHandle = rotatePoint({ x: 0, y: -depth / 2 - handle - 8 }, pose.rotation)
+  const bounds = boundsOf([...rectCorners(pose, width, depth, pose.rotation), { x: pose.x + turnHandle.x, y: pose.y + turnHandle.y }])
+  // The viewBox is fitted whole into the element (xMidYMid meet).
+  const { x, y, width: viewWidth, height: viewHeight } = view.value
+  const scale = Math.min(screen.width / viewWidth, screen.height / viewHeight)
+  const left = (screen.width - viewWidth * scale) / 2
+  const top = (screen.height - viewHeight * scale) / 2
+  return {
+    left: left + (bounds.minX - x) * scale,
+    right: left + (bounds.maxX - x) * scale,
+    top: top + (bounds.minY - y) * scale,
+    bottom: top + (bounds.maxY - y) * scale,
+  }
+})
+
+/**
+ * The four corner handles of a selection frame, in its own (unturned) directions. None while the
+ * frame is small on screen: the handles would cover the piece, and a drag would resize it instead
+ * of moving it.
+ */
+const handleCorners = (width: number, depth: number) => (Math.min(width, depth) / perPixel.value >= 56 ? rectCorners({ x: 0, y: 0 }, width, depth, 0) : [])
+
 /** Screen → plan centimetres; null when the pointer is outside the plan. */
 function toPlan(clientX: number, clientY: number, inside = false): Point | null {
   const element = svg.value
@@ -199,6 +245,7 @@ function drawPoint(plan: Point, from: Point | undefined, free: boolean, fine: bo
 type Gesture
   = | { type: 'drag', selection: PlanSelection, startPlan: Point, origin: { x: number, y: number, rotation: number }, startClient: Point, moved: boolean }
     | { type: 'rotate', selection: PlanSelection, center: Point, rotation: number }
+    | { type: 'resize', selection: PlanSelection, corner: number, startPlan: Point, origin: Sized, round: boolean, min: number, max: number }
     | { type: 'corner', index: number, startPlan: Point, origin: Point, startClient: Point, moved: boolean }
     | { type: 'pan', startClient: Point, startView: typeof view.value, moved: boolean, plan: Point | null, event: { altKey: boolean, shiftKey: boolean } }
     | { type: 'pinch', distance: number, startView: typeof view.value, middle: Point }
@@ -207,10 +254,20 @@ const pointers = new Map<number, Point>()
 let gesture: Gesture | null = null
 const DRAG_SLOP_PX = 5
 
-function stored(selection: PlanSelection): { x: number, y: number, rotation: number } | undefined {
+function stored(selection: PlanSelection): Sized | undefined {
   if (selection.kind === 'table') return props.layout.placements.find(placement => placement.tableId === selection.id)
   if (selection.kind === 'item') return floor.value.items.find(item => item.id === selection.id)
   return undefined
+}
+
+/** What a corner handle may do to a piece: the contract's size limits, and whether it stays round. */
+function sizeRules(selection: PlanSelection): { round: boolean, min: number, max: number } {
+  if (selection.kind === 'table') {
+    const placement = props.layout.placements.find(candidate => candidate.tableId === selection.id)
+    return { round: !!placement && findLook(props.looks, placement.lookId).shape === 'round', min: TABLE_SIZE_MIN_CM, max: TABLE_SIZE_MAX_CM }
+  }
+  const item = floor.value.items.find(candidate => candidate.id === selection.id)
+  return { round: !!item && ITEM_SPECS[item.kind].footprint === 'round', min: ITEM_SIZE_MIN_CM, max: ITEM_SIZE_MAX_CM }
 }
 
 function onPointerDown(event: PointerEvent) {
@@ -259,6 +316,10 @@ function onPointerDown(event: PointerEvent) {
     gesture = { type: 'rotate', selection, center: { x: origin.x, y: origin.y }, rotation: origin.rotation }
     return
   }
+  if (target.dataset.handle === 'resize') {
+    gesture = { type: 'resize', selection, corner: Number(target.dataset.corner), startPlan: plan, origin: { ...origin }, ...sizeRules(selection) }
+    return
+  }
   if (!isSelected(selection.kind, selection.id)) emit('select', selection)
   gesture = { type: 'drag', selection, startPlan: plan, origin: { ...origin }, startClient: { x: event.clientX, y: event.clientY }, moved: false }
 }
@@ -301,6 +362,11 @@ function onPointerMove(event: PointerEvent) {
     preview.value = { selection: gesture.selection, x: gesture.center.x, y: gesture.center.y, rotation }
     return
   }
+  if (gesture.type === 'resize') {
+    const delta = { x: plan.x - gesture.startPlan.x, y: plan.y - gesture.startPlan.y }
+    preview.value = { selection: gesture.selection, ...resizeFromCorner(gesture.origin, { corner: gesture.corner, delta, round: gesture.round, min: gesture.min, max: gesture.max }) }
+    return
+  }
   if (!gesture.moved && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
   gesture.moved = true
   const step = event.shiftKey ? FINE_GRID_CM : GRID_CM
@@ -328,6 +394,9 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   if (finished.type === 'pan' && !finished.moved) return tap(finished.plan, finished.event)
   if (finished.type === 'drag' && finished.moved && live) emit('move', finished.selection, { x: live.x, y: live.y })
   if (finished.type === 'rotate' && live) emit('rotate', finished.selection, live.rotation)
+  if (finished.type === 'resize' && live?.width !== undefined && live.depth !== undefined && (live.width !== finished.origin.width || live.depth !== finished.origin.depth)) {
+    emit('resize', finished.selection, { x: live.x, y: live.y, width: live.width, depth: live.depth })
+  }
   if (finished.type === 'corner' && finished.moved && liveOutline) emit('shape', liveOutline)
 }
 
@@ -395,7 +464,7 @@ function onWheel(event: WheelEvent) {
 function zoom(direction: 1 | -1) {
   zoomAround({ x: view.value.x + view.value.width / 2, y: view.value.y + view.value.height / 2 }, direction > 0 ? 0.8 : 1.25)
 }
-defineExpose({ toPlan, viewCenter, fit, zoom, focus: () => svg.value?.focus() })
+defineExpose({ toPlan, viewCenter, fit, zoom, selectionBox, focus: () => svg.value?.focus() })
 
 const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }
 
@@ -625,6 +694,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         :transform="transform(item)"
         data-kind="item"
         :data-id="item.id"
+        :data-testid="`plan-item-${item.kind}`"
         class="cursor-grab"
       >
         <template v-if="item.kind === 'plant'">
@@ -934,7 +1004,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       </template>
     </g>
 
-    <!-- The selection, with its turn handle. -->
+    <!-- The selection, with its turn handle and corner handles (2B). -->
     <template v-if="mode === 'select'">
       <template
         v-for="table in placed"
@@ -976,6 +1046,35 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             data-testid="rotate-handle"
             class="cursor-alias"
           />
+          <g
+            v-for="(point, handle) in handleCorners(table.extent.width + 12, table.extent.depth + 12)"
+            :key="handle"
+          >
+            <rect
+              :x="point.x - 6 * perPixel"
+              :y="point.y - 6 * perPixel"
+              :width="12 * perPixel"
+              :height="12 * perPixel"
+              fill="var(--ui-bg)"
+              stroke="var(--ui-primary)"
+              stroke-width="2"
+              vector-effect="non-scaling-stroke"
+              pointer-events="none"
+            />
+            <rect
+              :x="point.x - 16 * perPixel"
+              :y="point.y - 16 * perPixel"
+              :width="32 * perPixel"
+              :height="32 * perPixel"
+              fill="transparent"
+              data-kind="table"
+              :data-id="table.tableId"
+              data-handle="resize"
+              :data-corner="handle"
+              :data-testid="`resize-handle-${handle}`"
+              :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+            />
+          </g>
         </g>
       </template>
       <template
@@ -1008,6 +1107,34 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             data-handle="rotate"
             class="cursor-alias"
           />
+          <g
+            v-for="(point, handle) in handleCorners(item.width + 16, item.depth + 16)"
+            :key="handle"
+          >
+            <rect
+              :x="point.x - 6 * perPixel"
+              :y="point.y - 6 * perPixel"
+              :width="12 * perPixel"
+              :height="12 * perPixel"
+              fill="var(--ui-bg)"
+              stroke="var(--ui-primary)"
+              stroke-width="2"
+              vector-effect="non-scaling-stroke"
+              pointer-events="none"
+            />
+            <rect
+              :x="point.x - 16 * perPixel"
+              :y="point.y - 16 * perPixel"
+              :width="32 * perPixel"
+              :height="32 * perPixel"
+              fill="transparent"
+              data-kind="item"
+              :data-id="item.id"
+              data-handle="resize"
+              :data-corner="handle"
+              :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+            />
+          </g>
         </g>
       </template>
     </template>

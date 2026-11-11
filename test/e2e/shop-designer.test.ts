@@ -395,6 +395,12 @@ describe('the shop designer on saved layouts', () => {
     await openDesign(page)
     await plan(page).waitFor()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    // A selected table's quick actions fit beside it, as icons.
+    await plan(page).getByTestId('plan-table-L1').click()
+    await page.getByTestId('quick-actions').getByRole('button', { name: 'Duplicate look' }).waitFor()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await shot(page, 'phone-quick-actions')
+    await page.getByRole('button', { name: 'Done' }).click()
     await page.getByRole('button', { name: 'Library' }).click()
     await page.getByRole('dialog').getByText('Unplaced tables').waitFor()
     await shot(page, 'phone-library')
@@ -546,5 +552,69 @@ describe('the shop designer on saved layouts', () => {
     await save(page)
     const l1 = (await branchTables(page)).find(table => table.label === 'L1')!
     expect((await savedLayout(page)).placements.find(placement => placement.tableId === l1.id)).toMatchObject({ lookId: 'round-cafe' })
+  })
+
+  it('quick actions beside the selection: a corner handle resizes, Rotate 90°, Duplicate look asks which table, Remove from map', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    const panel = page.getByRole('complementary', { name: 'Selected' })
+    const quick = page.getByTestId('quick-actions')
+    const l1 = plan(page).getByTestId('plan-table-L1')
+    await l1.click()
+    await quick.waitFor()
+    await shot(page, 'quick-actions')
+    expect(await l1.getAttribute('transform')).toContain('rotate(0)')
+    const width = () => panel.getByLabel('Width (cm)').inputValue()
+    const before = Number(await width())
+
+    // L1 has a round look: its bottom-right handle, dragged 40 cm out, grows it both ways in one undo step.
+    const handle = (await plan(page).getByTestId('resize-handle-2').boundingBox())!
+    const scale = await plan(page).evaluate(svg => (svg as SVGSVGElement).getScreenCTM()!.a)
+    const start = { x: handle.x + handle.width / 2, y: handle.y + handle.height / 2 }
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(start.x + 40 * scale, start.y + 40 * scale, { steps: 5 })
+    await page.mouse.up()
+    await expect.poll(width).toBe(String(before + 40))
+    expect(await panel.getByLabel('Depth (cm)').inputValue()).toBe(String(before + 40))
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(width).toBe(String(before))
+    await page.getByRole('button', { name: 'Redo' }).click()
+    await expect.poll(width).toBe(String(before + 40))
+
+    await quick.getByRole('button', { name: 'Rotate 90°' }).click()
+    await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(90)')
+
+    // Duplicate look: which table? A new one, saved at once, goes beside L1 with L1's look, size and turn.
+    await quick.getByRole('button', { name: 'Duplicate look' }).click()
+    await page.getByRole('dialog').filter({ hasText: 'Which table is this?' }).getByRole('button', { name: 'New table' }).click()
+    const form = page.getByRole('dialog', { name: 'New table' })
+    await form.getByLabel('Name').fill('L4')
+    await form.getByRole('button', { name: 'Add table' }).click()
+    await plan(page).getByTestId('plan-table-L4').waitFor()
+    await expect.poll(() => quick.getAttribute('aria-label')).toBe('L4 quick actions')
+    await save(page)
+    const ids = Object.fromEntries((await branchTables(page)).map(table => [table.label, table.id]))
+    const saved = await savedLayout(page)
+    const original = saved.placements.find(placement => placement.tableId === ids.L1)!
+    const copy = saved.placements.find(placement => placement.tableId === ids.L4)!
+    expect(original).toMatchObject({ width: before + 40, depth: before + 40, rotation: 90 })
+    expect(copy).toMatchObject({ floorId: original.floorId, lookId: original.lookId, width: original.width, depth: original.depth, rotation: 90, y: original.y })
+    expect(copy.x).toBeGreaterThan(original.x)
+
+    // Remove from map: L4 goes back to Unplaced tables.
+    await quick.getByRole('button', { name: 'Remove from map' }).click()
+    await unplaced(page, 'L4').waitFor()
+    await expect.poll(() => quick.count()).toBe(0)
+
+    // Furniture: Duplicate copies it beside itself.
+    const plants = await plan(page).getByTestId('plan-item-plant').count()
+    await page.getByTestId('catalog-plant').click()
+    await quick.getByRole('button', { name: 'Duplicate', exact: true }).click()
+    await expect.poll(() => plan(page).getByTestId('plan-item-plant').count()).toBe(plants + 2)
+    await save(page)
+    const items = (await savedLayout(page)).floors.find(floor => floor.id === original.floorId)!.items.filter(item => item.kind === 'plant')
+    expect(items).toHaveLength(plants + 2)
+    expect((await savedLayout(page)).placements.map(placement => placement.tableId)).not.toContain(ids.L4)
   })
 })
