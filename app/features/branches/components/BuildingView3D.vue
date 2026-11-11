@@ -49,6 +49,8 @@ const viewpoints = ref<Viewpoint[]>([])
 const stats = ref<StageStats | null>(null)
 const listsOpen = ref(false)
 let viewer: BuildingViewer | null = null
+let modeChange: Promise<void> | undefined
+let revealRequest = 0
 
 const selected = computed(() => {
   const placement = props.layout.placements.find(candidate => candidate.tableId === selectedTable.value)
@@ -64,6 +66,7 @@ const insideName = computed(() => props.layout.floors.find(floor => floor.id ===
 async function start() {
   viewer?.dispose()
   viewer = null
+  modeChange = undefined
   status.value = 'loading'
   drawn.value = false
   stats.value = null
@@ -103,14 +106,18 @@ onBeforeUnmount(() => {
   viewer = null
 })
 
-watch(() => [props.layout, props.tables, props.looks, props.itemLooks] as const, ([layout, tables, looks, itemLooks]) => viewer?.setScene({ layout, tables, looks, itemLooks }))
+watch(() => [props.layout, props.tables, props.looks, props.itemLooks] as const, ([layout, tables, looks, itemLooks]) => {
+  viewer?.setScene({ layout, tables, looks, itemLooks })
+  if (insideFloor.value && !layout.floors.some(floor => floor.id === insideFloor.value)) void setMode('cutaway')
+})
 watch(dark, value => viewer?.setTheme(value))
 watch(selectedTable, id => viewer?.selectTable(id))
 
-async function setMode(next: 'exterior' | 'cutaway') {
+function setMode(next: 'exterior' | 'cutaway') {
   insideFloor.value = null
   mode.value = next
-  await viewer?.setMode(next)
+  modeChange = viewer?.setMode(next)
+  return modeChange
 }
 
 async function focusFloor(floorId: string) {
@@ -142,7 +149,11 @@ function viewQr() {
   if (table?.qrUrl) qrModal.open({ table: { ...table, qrUrl: table.qrUrl } })
 }
 
-const fit = () => viewer?.fit()
+async function fit() {
+  const current = viewer
+  await modeChange
+  if (viewer === current) await current?.fit()
+}
 const zoom = (direction: 1 | -1) => viewer?.zoom(direction)
 
 /**
@@ -150,6 +161,8 @@ const zoom = (direction: 1 | -1) => viewer?.zoom(direction)
  * exterior hides it (under a roof or another floor), where only its label would show.
  */
 async function reveal(tableId: string) {
+  const request = ++revealRequest
+  const current = viewer
   const placement = props.layout.placements.find(candidate => candidate.tableId === tableId)
   if (!placement) return
   const index = props.layout.floors.findIndex(floor => floor.id === placement.floorId)
@@ -157,10 +170,13 @@ async function reveal(tableId: string) {
   if (insideFloor.value) {
     if (placement.floorId !== insideFloor.value) await enterFloor(placement.floorId)
   }
-  else if (mode.value === 'exterior' && covered) {
-    await setMode('cutaway')
+  else {
+    if (mode.value === 'exterior' && covered) setMode('cutaway')
+    await modeChange
   }
-  viewer?.selectTable(tableId, { focus: true })
+  if (request === revealRequest && current === viewer && selectedTable.value === tableId) {
+    current?.selectTable(tableId, { focus: true })
+  }
 }
 
 function selectFromList(tableId: string) {

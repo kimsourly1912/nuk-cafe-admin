@@ -21,10 +21,11 @@ import { useElementSize } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, ITEM_SPECS } from '../designer/catalog'
-import { boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outsideOutline, outwardNormal, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, removeCorner } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
+import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
 
 const props = defineProps<{
@@ -155,20 +156,32 @@ const placed = computed(() => posedPlacements.value
     }
   }))
 
-const outside = computed(() => (shape.value.outline.length >= 3 ? outsideOutline({ ...floor.value, ...shape.value, items: items.value }, posedPlacements.value) : new Set<string>()))
+const footprints = computed(() => [
+  ...placed.value.map(table => tableFootprint(table, table.look, table.chairs)),
+  ...items.value.map(itemFootprint),
+])
+const floorShape = computed(() => ({ ...floor.value, ...shape.value }))
+const warnings = computed(() => placementWarnings(floorShape.value, footprints.value))
 
 const ghostView = computed(() => {
   const ghost = props.ghost
   if (!ghost) return null
-  if (ghost.kind === 'item') {
-    const spec = ITEM_SPECS[ghost.itemKind]
-    return { kind: 'item' as const, itemKind: ghost.itemKind, x: ghost.x, y: ghost.y, width: spec.width, depth: spec.depth }
-  }
+  if (ghost.kind === 'item') return ghost
   const table = ghost.tableId ? props.tables.find(candidate => candidate.id === ghost.tableId) : undefined
   const look = findLook(props.looks, ghost.lookId)
   // A look dragged before its table is chosen shows four chairs.
   const seats = table?.seats ?? 4
   return { kind: 'table' as const, x: ghost.x, y: ghost.y, label: table?.label ?? '?', look, width: look.defaultWidth, depth: look.defaultDepth, chairs: chairPoses(look, look.defaultWidth, look.defaultDepth, seats) }
+})
+
+const ghostWarning = computed(() => {
+  const ghost = ghostView.value
+  if (!ghost) return false
+  const piece = { ...ghost, rotation: 0 }
+  const footprint = ghost.kind === 'table'
+    ? tableFootprint({ ...piece, tableId: '' }, ghost.look, ghost.chairs)
+    : itemFootprint({ ...piece, id: '', kind: ghost.itemKind })
+  return placementWarnings(floorShape.value, footprints.value, footprint).has('')
 })
 
 const belowStairs = computed(() => (below.value?.items ?? []).filter(item => item.kind === 'stairs'))
@@ -492,7 +505,7 @@ function onWheel(event: WheelEvent) {
 function zoom(direction: 1 | -1) {
   zoomAround({ x: view.value.x + view.value.width / 2, y: view.value.y + view.value.height / 2 }, direction > 0 ? 0.8 : 1.25)
 }
-defineExpose({ toPlan, viewCenter, fit, zoom, selectionBox, focus: () => svg.value?.focus() })
+defineExpose({ toPlan, viewCenter, fit, zoom, selectionBox, warnings, focus: () => svg.value?.focus() })
 
 const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }
 
@@ -572,7 +585,11 @@ const transform = (object: { x: number, y: number, rotation: number }) => `trans
 const points = (list: readonly Point[]) => list.map(point => `${point.x},${point.y}`).join(' ')
 const stairLines = (depth: number) => Array.from({ length: Math.max(2, Math.floor(depth / 28)) }, (_, index) => -depth / 2 + (index + 1) * 28).filter(y => y < depth / 2)
 const slatLines = (width: number) => Array.from({ length: Math.max(1, Math.floor(width / 12) - 1) }, (_, index) => -width / 2 + (index + 1) * 12)
-const outsideCorners = (object: { x: number, y: number, rotation: number }, width: number, depth: number) => points(rectCorners(object, width + 24, depth + 24, object.rotation))
+const warningCorners = (object: { x: number, y: number, rotation: number }, width: number, depth: number) => points(rectCorners(object, width + 24, depth + 24, object.rotation))
+function chairRect(chair: TableLook['chair']) {
+  const size = chair === 'none' ? ITEM_SPECS['cafe-chair'] : ITEM_SPECS[chair]
+  return { x: -size.width / 2, y: -size.depth / 2, width: size.width, height: size.depth }
+}
 const metres = (cm: number) => `${Math.round(cm)} cm`
 /** A label's box around its text, in plan centimetres at the current zoom. */
 const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.value, height: 22 * perPixel.value, font: 12 * perPixel.value })
@@ -950,10 +967,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         <rect
           v-for="(chair, index) in table.chairs"
           :key="index"
-          x="-20"
-          y="-20"
-          width="40"
-          height="40"
+          v-bind="chairRect(table.look.chair)"
           rx="8"
           :transform="transform(chair)"
           fill="var(--ui-bg-elevated)"
@@ -965,9 +979,9 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             v-for="side in [1, -1]"
             :key="side"
             :x="-table.width / 2 - 5"
-            :y="side > 0 ? table.depth / 2 : -table.depth / 2 - 55"
+            :y="side > 0 ? table.depth / 2 : -table.depth / 2 - BOOTH_BENCH_DEPTH_CM"
             :width="table.width + 10"
-            height="55"
+            :height="BOOTH_BENCH_DEPTH_CM"
             rx="12"
             fill="color-mix(in oklab, var(--ui-primary) 8%, var(--ui-bg-elevated))"
             stroke="var(--ui-text-muted)"
@@ -1004,7 +1018,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       </g>
     </g>
 
-    <!-- Left outside the outline after it changed (9C): a reminder, never an error. -->
+    <!-- Placement warnings are advisory. -->
     <g
       fill="color-mix(in oklab, var(--ui-warning) 10%, transparent)"
       stroke="var(--ui-warning)"
@@ -1017,8 +1031,8 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         :key="table.tableId"
       >
         <polygon
-          v-if="outside.has(table.tableId)"
-          :points="outsideCorners(table, table.width, table.depth)"
+          v-if="warnings.has(table.tableId)"
+          :points="warningCorners(table, table.extent.width, table.extent.depth)"
         />
       </template>
       <template
@@ -1026,8 +1040,8 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         :key="item.id"
       >
         <polygon
-          v-if="outside.has(item.id)"
-          :points="outsideCorners(item, item.width, item.depth)"
+          v-if="warnings.has(item.id)"
+          :points="warningCorners(item, item.width, item.depth)"
         />
       </template>
     </g>
@@ -1330,28 +1344,37 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       opacity="0.6"
       pointer-events="none"
       stroke-dasharray="8 5"
+      :stroke="ghostWarning ? 'var(--ui-warning)' : 'var(--ui-primary)'"
       data-testid="plan-ghost"
     >
       <template v-if="ghostView.kind === 'table'">
         <rect
           v-for="(chair, index) in ghostView.chairs"
           :key="index"
-          x="-20"
-          y="-20"
-          width="40"
-          height="40"
+          v-bind="chairRect(ghostView.look.chair)"
           rx="8"
           :transform="transform(chair)"
           fill="var(--ui-bg)"
-          stroke="var(--ui-primary)"
           stroke-width="2.5"
         />
+        <template v-if="ghostView.look.shape === 'booth'">
+          <rect
+            v-for="side in [1, -1]"
+            :key="side"
+            :x="-ghostView.width / 2 - 5"
+            :y="side > 0 ? ghostView.depth / 2 : -ghostView.depth / 2 - BOOTH_BENCH_DEPTH_CM"
+            :width="ghostView.width + 10"
+            :height="BOOTH_BENCH_DEPTH_CM"
+            rx="12"
+            fill="var(--ui-bg)"
+            stroke-width="2.5"
+          />
+        </template>
         <ellipse
           v-if="ghostView.look.shape === 'round'"
           :rx="ghostView.width / 2"
           :ry="ghostView.depth / 2"
           fill="color-mix(in oklab, var(--ui-primary) 25%, var(--ui-bg))"
-          stroke="var(--ui-primary)"
           stroke-width="3"
         />
         <rect
@@ -1362,7 +1385,6 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :height="ghostView.depth"
           rx="10"
           fill="color-mix(in oklab, var(--ui-primary) 25%, var(--ui-bg))"
-          stroke="var(--ui-primary)"
           stroke-width="3"
         />
         <text
@@ -1371,8 +1393,16 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           font-size="26"
           font-weight="600"
           fill="var(--ui-text-highlighted)"
+          stroke="none"
         >{{ ghostView.label }}</text>
       </template>
+      <ellipse
+        v-else-if="ITEM_SPECS[ghostView.itemKind].footprint === 'round'"
+        :rx="ghostView.width / 2"
+        :ry="ghostView.depth / 2"
+        fill="var(--ui-bg-elevated)"
+        stroke-width="3"
+      />
       <rect
         v-else
         :x="-ghostView.width / 2"
@@ -1381,7 +1411,6 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         :height="ghostView.depth"
         rx="8"
         fill="var(--ui-bg-elevated)"
-        stroke="var(--ui-primary)"
         stroke-width="3"
       />
     </g>

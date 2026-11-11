@@ -3,6 +3,12 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer polish before the pilot (D273, 2026-11-11)
+
+- The owner requested the audit's five fixes in one PR before expanding the shop designer. Both layout views show save recovery. A library drop keeps its previewed grid position and custom dimensions. Undo clears invalid selections; 3D table navigation honors the latest selection and Fit building accounts for portrait viewports. Placement warnings include chair and fixture footprints and concave floor outlines. Warnings remain advisory.
+- How to verify: Shift-drag an unplaced table and compare the preview and drop, then undo. Save a stale draft from View in 3D and recover there. On a phone, fit a wide layout and pick two tables in quick succession. Move a table near an inside wall and an L-shaped corner to see the warning.
+- Regression coverage: `designer-geometry.test.ts` covers concave outlines, chair collisions, contact without overlap and portrait fit. `shop-designer.test.ts` covers fine-grid drop, Undo cleanup and stale-save recovery from 3D.
+
 ### Support visits read furniture looks (QS3, D193 amended, 2026-11-11)
 
 - Step 3d merged (PR #285; staging deploy green, reviewed by the owner on staging: "working fine"). **Owner answer (QS3):** a platform support visit may read the cafe's furniture looks. `furniture: ['manage']` joins `SUPPORT_READ_PERMISSIONS` (`server/features/support/support.rules.ts`); on GET it only lists looks, so Design shop and the **Furniture looks** page load during a visit, and creating, editing or deleting a look stays 403 `SUPPORT_READ_ONLY` (the app says "Platform support can only look at this cafe" before any request). D193 amended, D273 step 3d notes it.

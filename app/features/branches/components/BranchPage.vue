@@ -17,6 +17,7 @@ import BranchSettingsTab from './BranchSettingsTab.vue'
 import BranchTablesTab from './BranchTablesTab.vue'
 import BuildingView3D from './BuildingView3D.vue'
 import DesignShopEditor from './DesignShopEditor.vue'
+import LayoutSaveAlerts from './LayoutSaveAlerts.vue'
 
 const tenantPath = useTenantPath()
 
@@ -61,13 +62,15 @@ const summary = computed(() => {
 const selectedTable = computed<string | null>({
   get: () => (editor.selection.value?.kind === 'table' ? editor.selection.value.id : null),
   set: (id) => {
-    if (id) editor.selection.value = { kind: 'table', id }
+    if (id) {
+      const placement = layout.value.placements.find(candidate => candidate.tableId === id)
+      if (placement) editor.showFloor(placement.floorId)
+      editor.selection.value = { kind: 'table', id }
+    }
     else if (editor.selection.value?.kind === 'table') editor.selection.value = null
   },
 })
 function showOnPlan(tableId: string) {
-  const placement = layout.value.placements.find(candidate => candidate.tableId === tableId)
-  if (placement) editor.showFloor(placement.floorId)
   selectedTable.value = tableId
   view.value = 'design'
 }
@@ -226,6 +229,11 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           v-show="tab === 'tables' && view === 'list'"
           ref="tablesTab"
           :branch-id="id"
+        />
+        <LayoutSaveAlerts
+          v-if="designing"
+          :editor="editor"
+          :dining-tables="tables ?? []"
         />
         <DesignShopEditor
           v-if="tab === 'tables' && view === 'design'"
