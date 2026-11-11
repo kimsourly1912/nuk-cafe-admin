@@ -151,6 +151,17 @@ export function freeSpot(edge: Edge, length: number, width: number): number | nu
   return Math.floor(best.start + (best.size - width) / 2)
 }
 
+/**
+ * Whether edge `index` can take a new door or window: the edge's kind allows it (windows need a
+ * wall) and a free spot of the default width, or of the whole edge when shorter, is left.
+ */
+export function openingFits(shape: FloorShape, index: number, kind: OpeningKind): boolean {
+  const edge = shape.edges[index]
+  if (!edge || !edgeTakes(edge.kind, kind)) return false
+  const length = Math.round(edgeLength(shape.outline, index))
+  return length >= OPENING_MIN_WIDTH && freeSpot(edge, length, Math.min(OPENING_DEFAULT_WIDTH[kind], length)) !== null
+}
+
 /** Adds a door or window to edge `index` where it fits; the shape unchanged when it doesn't. */
 export function addOpening(shape: FloorShape, index: number, kind: OpeningKind, id: string): FloorShape {
   const edge = shape.edges[index]!

@@ -3,6 +3,7 @@ import type { BuiltInLookId, FloorGeometry, LayoutTable } from '#shared/contract
 import type { Db, Statement } from '#server/utils/batch'
 import { chunk, insertAll, requireCount } from '#server/utils/batch'
 import { inTenant } from '#server/utils/query'
+import { user } from '#server/db/tables'
 import { activeTable } from './branches.repository'
 import { branchLayoutFloors, branchLayoutPlacements, branchLayouts, customFurnitureLooks, diningTables } from './branches.schema'
 
@@ -32,7 +33,7 @@ export interface PlacementRow {
 
 export interface LayoutRows {
   /** `undefined`: the branch has never saved a layout. */
-  layout: { version: number, updatedAt: Date } | undefined
+  layout: { version: number, updatedAt: Date, updatedByName: string | null } | undefined
   floors: FloorRow[]
   placements: PlacementRow[]
   /** The branch's active tables; the service sorts them by label. */
@@ -71,12 +72,14 @@ const placementColumns = {
 
 /**
  * The branch's layout, its floors bottom first, its placements and its active tables, in one batch
- * (one snapshot), with the cafe's custom look ids. Uses the layout's and floors' keys,
+ * (one snapshot), with who saved it last (`user.name`, readable by every feature) and the cafe's
+ * custom look ids. Uses the layout's and floors' keys,
  * branch_layout_placements_floor_idx and dining_tables_branch_idx.
  */
 export async function layoutRows(db: Db, tenantId: string, branchId: string): Promise<LayoutRows> {
   const [layouts, floors, placements, tables, looks] = await db.batch([
-    db.select({ version: branchLayouts.version, updatedAt: branchLayouts.updatedAt }).from(branchLayouts)
+    db.select({ version: branchLayouts.version, updatedAt: branchLayouts.updatedAt, updatedByName: user.name }).from(branchLayouts)
+      .leftJoin(user, eq(user.id, branchLayouts.updatedBy))
       .where(ofBranch(branchLayouts, tenantId, branchId)).limit(1),
     db.select(floorColumns).from(branchLayoutFloors)
       .where(ofBranch(branchLayoutFloors, tenantId, branchId))

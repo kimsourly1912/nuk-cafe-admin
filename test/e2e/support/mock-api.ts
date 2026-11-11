@@ -168,7 +168,7 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   // A test listing branches gets them without hours (the opening-hours step still to do).
   'GET /admin/branches/{id}': ({ url: request }) => ({ id: request.pathname.split('/').pop(), name: 'Branch', timezone: 'Asia/Phnom_Penh', address: null, phone: null, status: 'active', hours: [], openNow: false, today: 1, version: 1 }),
   // No shop layout yet (D273): Design shop shows the starters.
-  'GET /admin/branches/{id}/layout': () => ({ version: 0, updatedAt: null, floors: [], placements: [], tables: [] }),
+  'GET /admin/branches/{id}/layout': () => ({ version: 0, updatedAt: null, updatedByName: null, floors: [], placements: [], tables: [] }),
   // No custom table looks (D273, step 3a): the built-in ones only.
   'GET /admin/furniture-looks': () => [],
   'GET /admin/menu/items': () => pageOf([]),

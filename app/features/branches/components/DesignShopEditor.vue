@@ -9,13 +9,14 @@
  */
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import type { DiningTable } from '#shared/contracts/branches'
+import { edgeLength } from '#shared/contracts/shop-layout'
 import type { CustomLook, Finish, Floor, InnerWall, ItemKind, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory } from '../designer/catalog'
 import { FINISH_SWATCHES, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK } from '../designer/catalog'
 import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, outsideOutline, placementExtent, snap } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
-import { areaM2, edgeNames, shapeOf } from '../designer/outline'
+import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import { isMovable } from '../designer/plan'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
@@ -202,6 +203,44 @@ function updateShape(shape: FloorShape) {
     target.edges = shape.edges
   })
 }
+
+// --- Typing a length on the plan's label (3A) ---
+
+/** The edge whose length is being typed, where its label is on screen, and what's typed so far. */
+const lengthEdit = ref<{ index: number, at: Point, value: number | undefined } | null>(null)
+const lengthInput = useTemplateRef<{ inputRef?: HTMLInputElement | null }>('lengthInput')
+const EDGE_KINDS = [
+  { value: 'wall', label: 'Wall' },
+  { value: 'railing', label: 'Railing' },
+  { value: 'open', label: 'Open' },
+] as const
+const EDGE_LENGTH_MIN_CM = 10
+const EDGE_LENGTH_MAX_CM = 10_000
+
+function editLength(index: number, at: Point) {
+  const current = floor.value
+  if (!current) return
+  lengthEdit.value = { index, at, value: Math.round(edgeLength(current.outline, index)) }
+  void nextTick(() => {
+    lengthInput.value?.inputRef?.focus()
+    lengthInput.value?.inputRef?.select()
+  })
+}
+
+/** Enter or leaving the field sets the length (one undo step); Escape leaves it as it was. */
+function applyLength() {
+  const edit = lengthEdit.value
+  lengthEdit.value = null
+  const current = floor.value
+  if (!edit || !current || typeof edit.value !== 'number' || !Number.isFinite(edit.value)) return
+  const length = Math.min(EDGE_LENGTH_MAX_CM, Math.max(EDGE_LENGTH_MIN_CM, Math.round(edit.value)))
+  if (length === Math.round(edgeLength(current.outline, edit.index))) return
+  updateShape(setEdgeLength(shapeOf(current), edit.index, length))
+}
+
+watch(() => [mode.value, floor.value?.id], () => {
+  lengthEdit.value = null
+})
 
 function addWall(wall: Omit<InnerWall, 'id'>) {
   changeFloor(target => target.walls.push({ id: newLayoutId('wall'), ...wall }))
@@ -490,6 +529,13 @@ const quickBarStyle = computed((): { left: string, top: string } | undefined => 
     top: `${within(top, barHeight.value, area.height)}px`,
   }
 })
+
+/** 6A: who saved the newer version and when, if the editor has read it. */
+function conflictText(latest: { updatedAt: string | null, updatedByName: string | null } | null | undefined): string {
+  const by = latest?.updatedByName ? ` by ${latest.updatedByName}` : ''
+  const when = latest?.updatedAt ? ` ${formatTimeAgo(latest.updatedAt)}` : ''
+  return `${by || when ? `Saved${by}${when}. ` : ''}Your draft is kept here until you choose.`
+}
 
 const position = computed(() => {
   const current = selectedPlacement.value ?? selectedItem.value
@@ -1052,7 +1098,36 @@ function chooseStarter(starter: Starter) {
         @remove="remove"
         @shape="updateShape"
         @add-wall="addWall"
+        @edit-length="editLength"
       />
+
+      <!-- Draw outline: the clicked length label becomes a field (3A). -->
+      <form
+        v-if="lengthEdit"
+        class="absolute -translate-x-1/2 -translate-y-1/2"
+        :style="{ left: `${lengthEdit.at.x}px`, top: `${lengthEdit.at.y}px` }"
+        data-testid="edge-length-edit"
+        @submit.prevent="applyLength()"
+      >
+        <UInput
+          ref="lengthInput"
+          v-model.number="lengthEdit.value"
+          type="number"
+          inputmode="numeric"
+          :min="EDGE_LENGTH_MIN_CM"
+          :max="EDGE_LENGTH_MAX_CM"
+          size="sm"
+          class="w-28 shadow-md"
+          :aria-label="`${names[lengthEdit.index] ?? 'Edge'} length (cm)`"
+          :ui="{ trailing: 'pointer-events-none text-xs text-muted' }"
+          @blur="applyLength()"
+          @keydown.esc.stop.prevent="lengthEdit = null"
+        >
+          <template #trailing>
+            cm
+          </template>
+        </UInput>
+      </form>
 
       <!-- Quick actions next to the selection (2B): the common moves without the panel. -->
       <div
@@ -1110,6 +1185,76 @@ function chooseStarter(starter: Starter) {
         >
           <span class="hidden sm:inline">{{ selectedPlacement ? 'Remove from map' : 'Delete' }}</span>
         </UButton>
+      </div>
+      <div
+        v-else-if="mode === 'select' && quickBarStyle && selectedWall"
+        ref="quickBar"
+        role="toolbar"
+        aria-label="Wall quick actions"
+        class="absolute flex items-center rounded-lg border border-default bg-default p-1 shadow-md"
+        :style="quickBarStyle"
+        data-testid="quick-actions"
+      >
+        <UButton
+          icon="i-lucide-trash-2"
+          color="neutral"
+          variant="ghost"
+          aria-label="Delete wall"
+          @click="remove(selection!)"
+        >
+          <span class="hidden sm:inline">Delete wall</span>
+        </UButton>
+      </div>
+      <div
+        v-else-if="mode === 'select' && quickBarStyle && floor && selectedEdge !== undefined"
+        ref="quickBar"
+        role="toolbar"
+        :aria-label="`${names[selectedEdge] ?? 'Edge'} quick actions`"
+        class="absolute flex items-center gap-0.5 rounded-lg border border-default bg-default p-1 shadow-md"
+        :style="quickBarStyle"
+        data-testid="quick-actions"
+      >
+        <UFieldGroup
+          role="group"
+          aria-label="Edge type"
+        >
+          <UButton
+            v-for="kind in EDGE_KINDS"
+            :key="kind.value"
+            :label="kind.label"
+            :color="floor.edges[selectedEdge]?.kind === kind.value ? 'primary' : 'neutral'"
+            :variant="floor.edges[selectedEdge]?.kind === kind.value ? 'soft' : 'ghost'"
+            :aria-pressed="floor.edges[selectedEdge]?.kind === kind.value"
+            @click="updateShape(setEdgeKind(shapeOf(floor), selectedEdge, kind.value))"
+          />
+        </UFieldGroup>
+        <template v-if="floor.edges[selectedEdge]?.kind !== 'open'">
+          <USeparator
+            orientation="vertical"
+            class="h-5"
+          />
+          <UButton
+            icon="i-lucide-door-open"
+            color="neutral"
+            variant="ghost"
+            :aria-label="`Add a ${floor.edges[selectedEdge]?.kind === 'railing' ? 'gate' : 'door'}`"
+            :disabled="!openingFits(shapeOf(floor), selectedEdge, 'door')"
+            @click="updateShape(addOpening(shapeOf(floor), selectedEdge, 'door', newLayoutId('door')))"
+          >
+            <span class="hidden sm:inline">{{ floor.edges[selectedEdge]?.kind === 'railing' ? 'Gate' : 'Door' }}</span>
+          </UButton>
+          <UButton
+            v-if="floor.edges[selectedEdge]?.kind === 'wall'"
+            icon="i-lucide-app-window"
+            color="neutral"
+            variant="ghost"
+            aria-label="Add a window"
+            :disabled="!openingFits(shapeOf(floor), selectedEdge, 'window')"
+            @click="updateShape(addOpening(shapeOf(floor), selectedEdge, 'window', newLayoutId('window')))"
+          >
+            <span class="hidden sm:inline">Window</span>
+          </UButton>
+        </template>
       </div>
 
       <div class="pointer-events-none absolute inset-x-3 top-3 flex flex-col gap-2">
@@ -1360,7 +1505,7 @@ function chooseStarter(starter: Starter) {
           icon="i-lucide-triangle-alert"
           class="pointer-events-auto max-w-xl"
           title="This layout was changed somewhere else"
-          :description="conflict.latest?.updatedAt ? `Saved ${formatTimeAgo(conflict.latest.updatedAt)}. Your draft is kept here until you choose.` : 'Your draft is kept here until you choose.'"
+          :description="conflictText(conflict.latest)"
           :actions="[
             { label: 'Load latest', color: 'neutral', variant: 'outline', onClick: () => editor.loadLatest() },
             { label: 'Overwrite with mine', color: 'error', variant: 'outline', onClick: () => editor.overwrite() },

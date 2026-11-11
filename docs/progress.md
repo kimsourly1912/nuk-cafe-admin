@@ -3,15 +3,22 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
-### Shop designer step 2d: quick actions and corner handles (D273, 2026-11-11)
+### Shop designer step 2d: the editor finish (D273, 2026-11-11)
 
-- Step 3b merged (PR #282). The owner chose this before the pilot (3c) from step 2b's deferred list. **Built** from mockup frame 2B: a toolbar beside the selected table (**Rotate 90°**, **Duplicate look**, **Remove from map**) or furniture (**Rotate 90°**, **Duplicate**, **Delete**), icons only on phones; square corner handles that resize tables and furniture on the plan (opposite corner fixed, 5 cm steps, the contract's limits, round stays round, one undo step). **Duplicate look** asks which table (unplaced or New table) and copies only the look, size and turn, never the table or its QR. No server change; the furniture size limits got names in the contract (same values). [Plan → Step 2d](plans/shop-designer.md#step-2d-quick-actions-and-corner-handles-built-2026-11-11).
+- Step 3b merged (PR #282). The owner chose to finish step 2b's deferred editor items before the pilot (3c), in one step. **Built:**
+  - frame 2B's quick actions in a bar beside the selection: a table (**Rotate 90°**, **Duplicate look**, **Remove from map**), furniture (**Rotate 90°**, **Duplicate**, **Delete**), an inside wall (**Delete wall**), an outline edge (**Wall** / **Railing** / **Open**, **Door** or **Gate**, **Window**); icons only on phones. **Duplicate look** asks which table and copies only the look, size and turn, never the table or its QR;
+  - square corner handles that resize tables and furniture (opposite corner fixed, 5 cm steps, the contract's limits, round stays round, one undo step);
+  - frame 3A's typed lengths: in Draw outline, a click on an edge's length label makes it a field (Enter sets, Escape leaves);
+  - frame 6A's "Saved by Dara 3 minutes ago" in the stale-save message: the layout's GET adds `updatedByName` (`user.name` through `updated_by`). No migration.
+  - **Owner decision:** the editor stays usable on phones; criterion 10's "view only on phone" is dropped (plan and D273 amended).
+
+  [Plan → Step 2d](plans/shop-designer.md#step-2d-the-editor-finish-built-2026-11-11).
 - **Evidence:**
   - `pnpm lint`, `pnpm typecheck` clean.
-  - `pnpm test:unit`: 2702 passed, 1 skipped (179 files), with `designer-geometry.test.ts` (20, 4 new: the fixed corner, a turned table, limits and round pieces, where a copy goes).
-  - `pnpm vitest run --project e2e test/e2e/shop-designer.test.ts`: 13 passed on the built server (no mocks): a corner handle dragged 40 cm, Undo/Redo, Rotate 90°, Duplicate look with New table saved beside L1, Remove from map, a plant duplicated, the 390 px phone bar with no sideways scrolling. Desktop and phone screenshots checked by eye.
-- **Not verified:** real touch devices (handle size under a finger, the bar beside the move pad on a small tablet); the full e2e suite (no shared code changed apart from two named constants).
-- How to verify: on staging, select a table in Design shop: drag a square corner, then use **Rotate 90°**, **Duplicate look** and **Remove from map** in the bar under it; repeat on a phone.
+  - `pnpm test:unit`: 2703 passed, 1 skipped (179 files), with `designer-geometry.test.ts` (+4: the fixed corner, a turned table, limits and round pieces, where a copy goes), `designer-outline.test.ts` (+1: whether a door or window fits) and `branches.layout.service.test.ts` (`updatedByName`).
+  - `pnpm vitest run --project e2e test/e2e/shop-designer.test.ts test/e2e/shop-layout-api.test.ts`: 18 passed on the built server (no mocks): a corner handle dragged 40 cm with Undo/Redo, Rotate 90°, Duplicate look with New table saved beside L1, Remove from map, a plant duplicated, "Saved by Lina Lay" in the stale-save message, a length typed on a label and saved, an edge made a railing with a gate and a wall deleted from their bars, the 390 px phone bar with no sideways scrolling. Desktop and phone screenshots checked by eye.
+- **Not verified:** real touch devices (handle size under a finger, the bar beside the move pad on a small tablet, the length field with a phone keyboard); the full e2e suite (no shared code changed apart from two named constants and one added response field).
+- How to verify: on staging, in Design shop: drag a table's square corner; use **Rotate 90°**, **Duplicate look** and **Remove from map** in the bar under it; click an outline edge and make it a railing with a gate from its bar; in Draw outline, click a length, type one and press Enter; save on two devices to see "Saved by …". Repeat on a phone.
 
 ### Shop designer step 3b: look photos (D273, 2026-11-11)
 

@@ -22,6 +22,7 @@ function toLayout(rows: LayoutRows): BranchLayout {
   return {
     version: rows.layout?.version ?? 0,
     updatedAt: rows.layout ? toIso(rows.layout.updatedAt) : null,
+    updatedByName: rows.layout?.updatedByName ?? null,
     floors: rows.floors.map(toFloor),
     placements: rows.placements.map(toPlacement),
     tables: rows.tables.sort((a, b) => byLabel.compare(a.label, b.label)),
