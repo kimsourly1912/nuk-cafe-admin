@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Explore planned: a third-person café world with a map (D275, 2026-11-11)
+
+Branch `ccr-bb57b73a-ufdsic`. The owner's brief and twelve mockup frames (stored in [plans/explore/](plans/explore/brief.md)) ask for a GTA-like way to discover the cafe's branches: walk, ride a tuk-tuk or a moto, enter the café as drawn in Design shop, open its real menu, with a minimap and a full map. Reviewed against main `4dd4b4c`; the owner delegated the open choices ("help me decide all the way"). [Plan](plans/explore.md).
+
+- **Found while reviewing the brief:** branches have no coordinates (a pin needs a migration); the layout is read only under `/admin` and returns `updatedByName`, table ids and photo ids (a public projection is needed); the brief's Rapier candidate is WebAssembly, which the CSP refuses (D273); no rigged character exists (3g found no CC0 people); the viewer renders on demand while a game renders every frame, and the owner's phone already draws the café alone in 23–30 ms; the cart is already per branch (`useCart(branchId)`), so a ride never moves items.
+- **Decided (D275):** one cafe's branches; Show in Explore with a pin and a street door; own collision on the plan; a generated avatar behind `AvatarRig`; districts generated per branch and joined by gateways; location used in the browser only; Canvas 2D minimap and full map with a waypoint and route; the counter opens the real menu; overlays pause; a pure ride state machine; the controls and movement constants in the plan.
+- **Next:** E1 (walk and map) behind `NUXT_PUBLIC_EXPLORE`, gated by the owner's Android benchmark (`?bench=walk`, p95 ≤ 33.3 ms) and their feel review. Shipping waits for the Riverside pilot (3c).
+- **Evidence:** documentation only; no code changed.
+
 ### Shop designer step 4a groundwork: the saved scene (D274, 2026-11-11)
 
 Branch `claude/zen-keller-wqnniy`, restarted from `main` after PR #291. The owner chose (2026-11-11) to build 4a's decided parts before the pilot, keeping the scenes flag on, and answered **QS5: the pilot runs on production**. [Plan → Step 4a](plans/shop-designer-scenes.md#step-4a-groundwork-the-saved-scene-built-2026-11-11).
