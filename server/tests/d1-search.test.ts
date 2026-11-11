@@ -489,7 +489,7 @@ describe('the shop layout on real D1 (D273)', { timeout: 60_000, tags: ['slow'] 
     const branchId = newId()
     await insertBranch(db, { id: branchId, name: 'Item look lab', timezone: 'Asia/Phnom_Penh', tenantId: ours })
     const owner: Actor = { ...ourOwner, userId: (await createUser(db)).id }
-    const input = (name: string) => ({ name, kind: 'service-counter', finishes: {}, defaultWidth: 180, defaultDepth: 65, photoId: null }) as const
+    const input = (name: string) => ({ name, kind: 'service-counter', finishes: {}, defaultWidth: 180, defaultDepth: 65, defaultHeight: null, photoId: null }) as const
     const lookIds: string[] = []
     // 48, leaving room under the limit of 50 for the two below; d1-limits.test.ts saves all 50.
     for (let n = 0; n < 48; n++) lookIds.push((await createItemLook(db, owner, input(`D1 counter ${n}`))).id)

@@ -135,6 +135,10 @@ export const itemLookLimit = () =>
   apiError(409, BranchErrorCodes.LOOK_LIMIT, `A cafe can have at most ${MAX_CUSTOM_ITEM_LOOKS} chair and fixture looks. Delete one you don't use first.`)
 
 /** A delete of a chair or fixture look placed pieces still use: `places` are some of its floors, `total` all its pieces. */
+/** An edit's height outside the look's kind's range (a create's is the contract's 400). */
+export const itemLookHeightOutOfRange = (range: string) =>
+  apiError(400, ErrorCodes.VALIDATION_FAILED, `This kind's height is ${range}.`, { fieldErrors: { defaultHeight: [`Out of this kind's height range (${range})`] } })
+
 export function itemLookInUse(places: { floor: string, branch: string, pieces: number }[], total: number) {
   const named = places.map(place => `${place.pieces} on the ${place.floor} floor (${place.branch})`).join(', ')
   const more = total - places.reduce((sum, place) => sum + place.pieces, 0)

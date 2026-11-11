@@ -1,4 +1,4 @@
-import { FIGURE_SIZES } from '#shared/contracts/shop-layout'
+import { FIGURE_SIZES, ITEM_HEIGHTS, isItemLookKind } from '#shared/contracts/shop-layout'
 import type { FigureKind, Finish, ItemKind, ItemLook, LayoutItem, TableLook } from '#shared/contracts/shop-layout'
 
 /**
@@ -56,7 +56,7 @@ export interface ItemSpec {
   footprint: 'rect' | 'round'
   width: number
   depth: number
-  /** Its height in 3D (stairs: the floor's height). */
+  /** Its height in 3D (stairs: the floor's height); a chair's or fixture's default (`ITEM_HEIGHTS`). */
   height: number
   slots: FinishSlot[]
   /** The picture it ships with (step 3d, `BUILT_IN_PHOTO`); stairs have none. */
@@ -81,15 +81,15 @@ const figure = (kind: FigureKind, label: string, shape: FigureShape, height: num
   ({ kind, label, category: 'figures', footprint: 'rect', ...FIGURE_SIZES[kind], height, slots: [], photo: BUILT_IN_PHOTO(kind), figure: shape })
 
 export const ITEM_SPECS: Record<ItemKind, ItemSpec> = {
-  'cafe-chair': { kind: 'cafe-chair', label: 'Café chair', category: 'chairs', footprint: 'rect', width: 48, depth: 53, height: 82, slots: [frame('warm-oak'), seat('olive')], photo: BUILT_IN_PHOTO('cafe-chair') },
-  'bentwood-chair': { kind: 'bentwood-chair', label: 'Bentwood chair', category: 'chairs', footprint: 'rect', width: 44, depth: 50, height: 88, slots: [frame('walnut')], photo: BUILT_IN_PHOTO('bentwood-chair') },
-  'bar-stool': { kind: 'bar-stool', label: 'Bar stool', category: 'chairs', footprint: 'round', width: 40, depth: 40, height: 75, slots: [frame('warm-oak', [...WOODS, ...METALS]), seat('olive')], photo: BUILT_IN_PHOTO('bar-stool') },
-  'dining-bench': { kind: 'dining-bench', label: 'Dining bench', category: 'chairs', footprint: 'rect', width: 140, depth: 40, height: 46, slots: [frame('warm-oak'), seat('olive')], photo: BUILT_IN_PHOTO('dining-bench') },
-  'service-counter': { kind: 'service-counter', label: 'Service counter', category: 'fixtures', footprint: 'rect', width: 180, depth: 65, height: 92, slots: [{ key: 'cabinet', label: 'Cabinet', options: WOODS, default: 'warm-oak' }, { key: 'top', label: 'Countertop', options: STONES, default: 'limestone' }], photo: BUILT_IN_PHOTO('service-counter') },
-  'display-shelf': { kind: 'display-shelf', label: 'Display shelf', category: 'fixtures', footprint: 'rect', width: 100, depth: 40, height: 190, slots: [frame('warm-oak')], photo: BUILT_IN_PHOTO('display-shelf') },
-  'planter': { kind: 'planter', label: 'Planter', category: 'fixtures', footprint: 'rect', width: 100, depth: 40, height: 60, slots: [{ key: 'box', label: 'Box', options: WOODS, default: 'warm-oak' }], photo: BUILT_IN_PHOTO('planter') },
-  'plant': { kind: 'plant', label: 'Plant', category: 'fixtures', footprint: 'round', width: 50, depth: 50, height: 120, slots: [{ key: 'pot', label: 'Pot', options: ['terracotta', ...STONES], default: 'terracotta' }], photo: BUILT_IN_PHOTO('plant') },
-  'room-divider': { kind: 'room-divider', label: 'Room divider', category: 'fixtures', footprint: 'rect', width: 120, depth: 20, height: 180, slots: [frame('warm-oak')], photo: BUILT_IN_PHOTO('room-divider') },
+  'cafe-chair': { kind: 'cafe-chair', label: 'Café chair', category: 'chairs', footprint: 'rect', width: 48, depth: 53, height: ITEM_HEIGHTS['cafe-chair'].default, slots: [frame('warm-oak'), seat('olive')], photo: BUILT_IN_PHOTO('cafe-chair') },
+  'bentwood-chair': { kind: 'bentwood-chair', label: 'Bentwood chair', category: 'chairs', footprint: 'rect', width: 44, depth: 50, height: ITEM_HEIGHTS['bentwood-chair'].default, slots: [frame('walnut')], photo: BUILT_IN_PHOTO('bentwood-chair') },
+  'bar-stool': { kind: 'bar-stool', label: 'Bar stool', category: 'chairs', footprint: 'round', width: 40, depth: 40, height: ITEM_HEIGHTS['bar-stool'].default, slots: [frame('warm-oak', [...WOODS, ...METALS]), seat('olive')], photo: BUILT_IN_PHOTO('bar-stool') },
+  'dining-bench': { kind: 'dining-bench', label: 'Dining bench', category: 'chairs', footprint: 'rect', width: 140, depth: 40, height: ITEM_HEIGHTS['dining-bench'].default, slots: [frame('warm-oak'), seat('olive')], photo: BUILT_IN_PHOTO('dining-bench') },
+  'service-counter': { kind: 'service-counter', label: 'Service counter', category: 'fixtures', footprint: 'rect', width: 180, depth: 65, height: ITEM_HEIGHTS['service-counter'].default, slots: [{ key: 'cabinet', label: 'Cabinet', options: WOODS, default: 'warm-oak' }, { key: 'top', label: 'Countertop', options: STONES, default: 'limestone' }], photo: BUILT_IN_PHOTO('service-counter') },
+  'display-shelf': { kind: 'display-shelf', label: 'Display shelf', category: 'fixtures', footprint: 'rect', width: 100, depth: 40, height: ITEM_HEIGHTS['display-shelf'].default, slots: [frame('warm-oak')], photo: BUILT_IN_PHOTO('display-shelf') },
+  'planter': { kind: 'planter', label: 'Planter', category: 'fixtures', footprint: 'rect', width: 100, depth: 40, height: ITEM_HEIGHTS['planter'].default, slots: [{ key: 'box', label: 'Box', options: WOODS, default: 'warm-oak' }], photo: BUILT_IN_PHOTO('planter') },
+  'plant': { kind: 'plant', label: 'Plant', category: 'fixtures', footprint: 'round', width: 50, depth: 50, height: ITEM_HEIGHTS['plant'].default, slots: [{ key: 'pot', label: 'Pot', options: ['terracotta', ...STONES], default: 'terracotta' }], photo: BUILT_IN_PHOTO('plant') },
+  'room-divider': { kind: 'room-divider', label: 'Room divider', category: 'fixtures', footprint: 'rect', width: 120, depth: 20, height: ITEM_HEIGHTS['room-divider'].default, slots: [frame('warm-oak')], photo: BUILT_IN_PHOTO('room-divider') },
   'stairs': { kind: 'stairs', label: 'Stairs', category: 'structure', footprint: 'rect', width: 100, depth: 340, height: 300, slots: [{ key: 'tread', label: 'Treads', options: WOODS, default: 'warm-oak' }], photo: null },
   // People and pets (step 3g, D274): a fixed size (the contract's), no finishes. A seated customer
   // sits at chair height, so it goes on a chair; someone lazing lies in a hammock on its stand.
@@ -150,4 +150,12 @@ export function findItemLook(looks: readonly ItemLook[], id: string | undefined)
 export function pieceFinishes(item: Pick<LayoutItem, 'kind' | 'finishes' | 'lookId'>, looks: readonly ItemLook[]): LayoutItem['finishes'] {
   const look = findItemLook(looks, item.lookId)
   return look && look.kind === item.kind ? look.finishes : item.finishes
+}
+
+/**
+ * How tall a piece is drawn (step 3e): its own height, or the kind's default; stairs and people and
+ * pets have the kind's (stairs are drawn to their floor's height).
+ */
+export function pieceHeight(item: Pick<LayoutItem, 'kind' | 'height'>): number {
+  return isItemLookKind(item.kind) && item.height !== undefined ? item.height : ITEM_SPECS[item.kind].height
 }

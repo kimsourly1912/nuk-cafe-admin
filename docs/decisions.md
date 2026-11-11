@@ -3114,6 +3114,13 @@ Verification: migrated SQLite forced interleavings, populated local workerd/D1 r
   - **A support visit reads looks** (QS3, answered by the owner 2026-11-11; D193 amended): `furniture: ['manage']` joins the visit's read permissions, so Design shop loads during one.
 
   [Plan → Step 3d](plans/shop-designer.md#step-3d-chair-and-fixture-looks-built-in-pictures-and-the-looks-page-built-2026-11-11).
+- **Step 3e (2026-11-11; one PR with 3f at the owner's choice):** a chair's or fixture's **own height** (QS2) and **picking a piece in 3D**. Decided:
+  - **Each kind's height range is the shared contract's** (`ITEM_HEIGHTS`), so the server refuses a 4 m bar stool as it refuses a 4 m-wide one; the database keeps only a bound (20–300 cm). A piece's `height` is optional in its floor's JSON (old layouts draw as before); a look's `defaultHeight` is a new piece's starting height, like its size, and an edit's is checked against the look's kind in the service (the edit has no kind).
+  - **Migration `0062_item_look_heights` adds the column in place with a column CHECK**, hand-edited from drizzle-kit's table rebuild: `custom_item_looks` is the target of a restrict foreign key, which a drop-and-rename would break on D1.
+  - **A height moves parts, it never stretches them** (legs and boards keep their thickness), consistent with how widths already work.
+  - **One selection for both views, a table or a piece**; clearing one kind never clears the other. The lists stay tables only.
+
+  [Plan → Step 3e](plans/shop-designer.md#step-3e-heights-and-picking-a-piece-in-3d-built-2026-11-11).
 
 ### D274: Shop designer scenes: generated surroundings, CC0 models and a saved preset per branch (2026-11-11)
 

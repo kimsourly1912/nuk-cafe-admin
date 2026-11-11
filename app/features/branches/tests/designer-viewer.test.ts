@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FIGURE_SIZES } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS } from '../designer/catalog'
 import { createBuildingViewer } from '../designer/scene/building-viewer'
-import type { BuildingNavigation } from '../designer/scene/building-viewer'
+import type { BuildingNavigation, BuildingViewerOptions } from '../designer/scene/building-viewer'
 import { createBuildContext, disposeBuildContext } from '../designer/scene/furniture'
 import { createModelLibrary } from '../designer/scene/models'
 import { createStage } from '../designer/scene/stage'
@@ -36,14 +36,15 @@ afterEach(() => {
   mixers.length = 0
 })
 
-function makeViewer() {
+function makeViewer(extra: Partial<BuildingViewerOptions> = {}) {
   vi.stubGlobal('document', new Window().document)
   const camera = new PerspectiveCamera(32, 1)
   const canvas = document.createElement('canvas')
   const controls = new OrbitControls(camera, canvas)
   const scene = new Scene()
   const material = new MeshBasicMaterial()
-  const materials = { finish: () => material, surface: () => material, setTheme: vi.fn(), dispose: () => material.dispose() }
+  const highlight = new MeshBasicMaterial({ name: 'highlight' })
+  const materials = { finish: () => material, surface: (key: string) => (key === 'highlight' ? highlight : material), setTheme: vi.fn(), dispose: () => material.dispose() }
   const context = createBuildContext(materials)
   const frames = new Map<(now: number) => boolean, () => void>()
   const stage: Stage = {
@@ -77,7 +78,7 @@ function makeViewer() {
   vi.mocked(createStage).mockReturnValue(stage)
   vi.mocked(createModelLibrary).mockReturnValue(modelLibrary)
   const onNavigationChange = vi.fn<(navigation: BuildingNavigation) => void>()
-  const viewer = createBuildingViewer({ canvas, dark: false, onNavigationChange })
+  const viewer = createBuildingViewer({ canvas, dark: false, onNavigationChange, ...extra })
   viewer.setScene({ layout: demoLayout(), tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
 
   let time = 0
@@ -98,7 +99,7 @@ function makeViewer() {
       if (!step(time)) frames.delete(step)
     }
   }
-  return { viewer, camera, controls, onNavigationChange, settle, frames, frame, stage }
+  return { viewer, camera, controls, onNavigationChange, settle, frames, frame, stage, canvas, highlight }
 }
 
 describe('building navigation', () => {
@@ -360,5 +361,101 @@ describe('the benchmark (step 3h)', () => {
     frame()
     expect(await running).toBeNull()
     viewer.dispose()
+  })
+})
+
+describe('picking a piece in 3D (step 3e)', () => {
+  /** The demo building with a planter on the open rooftop and a cat beside it. */
+  function withPieces() {
+    const layout = demoLayout()
+    const rooftop = layout.floors.find(floor => floor.id === 'rooftop')!
+    rooftop.items.push({ id: 'probe', kind: 'planter', x: 300, y: 300, rotation: 0, width: 100, depth: 40, finishes: {}, height: 90 })
+    rooftop.items.push({ id: 'cat-1', kind: 'cat', x: 500, y: 300, rotation: 0, ...FIGURE_SIZES.cat, finishes: {} })
+    return { layout, tables: DEMO_TABLES, looks: BUILT_IN_LOOKS }
+  }
+  const objectOf = (scene: Scene, itemId: string) => {
+    let found: Group | undefined
+    scene.traverse(object => (object.userData.itemId === itemId ? (found = object as Group) : undefined))
+    return found!
+  }
+  const lit = (object: Group, highlight: MeshBasicMaterial) => {
+    const meshes: Mesh[] = []
+    object.traverse(child => child instanceof Mesh && meshes.push(child))
+    return meshes.filter(mesh => mesh.material === highlight).length
+  }
+  /** A tap in the middle of the canvas, with the camera straight above `target`. */
+  function tapAbove(setup: ReturnType<typeof makeViewer>, target: Vector3) {
+    const { camera, canvas } = setup
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}) })
+    camera.position.set(target.x, target.y + 6, target.z + 0.001)
+    camera.lookAt(target)
+    camera.aspect = 1
+    camera.updateProjectionMatrix()
+    camera.updateMatrixWorld(true)
+    const PointerEvent = document.defaultView!.PointerEvent
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 1, button: 0, clientX: 50, clientY: 50 }))
+    canvas.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, button: 0, clientX: 50, clientY: 50 }))
+  }
+
+  it('a tap on a piece selects it and lights the whole piece; a tap on nothing clears it', () => {
+    const onSelectItem = vi.fn()
+    const onSelectTable = vi.fn()
+    const setup = makeViewer({ onSelectItem, onSelectTable })
+    setup.viewer.setScene(withPieces())
+    const probe = objectOf(setup.stage.scene, 'probe')
+    tapAbove(setup, probe.getWorldPosition(new Vector3()))
+    expect(onSelectItem).toHaveBeenLastCalledWith('probe')
+    expect(onSelectTable).not.toHaveBeenCalled()
+    expect(lit(probe, setup.highlight)).toBeGreaterThan(2)
+    // Far off the building: nothing there, so the piece and any table are let go.
+    tapAbove(setup, new Vector3(200, 0, 200))
+    expect(onSelectItem).toHaveBeenLastCalledWith(null)
+    expect(onSelectTable).toHaveBeenLastCalledWith(null)
+    expect(lit(probe, setup.highlight)).toBe(0)
+  })
+
+  it('a figure lights up but its contact shadow doesn\'t', () => {
+    const setup = makeViewer()
+    setup.viewer.setPlayback({ figures: true, animate: false })
+    setup.viewer.setScene(withPieces())
+    setup.viewer.selectItem('cat-1')
+    const cat = objectOf(setup.stage.scene, 'cat-1')
+    const shadow = cat.children.find(child => child.userData.part === 'contact-shadow') as Mesh
+    expect(lit(cat, setup.highlight)).toBeGreaterThan(2)
+    expect(shadow.material).not.toBe(setup.highlight)
+  })
+
+  it('one selection at a time: a table replaces the piece, and clearing the other kind changes nothing', () => {
+    const setup = makeViewer()
+    setup.viewer.setScene(withPieces())
+    const probe = objectOf(setup.stage.scene, 'probe')
+    setup.viewer.selectItem('probe')
+    // Design shop let go of a table it didn't have: the piece stays lit.
+    setup.viewer.selectTable(null)
+    expect(lit(probe, setup.highlight)).toBeGreaterThan(0)
+    setup.viewer.selectTable(DEMO_TABLES[0]!.id)
+    expect(lit(probe, setup.highlight)).toBe(0)
+    setup.viewer.selectItem(null)
+    let tableLit = 0
+    setup.stage.scene.traverse(object => (object instanceof Mesh && object.material === setup.highlight ? tableLit++ : undefined))
+    expect(tableLit).toBeGreaterThan(0)
+  })
+
+  it('keeps the piece selected when the scene is built again, and lets it go once the piece is gone', () => {
+    const setup = makeViewer()
+    const input = withPieces()
+    setup.viewer.setScene(input)
+    setup.viewer.selectItem('probe')
+    const moved = structuredClone(input.layout)
+    moved.floors.find(floor => floor.id === 'rooftop')!.items.find(item => item.id === 'probe')!.x = 400
+    setup.viewer.setScene({ ...input, layout: moved })
+    expect(lit(objectOf(setup.stage.scene, 'probe'), setup.highlight)).toBeGreaterThan(0)
+    const without = structuredClone(moved)
+    const rooftop = without.floors.find(floor => floor.id === 'rooftop')!
+    rooftop.items = rooftop.items.filter(item => item.id !== 'probe')
+    setup.viewer.setScene({ ...input, layout: without })
+    // Put back: a deleted piece's selection doesn't come back with it.
+    setup.viewer.setScene({ ...input, layout: moved })
+    expect(lit(objectOf(setup.stage.scene, 'probe'), setup.highlight)).toBe(0)
   })
 })

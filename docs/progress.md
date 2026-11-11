@@ -3,6 +3,17 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 3e: heights and picking a piece in 3D (D273, 2026-11-11)
+
+- Step 3h merged (PR #290); the branch restarted from `main`. **Owner's choice (2026-11-11):** build the small and medium steps that are ready (3e and 3f) in **one PR**, one commit per step, one review on staging (an exception to "one step per PR", not a rule change). 3c (the pilot), 4a (waits for the pilot and the benchmark), 4b–4d (large, each benchmarked) and the owner's CC0 models (waiting for files) stay separate.
+- **Built:** a chair's or fixture's own **Height (cm)** in its panel and in the look form, in each kind's range (contract `ITEM_HEIGHTS`; a look's `default_height_cm`, migration `0062_item_look_heights`, added in place); every chair and fixture model drawn at any height in its range; a tap on a piece in 3D selects it, with a card and **Show on plan**; one selection (table or piece) shared by Design shop and View in 3D. [Plan → Step 3e](plans/shop-designer.md#step-3e-heights-and-picking-a-piece-in-3d-built-2026-11-11).
+- **Evidence (2026-11-11, Linux container, Chromium at `/opt/pw-browsers/chromium`):**
+  - Migration generated with `drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts` (the `#auth/schema` pitfall), its table rebuild replaced by hand with one `ALTER TABLE … ADD` with a column CHECK; a second run says "No schema changes". `server/tests/d1-search.test.ts` (local D1) 19 passed with it.
+  - `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2820 passed, 1 skipped (184 files); `test/e2e/shop-designer.test.ts` 20 passed.
+  - Guards removed one at a time, each failing a test: an edit's height against the look's kind, a create's height range, a piece's height range, no height on stairs and figures, clearing a table keeps a selected piece, a figure's contact shadow not lit, a gone piece's selection dropped.
+  - Pictures made again: `display-shelf` (its shelves are spaced so the top jars fit under the top board) and `barista` (the committed one predated 3g's last arm fix). Every other built-in picture rendered the same at its default height.
+- **Not verified:** tapping a piece on a real phone (the unit test taps through the raycaster; the e2e test selects it in Design shop).
+
 ### Shop designer step 3h: the Neighborhood lane test scene and its benchmark (D274, 2026-11-11)
 
 - Step 3g merged (PR #289); the branch restarted from `main`. **Built (internal, `NUXT_PUBLIC_SHOP_DESIGNER_SCENES`: dev, staging, e2e; off in production):** the Neighborhood lane generated around any café outline (seeded by the branch id), a **Surroundings** select and **Fit scene** in View in 3D, the cutaway hiding shophouses on the camera's side, the passer-by and the cat, and the benchmark (`?bench=orbit`: 5 s warm-up, three 20 s orbits, median and p95, renderer counts, **Copy report**). [Plan → Step 3h](plans/shop-designer-scenes.md#step-3h-the-neighborhood-lane-test-scene-built-2026-11-11).

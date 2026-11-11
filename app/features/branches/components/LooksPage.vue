@@ -77,8 +77,8 @@ function pieceCard(spec: ItemSpec, look?: CustomItemLook): LookCard {
   const round = spec.footprint === 'round'
   const kind = spec.kind as CustomItemLook['kind']
   const from = look
-    ? { kind: look.kind, finishes: look.finishes, width: look.defaultWidth, depth: look.defaultDepth }
-    : { kind, finishes: {}, width: spec.width, depth: spec.depth }
+    ? { kind: look.kind, finishes: look.finishes, width: look.defaultWidth, depth: look.defaultDepth, height: look.defaultHeight }
+    : { kind, finishes: {}, width: spec.width, depth: spec.depth, height: spec.height }
   const startFrom: DropdownMenuItem = { label: 'New look from this', icon: 'i-lucide-copy-plus', onSelect: () => void itemLookModal.open({ from }) }
   if (!look) {
     return { key: spec.kind, name: spec.label, photo: spec.photo, icon: 'i-lucide-armchair', meta: `${sizeOf(round, spec.width, spec.depth)} · Built in`, actions: [startFrom], testid: `look-card-${spec.kind}` }

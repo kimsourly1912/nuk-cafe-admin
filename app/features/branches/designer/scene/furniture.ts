@@ -3,7 +3,7 @@ import type { BufferGeometry, Material, Object3D } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Finish, ItemKind, TableLook } from '#shared/contracts/shop-layout'
-import { itemFinish, lookFinish } from '../catalog'
+import { ITEM_SPECS, itemFinish, lookFinish } from '../catalog'
 import { BOOTH_BENCH_DEPTH_CM, chairPoses } from '../geometry'
 import type { MaterialLibrary } from './materials'
 import { cm, yRotation } from './units'
@@ -106,6 +106,11 @@ export interface ItemBuild {
   width: number
   depth: number
   finishes: Partial<Record<string, Finish>>
+  /**
+   * How tall it is (step 3e, a chair's or fixture's own height in its kind's range); left out, the
+   * kind's default. Parts keep their real thickness: a taller chair has a higher seat, not thicker legs.
+   */
+  height?: number
   /** The floor's height, for stairs. */
   floorHeight?: number
 }
@@ -113,33 +118,34 @@ export interface ItemBuild {
 export function buildItem(context: BuildContext, item: ItemBuild): Group {
   const finish = (key: string) => context.materials.finish(itemFinish(item.kind, item.finishes, key))
   const group = new Group()
+  const height = item.height ?? ITEM_SPECS[item.kind].height
   switch (item.kind) {
     case 'cafe-chair':
-      cafeChair(context, group, item.width, item.depth, finish('frame'), finish('seat'))
+      cafeChair(context, group, item.width, item.depth, height, finish('frame'), finish('seat'))
       break
     case 'bentwood-chair':
-      bentwoodChair(context, group, item.width, item.depth, finish('frame'))
+      bentwoodChair(context, group, item.width, item.depth, height, finish('frame'))
       break
     case 'bar-stool':
-      barStool(context, group, item.width, finish('frame'), finish('seat'))
+      barStool(context, group, item.width, height, finish('frame'), finish('seat'))
       break
     case 'dining-bench':
-      diningBench(context, group, item.width, item.depth, finish('frame'), finish('seat'))
+      diningBench(context, group, item.width, item.depth, height, finish('frame'), finish('seat'))
       break
     case 'service-counter':
-      serviceCounter(context, group, item.width, item.depth, finish('cabinet'), finish('top'))
+      serviceCounter(context, group, item.width, item.depth, height, finish('cabinet'), finish('top'))
       break
     case 'display-shelf':
-      displayShelf(context, group, item.width, item.depth, finish('frame'))
+      displayShelf(context, group, item.width, item.depth, height, finish('frame'))
       break
     case 'planter':
-      planter(context, group, item.width, item.depth, finish('box'))
+      planter(context, group, item.width, item.depth, height, finish('box'))
       break
     case 'plant':
-      plant(context, group, item.width, finish('pot'))
+      plant(context, group, item.width, height, finish('pot'))
       break
     case 'room-divider':
-      roomDivider(context, group, item.width, item.depth, finish('frame'))
+      roomDivider(context, group, item.width, item.depth, height, finish('frame'))
       break
     case 'stairs':
       stairs(context, group, item.width, item.depth, item.floorHeight ?? 300, finish('tread'))
@@ -216,9 +222,9 @@ function boothBench(context: BuildContext, width: number, frame: Material, seat:
   return bench
 }
 
-function cafeChair(context: BuildContext, group: Group, width: number, depth: number, frame: Material, seat: Material) {
-  const height = 82
-  const seatHeight = 45
+/** The seat is 37 cm under the top of the back at any height (45 cm at the default 82). */
+function cafeChair(context: BuildContext, group: Group, width: number, depth: number, height: number, frame: Material, seat: Material) {
+  const seatHeight = height - 37
   const x = width / 2 - 4.5
   const z = depth / 2 - 5
   for (const side of [1, -1]) {
@@ -232,8 +238,10 @@ function cafeChair(context: BuildContext, group: Group, width: number, depth: nu
   group.add(back)
 }
 
-function bentwoodChair(context: BuildContext, group: Group, width: number, depth: number, frame: Material) {
-  const seatHeight = 46
+/** The seat is 42 cm under the top of the hoop (46 cm at the default 88). */
+function bentwoodChair(context: BuildContext, group: Group, width: number, depth: number, height: number, frame: Material) {
+  const seatHeight = height - 42
+  const hoopY = height - 14
   const radius = Math.min(width, depth) / 2 - 1
   group.add(part(disc(context, radius, 3.5, 1.2), frame, { x: 0, y: seatHeight, z: 0 }))
   const ring = part(torus(context, radius - 0.5, 1.1), frame, { x: 0, y: seatHeight - 3, z: 0 })
@@ -245,21 +253,21 @@ function bentwoodChair(context: BuildContext, group: Group, width: number, depth
     const bottom = radius - 1
     group.add(rod(context, { x: Math.cos(angle) * top, y: seatHeight - 3, z: Math.sin(angle) * top }, { x: Math.cos(angle) * bottom, y: 0.8, z: Math.sin(angle) * bottom }, 1.3, frame))
   }
-  const legRing = part(torus(context, radius - 3.5, 0.8), frame, { x: 0, y: 20, z: 0 })
+  const legRing = part(torus(context, radius - 3.5, 0.8), frame, { x: 0, y: Math.round(seatHeight * 0.435), z: 0 })
   legRing.rotation.x = Math.PI / 2
   group.add(legRing)
   const backZ = -(radius - 2)
-  for (const side of [1, -1]) group.add(rod(context, { x: side * 12, y: seatHeight, z: backZ }, { x: side * 13, y: 74, z: backZ - 4 }, 1.2, frame))
-  const hoop = part(torus(context, 13, 1.2, Math.PI), frame, { x: 0, y: 74, z: backZ - 4 })
+  for (const side of [1, -1]) group.add(rod(context, { x: side * 12, y: seatHeight, z: backZ }, { x: side * 13, y: hoopY, z: backZ - 4 }, 1.2, frame))
+  const hoop = part(torus(context, 13, 1.2, Math.PI), frame, { x: 0, y: hoopY, z: backZ - 4 })
   hoop.rotation.x = -0.15
   group.add(hoop)
-  const inner = part(torus(context, 8, 0.9, Math.PI), frame, { x: 0, y: 66, z: backZ - 3 })
+  const inner = part(torus(context, 8, 0.9, Math.PI), frame, { x: 0, y: hoopY - 8, z: backZ - 3 })
   inner.rotation.x = -0.15
   group.add(inner)
 }
 
-function barStool(context: BuildContext, group: Group, width: number, frame: Material, seat: Material) {
-  const height = 75
+/** The footrest ring sits at 37% of the height (28 cm at the default 75). */
+function barStool(context: BuildContext, group: Group, width: number, height: number, frame: Material, seat: Material) {
   const radius = width / 2 - 1
   group.add(part(cylinder(context, radius, radius - 1, 6, 32), seat, { x: 0, y: height - 3, z: 0 }))
   group.add(part(disc(context, radius - 1, 3, 1), frame, { x: 0, y: height - 7.5, z: 0 }))
@@ -267,23 +275,21 @@ function barStool(context: BuildContext, group: Group, width: number, frame: Mat
     const angle = Math.PI / 4 + (leg * Math.PI) / 2
     group.add(rod(context, { x: Math.cos(angle) * 11, y: height - 8, z: Math.sin(angle) * 11 }, { x: Math.cos(angle) * (radius - 1), y: 0.8, z: Math.sin(angle) * (radius - 1) }, 1.4, frame))
   }
-  const ring = part(torus(context, 15.5, 1), frame, { x: 0, y: 28, z: 0 })
+  const ring = part(torus(context, 15.5, 1), frame, { x: 0, y: Math.round(height * 0.373), z: 0 })
   ring.rotation.x = Math.PI / 2
   group.add(ring)
 }
 
-function diningBench(context: BuildContext, group: Group, width: number, depth: number, frame: Material, seat: Material) {
-  const height = 46
+function diningBench(context: BuildContext, group: Group, width: number, depth: number, height: number, frame: Material, seat: Material) {
   for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
     group.add(part(box(context, 4.5, height - 8, 4.5, 0.8), frame, { x: sx * (width / 2 - 6), y: (height - 8) / 2, z: sz * (depth / 2 - 5) }))
   }
-  group.add(part(box(context, width - 12, 4, 3, 0.6), frame, { x: 0, y: 14, z: 0 }))
+  group.add(part(box(context, width - 12, 4, 3, 0.6), frame, { x: 0, y: Math.round(height * 0.3), z: 0 }))
   group.add(part(box(context, width, 4, depth, 1), frame, { x: 0, y: height - 7, z: 0 }))
   group.add(part(box(context, width - 2, 6, depth - 2, 2.5), seat, { x: 0, y: height - 2, z: 0 }))
 }
 
-function serviceCounter(context: BuildContext, group: Group, width: number, depth: number, cabinet: Material, top: Material) {
-  const height = 92
+function serviceCounter(context: BuildContext, group: Group, width: number, depth: number, height: number, cabinet: Material, top: Material) {
   const plinth = context.materials.surface('plinth')
   group.add(part(box(context, width - 6, 8, depth - 6), plinth, { x: 0, y: 4, z: 0 }))
   const body = height - 4 - 8
@@ -303,14 +309,21 @@ function serviceCounter(context: BuildContext, group: Group, width: number, dept
   group.add(part(box(context, width + 4, 4, depth + 4, 1.2), top, { x: 0, y: height - 2, z: 0 }))
 }
 
-function displayShelf(context: BuildContext, group: Group, width: number, depth: number, frame: Material) {
-  const height = 190
+/**
+ * A cupboard below (72 cm, lower on a short shelf) and open shelves about 30 cm apart above it, the
+ * highest 20 cm under the top so its jars fit: three at the default 190.
+ */
+function displayShelf(context: BuildContext, group: Group, width: number, depth: number, height: number, frame: Material) {
+  const cupboard = Math.min(72, Math.round(height * 0.6))
   for (const side of [1, -1]) group.add(part(box(context, 3, height, depth, 0.6), frame, { x: side * (width / 2 - 1.5), y: height / 2, z: 0 }))
   group.add(part(box(context, width - 6, height - 2, 1.6), frame, { x: 0, y: height / 2, z: -(depth / 2 - 0.8) }))
-  group.add(part(box(context, width - 6, 72, depth - 2, 0.8), frame, { x: 0, y: 36, z: 0 }))
-  group.add(part(box(context, 0.6, 60, 0.6), context.materials.surface('plinth'), { x: 0, y: 38, z: depth / 2 }))
+  group.add(part(box(context, width - 6, cupboard, depth - 2, 0.8), frame, { x: 0, y: cupboard / 2, z: 0 }))
+  group.add(part(box(context, 0.6, cupboard - 12, 0.6), context.materials.surface('plinth'), { x: 0, y: cupboard / 2 + 2, z: depth / 2 }))
   const ceramic = context.materials.surface('ceramic')
-  const shelves = [110, 145, 180]
+  const first = cupboard + 38
+  const last = height - 20
+  const count = last < first ? 0 : Math.floor((last - first) / 30) + 1
+  const shelves = Array.from({ length: count }, (_, index) => (count === 1 ? first : Math.round(first + (index * (last - first)) / (count - 1))))
   shelves.forEach((y, row) => {
     group.add(part(box(context, width - 6, 2.5, depth - 3, 0.5), frame, { x: 0, y, z: 0.5 }))
     const count = Math.max(2, Math.floor((width - 10) / 22))
@@ -324,22 +337,28 @@ function displayShelf(context: BuildContext, group: Group, width: number, depth:
   group.add(part(box(context, width - 6, 2.5, depth - 3, 0.5), frame, { x: 0, y: height - 1.25, z: 0.5 }))
 }
 
-function planter(context: BuildContext, group: Group, width: number, depth: number, boxMaterial: Material) {
-  const height = 45
-  group.add(part(box(context, width, height, depth, 1.2), boxMaterial, { x: 0, y: height / 2, z: 0 }))
-  group.add(part(box(context, width - 4, 1, depth - 4), context.materials.surface('soil'), { x: 0, y: height - 1, z: 0 }))
+/** `height` is to the top of the bushes, 30 cm over the box (a 45 cm box at the default 75). */
+function planter(context: BuildContext, group: Group, width: number, depth: number, height: number, boxMaterial: Material) {
+  const boxHeight = height - 30
+  group.add(part(box(context, width, boxHeight, depth, 1.2), boxMaterial, { x: 0, y: boxHeight / 2, z: 0 }))
+  group.add(part(box(context, width - 4, 1, depth - 4), context.materials.surface('soil'), { x: 0, y: boxHeight - 1, z: 0 }))
   // Bushes of 13–16 cm stay over the box, so the plan's footprint is the planter's.
   const count = Math.max(2, Math.round(width / 30))
   const span = Math.max(0, width - 2 * 16)
   for (let index = 0; index < count; index++) {
     const x = count === 1 ? 0 : -span / 2 + (index * span) / (count - 1)
-    bush(context, group, { x, y: height + 8, z: 0 }, Math.min(13 + (index % 2) * 3, depth / 2), index)
+    bush(context, group, { x, y: boxHeight + 8, z: 0 }, Math.min(13 + (index % 2) * 3, depth / 2), index)
   }
 }
 
-function plant(context: BuildContext, group: Group, width: number, pot: Material) {
+/**
+ * The pot is 38 cm (lower on a small plant); the leaves reach `height` (125 by default), so a tall
+ * plant is a taller stem and wider-spaced clusters, the leaves their real size.
+ */
+function plant(context: BuildContext, group: Group, width: number, height: number, pot: Material) {
   const radius = width / 2
-  const potHeight = 38
+  const potHeight = Math.round(38 * Math.min(1, Math.max(0.6, height / 125)))
+  const grow = (height - potHeight - 17) / 70
   const profile = [
     new Vector2(0, 0),
     new Vector2(radius * 0.62, 0),
@@ -347,9 +366,10 @@ function plant(context: BuildContext, group: Group, width: number, pot: Material
     new Vector2(radius * 0.86, potHeight),
     new Vector2(radius * 0.8, potHeight),
   ].map(point => new Vector2(cm(point.x), cm(point.y)))
-  group.add(part(cached(context, `pot:${width}`, () => new LatheGeometry(profile, 32)), pot, { x: 0, y: 0, z: 0 }))
+  group.add(part(cached(context, `pot:${width}:${potHeight}`, () => new LatheGeometry(profile, 32)), pot, { x: 0, y: 0, z: 0 }))
   group.add(part(disc(context, radius * 0.78, 1, 0.2), context.materials.surface('soil'), { x: 0, y: potHeight - 3, z: 0 }))
-  group.add(part(cylinder(context, 1, 1.4, 40, 8), context.materials.surface('leaf-dark'), { x: 0, y: potHeight + 18, z: 0 }))
+  const stem = Math.round(40 * grow)
+  group.add(part(cylinder(context, 1, 1.4, stem, 8), context.materials.surface('leaf-dark'), { x: 0, y: potHeight + Math.round(18 * grow), z: 0 }))
   const clusters: At[] = [
     { x: 0, y: 100, z: 0 },
     { x: 11, y: 82, z: 5 },
@@ -358,7 +378,7 @@ function plant(context: BuildContext, group: Group, width: number, pot: Material
     { x: -7, y: 66, z: 10 },
     { x: 9, y: 108, z: -6 },
   ]
-  clusters.forEach((at, index) => bush(context, group, at, 10 + (index % 3) * 3, index))
+  clusters.forEach((at, index) => bush(context, group, { ...at, y: potHeight + (at.y - 38) * grow }, 10 + (index % 3) * 3, index))
 }
 
 function bush(context: BuildContext, group: Group, at: At, radius: number, index: number) {
@@ -369,8 +389,7 @@ function bush(context: BuildContext, group: Group, at: At, radius: number, index
   group.add(mesh)
 }
 
-function roomDivider(context: BuildContext, group: Group, width: number, depth: number, frame: Material) {
-  const height = 180
+function roomDivider(context: BuildContext, group: Group, width: number, depth: number, height: number, frame: Material) {
   const rail = depth
   for (const side of [1, -1]) group.add(part(box(context, 4, height, rail, 0.6), frame, { x: side * (width / 2 - 2), y: height / 2, z: 0 }))
   group.add(part(box(context, width, 4, rail, 0.6), frame, { x: 0, y: height - 2, z: 0 }))

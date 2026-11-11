@@ -598,3 +598,31 @@ describe('0061_item_looks', () => {
     for (const file of files.slice(at + 1)) await applyMigration(client, file)
   })
 })
+
+describe('0062_item_look_heights', () => {
+  it('adds a look\'s height in place: saved looks and their uses stay, null is the kind\'s default, the bound is checked', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0062_item_look_heights.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    await client.batch([
+      `insert into organization (id, name, slug, created_at) values ('t1', 'NUK Cafe', 'nuk', 1)`,
+      `insert into branches (id, tenant_id, name, timezone) values ('b1', 't1', 'Riverside', 'Asia/Phnom_Penh')`,
+      `insert into branch_layouts (tenant_id, branch_id) values ('t1', 'b1')`,
+      `insert into branch_layout_floors (tenant_id, branch_id, id, position, name, height_cm, has_roof, geometry) values ('t1', 'b1', 'ground', 0, 'Ground', 300, 1, '{"items":[]}')`,
+      `insert into custom_item_looks (id, tenant_id, name, kind, finishes, default_width_cm, default_depth_cm) values ('ours', 't1', 'Walnut chair', 'cafe-chair', '{}', 46, 52)`,
+      `insert into branch_layout_item_looks (tenant_id, branch_id, floor_id, look_id, kind, pieces) values ('t1', 'b1', 'ground', 'ours', 'cafe-chair', 2)`,
+    ])
+    await applyMigration(client, files[at]!)
+    // Not rebuilt: the look, its use and the use's foreign key are as they were.
+    expect((await client.execute(`select name, default_height_cm from custom_item_looks`)).rows).toMatchObject([{ name: 'Walnut chair', default_height_cm: null }])
+    expect((await client.execute('select pieces from branch_layout_item_looks')).rows).toMatchObject([{ pieces: 2 }])
+    await expect(client.execute(`delete from custom_item_looks where id = 'ours'`)).rejects.toThrow(/FOREIGN KEY/)
+    const height = (value: number) => client.execute(`update custom_item_looks set default_height_cm = ${value} where id = 'ours'`)
+    await expect(height(19)).rejects.toThrow(/CHECK/)
+    await expect(height(301)).rejects.toThrow(/CHECK/)
+    await height(105)
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+})

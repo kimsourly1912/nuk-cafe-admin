@@ -75,6 +75,23 @@ function showOnPlan(tableId: string) {
   view.value = 'design'
 }
 
+/** One selected piece too (step 3e), the same way: picked in 3D, it is selected in Design shop. */
+const selectedItem = computed<string | null>({
+  get: () => (editor.selection.value?.kind === 'item' ? editor.selection.value.id : null),
+  set: (id) => {
+    if (id) {
+      const floor = layout.value.floors.find(candidate => candidate.items.some(item => item.id === id))
+      if (floor) editor.showFloor(floor.id)
+      editor.selection.value = { kind: 'item', id }
+    }
+    else if (editor.selection.value?.kind === 'item') editor.selection.value = null
+  },
+})
+function showItemOnPlan(itemId: string) {
+  selectedItem.value = itemId
+  view.value = 'design'
+}
+
 const settingsTab = useTemplateRef('settingsTab')
 const tablesTab = useTemplateRef('tablesTab')
 const several = computed(() => (branches.value?.length ?? 0) > 1)
@@ -286,6 +303,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           <BuildingView3D
             v-else
             v-model:selected-table="selectedTable"
+            v-model:selected-item="selectedItem"
             :layout="layout"
             :tables="editor.tables.value"
             :looks="editor.looks.value"
@@ -294,6 +312,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
             :unsaved="editor.isDirty.value"
             :branch-id="id"
             @show-on-plan="showOnPlan"
+            @show-item-on-plan="showItemOnPlan"
             @design-shop="view = 'design'"
           />
         </template>

@@ -14,6 +14,8 @@ export interface ItemLookRow {
   finishes: Record<string, Finish>
   defaultWidthCm: number
   defaultDepthCm: number
+  /** `null`: the kind's default height (a look saved before step 3e). */
+  defaultHeightCm: number | null
   /** The photo's upload (a `media_assets` id), or `null`. */
   photoAssetId: string | null
   version: number
@@ -38,6 +40,7 @@ const lookColumns = {
   finishes: customItemLooks.finishes,
   defaultWidthCm: customItemLooks.defaultWidthCm,
   defaultDepthCm: customItemLooks.defaultDepthCm,
+  defaultHeightCm: customItemLooks.defaultHeightCm,
   photoAssetId: customItemLooks.photoAssetId,
   version: customItemLooks.version,
 }
