@@ -1,6 +1,6 @@
 # Shop designer plan
 
-Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) reviewed by the owner on staging** (2026-11-10: "everything is so perfect"; their Android phone draws the 3D view in 23–30 ms a frame). **Step 2a (server) merged** (2026-11-10, [below](#step-2a-the-server-built-2026-11-10)). **Step 2b (the editor on saved layouts) merged** (2026-11-10, [below](#step-2b-the-editor-built-2026-11-10)). **Step 2c (the viewer) merged** (2026-11-10, [below](#step-2c-the-viewer-built-2026-11-10)). **Step 3a (looks) merged** (2026-11-10, [below](#step-3a-custom-looks-built-2026-11-10)). **Step 3b (photos) merged** (2026-11-11, [below](#step-3b-look-photos-built-2026-11-11)). **Step 2d (quick actions and corner handles) merged** (2026-11-11, PR #283, [below](#step-2d-quick-actions-and-corner-handles-built-2026-11-11)), before the pilot at the owner's choice. **Step 3d (custom chairs and fixtures, built-in pictures, the Looks page) built, in review** (2026-11-11, [below](#step-3d-chair-and-fixture-looks-built-in-pictures-and-the-looks-page-built-2026-11-11)). Next: step 3c (the pilot).
+Owner brief 2026-11-10; decisions in [D273](../decisions.md#d273-the-shop-designer-a-branch-layout-separate-from-its-tables-drawn-in-2d-and-3d-2026-11-10). Status: **step 1 (prototype) reviewed by the owner on staging** (2026-11-10: "everything is so perfect"; their Android phone draws the 3D view in 23–30 ms a frame). **Step 2a (server) merged** (2026-11-10, [below](#step-2a-the-server-built-2026-11-10)). **Step 2b (the editor on saved layouts) merged** (2026-11-10, [below](#step-2b-the-editor-built-2026-11-10)). **Step 2c (the viewer) merged** (2026-11-10, [below](#step-2c-the-viewer-built-2026-11-10)). **Step 3a (looks) merged** (2026-11-10, [below](#step-3a-custom-looks-built-2026-11-10)). **Step 3b (photos) merged** (2026-11-11, [below](#step-3b-look-photos-built-2026-11-11)). **Step 2d (the editor finish: quick actions, corner handles, typed lengths, Saved by) merged** (2026-11-11, PRs #283 and #284, [below](#step-2d-the-editor-finish-built-2026-11-11)), before the pilot at the owner's choice. **Step 3d (custom chairs and fixtures, built-in pictures, the Looks page) built, in review** (2026-11-11, [below](#step-3d-chair-and-fixture-looks-built-in-pictures-and-the-looks-page-built-2026-11-11)). Next: step 3c (the pilot).
 
 Design references:
 
@@ -22,7 +22,7 @@ Design references:
   7. View in 3D shows the same saved layout: exterior orbit, cutaway (roof and camera-facing walls hidden, floors pulled apart), and inside a floor from preset viewpoints. Selecting a table shows its label, seats, floor, View QR and Show on plan.
   8. Moving, restyling or unplacing a table never changes its QR; a printed QR keeps working.
   9. Custom looks (cafe-wide) with a main and an accent finish and an optional photo shown in the picker and the table details.
-  10. The 3D view works on tablet and phone (view only on phone); the lists work when 3D is unavailable.
+  10. The 3D view works on tablet and phone; the lists work when 3D is unavailable. The editor works on phones too (owner, 2026-11-11: "future users can edit on their phone"; the first draft said view only on phone).
 - **Out of scope (follow-ups):** tracing an imported floor sketch, importing 3D model files, free walking, a live counter map, a public tour, editing the layout from the counter app.
 
 ## Agreed rules (D273)
@@ -106,7 +106,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 | 3a. Looks (**built**) | Starter catalog and custom looks | Edit a look used by three tables; delete refused while used |
 | 3b. Photos (**built**) | Look photos via `media_assets` attach/release | Photo shows in the picker and table details |
 | 3d. Chairs and fixtures (**built**) | Custom chair and fixture looks that save, their photo, pictures on the built-in looks, a Looks page | Make a chair look on the Looks page, place it in two branches, edit it, delete it once unused; built-in pictures in the library |
-| 2d. Quick actions (**built**, from 2b's list) | Frame 2B's quick actions beside the selection, corner handles to resize | Resize, turn and duplicate tables without the panel, on a tablet and a phone |
+| 2d. Editor finish (**built**, 2b's deferred items) | Frame 2B's quick actions beside the selection (tables, furniture, walls, edges), corner handles to resize, lengths typed on the plan's labels (3A), "Saved by" in the stale-save message (6A) | Resize, turn and duplicate tables and type a length without the panel, on a tablet and a phone |
 | 3c. Pilot | Pilot with a real café; prioritize more furniture from what the owner reaches for | The owner recreates part of their café and explores it without help |
 
 ## Edge cases and verification
@@ -216,11 +216,11 @@ A branch's **Dining tables** tab has three views: **Table list**, **Design shop*
   - **A table archived elsewhere** shows as "… is no longer an active table here" with **Remove from map**; the server's 409 `LAYOUT_TABLE_UNAVAILABLE` refetches the tables so the editor names it.
   - **Lengths and openings are typed in the edge's panel** (length, a door's width and position), rather than on the plan's labels (3A) or by dragging an opening along its edge. Inside walls are drawn and deleted, not dragged.
   - **Below `lg` the library, and below `md` the selection's panel, open in a slide-over** (the Library button on the floor bar, Details on the move pad), so a tablet in portrait can place tables.
-  - **"Saved by Dara" (6A) is not shown**: the layout's GET names when it was saved, not by whom. Adding the name is a server change for a later step if the owner wants it.
+  - **"Saved by Dara" (6A) is not shown**: the layout's GET names when it was saved, not by whom. Adding the name is a server change for a later step if the owner wants it. (**Built in step 2d.**)
   - **The furniture studio is no longer reachable**: it was the prototype's preview of step 3a. Its code (`FurnitureStudio.vue`, `designer/scene/studio-viewer.ts`) stays for 3a.
 - **Not in 2b:**
-  - the quick actions beside a selected table (2B: Rotate 90°, Duplicate look), and corner handles to resize on the plan (the panel's width and depth do it) (**built in [step 2d](#step-2d-quick-actions-and-corner-handles-built-2026-11-11)**);
-  - typing a length on the plan's label;
+  - the quick actions beside a selected table (2B: Rotate 90°, Duplicate look), and corner handles to resize on the plan (the panel's width and depth do it) (**built in [step 2d](#step-2d-the-editor-finish-built-2026-11-11)**);
+  - typing a length on the plan's label (**built in step 2d**);
   - the 3D items of step 2c: the table card's View QR, quality on real devices, the saved-or-draft question above.
 - **Tests:**
   - `app/features/branches/tests/designer-outline.test.ts` (18): drawing and closing a shape; moving a corner with and without right angles; openings moved or dropped on a shorter edge; splitting and merging edges with their openings (corner 0 included); edge kinds and what each takes; a free spot for a new door; a widened opening pushing another; edge names either way round; every starter valid and table-free; Blank's message; new floors up to the limit. Every edited shape passes the shared contract.
@@ -318,23 +318,31 @@ A custom look can have a photo of the real piece, so the owner recognises it. Th
 - **Not in 3b:** photos for chairs or fixtures (nothing saves them yet); a photo on built-in looks.
 - **Review on staging:** Design shop → New look, **Upload photo**, frame it, save. The photo shows on the look under Table looks; give the look to a table: the photo shows next to **Look** in its panel and, after saving, on its card in **View in 3D**. Edit the look and **Remove** the photo: the shape icon comes back.
 
-## Step 2d: quick actions and corner handles (built 2026-11-11)
+## Step 2d: the editor finish (built 2026-11-11)
 
-Two of step 2b's deferred items, built before the pilot (owner's choice, 2026-11-11) so the owner can rebuild their café without reaching for the panel. Frame 2B of the mockups is the design. No server or contract change except naming the furniture size limits (`ITEM_SIZE_MIN_CM`, `ITEM_SIZE_MAX_CM`, the values the schema already had).
+Step 2b's deferred editor items, built before the pilot (owner's choice, 2026-11-11) so the owner can rebuild their café without reaching for the panel. Frames 2B (quick actions), 3A (typed lengths) and 6A ("Saved by") of the mockups are the design. No migration. The contract names the furniture size limits (`ITEM_SIZE_MIN_CM`, `ITEM_SIZE_MAX_CM`, the values the schema already had) and the layout's GET adds `updatedByName`.
 
-- **Where:** `designer/geometry.ts` (`resizeFromCorner`, `besideOf`), `FloorPlanCanvas.vue` (the corner handles, the resize gesture, `selectionBox` exposed), `DesignShopEditor.vue` (the quick-action bar, `duplicateLook`, `duplicateItem`, `resize`).
+The owner also settled acceptance criterion 10 here: **the editor stays usable on phones** (the first draft said view only on phone).
+
+- **Where:** `designer/geometry.ts` (`resizeFromCorner`, `besideOf`), `designer/outline.ts` (`openingFits`, shared with the edge's panel), `FloorPlanCanvas.vue` (the corner handles, the resize gesture, clickable length labels, `selectionBox` exposed), `DesignShopEditor.vue` (the quick-action bars, `duplicateLook`, `duplicateItem`, `resize`, the length field), `branches.layout.repository.ts` and `.service.ts` (`updatedByName`).
 - **Quick actions** (a toolbar under the selection, above it when there's no room, kept inside the plan; hidden while the piece is dragged, turned or resized, and when it's off screen):
   - a table: **Rotate 90°**, **Duplicate look**, **Remove from map**;
   - furniture: **Rotate 90°**, **Duplicate**, **Delete**;
+  - an inside wall: **Delete wall**;
+  - an outline edge (in the select tool): **Wall** / **Railing** / **Open**, **Door** (**Gate** on a railing) and **Window** (walls only), disabled when no spot is free, the same rule as the edge's panel (`openingFits`);
   - icons only below `sm` (the accessible names stay), so a 390 px phone fits it beside the move pad.
 - **Duplicate look** asks **Which table is this?** (the dialog a look from the library uses: an unplaced table or **New table**) and puts that table beside this one, clear of its chairs, with the same look, size, turn and floor. It never copies the table, its label or its QR code (frame 2B). The original is read again after the dialog: if an undo took it off the map meanwhile, nothing is placed.
 - **Duplicate** (furniture) copies the piece with its size, turn and finishes beside it; the copy is selected.
 - **Corner handles** on the selection frame (tables and furniture): the opposite corner stays put, sizes snap to 5 cm (the panel's step) within the contract's limits (tables 40–600 cm, furniture 10–2000 cm), a round table or piece stays round. One undo step per drag, like moving and turning. The handles hide when the frame is under 56 px on screen, so a small piece can still be dragged.
-- **Not in 2d:** typing a length on the plan's label (2b's third item; the panel and the edge's panel type lengths); quick actions for inside walls and edges (their panels are short).
+- **Typed lengths (3A):** in Draw outline, a click on an edge's length label turns it into a field there, filled with the length and selected. **Enter** or leaving the field sets it (as the edge's panel does: the end corner moves, right angles kept; one undo step; 10–10 000 cm); **Escape** leaves it as it was. Changing tool or floor closes it.
+- **"Saved by" (6A):** the layout's GET names who saved it last (`updatedByName`: `user.name` through `branch_layouts.updated_by`, a left join, null before the first save or once the account is gone). The stale-save message reads "Saved by Dara 3 minutes ago. Your draft is kept here until you choose." The mockup's "on another device" is left out: the server can't tell a second device from a second tab.
+- **Not in 2d:** quick actions while Draw outline is open (the edge's panel is beside it, and the bar would cover the labels).
 - **Tests:**
   - `app/features/branches/tests/designer-geometry.test.ts` (+4): a corner grows the piece with the opposite corner fixed; a table turned 90° widens when dragged down the screen; the size limits and a round piece; where a copy goes, turned or not.
-  - `test/e2e/shop-designer.test.ts` (13, +1, and the phone test extended): a round table's corner handle dragged 40 cm out grows both ways, Undo and Redo; **Rotate 90°**; **Duplicate look** with **New table** puts L4 beside L1 with L1's look, size and turn, saved; **Remove from map**; a plant duplicated; on a 390 px phone the bar fits with no sideways scrolling.
-- **Review on staging:** select a table: drag a square corner to resize it, then **Rotate 90°**, **Duplicate look** (pick an unplaced table or New table) and **Remove from map** from the bar under it. On a phone, the same bar shows icons.
+  - `app/features/branches/tests/designer-outline.test.ts` (+1): whether a door or window fits (kind, room, a short edge).
+  - `server/features/branches/tests/branches.layout.service.test.ts`: `updatedByName` null before the first save, the saver's name after.
+  - `test/e2e/shop-designer.test.ts` (14, +2, the phone and stale-save tests extended): "Saved by Lina Lay" in the stale-save message; a length typed on a label (Escape leaves it, Enter sets it, saved); an edge made a railing with a gate from its bar; a wall drawn and deleted from its bar; and a round table's corner handle dragged 40 cm out grows both ways, Undo and Redo; **Rotate 90°**; **Duplicate look** with **New table** puts L4 beside L1 with L1's look, size and turn, saved; **Remove from map**; a plant duplicated; on a 390 px phone the bar fits with no sideways scrolling.
+- **Review on staging:** select a table: drag a square corner to resize it, then **Rotate 90°**, **Duplicate look** (pick an unplaced table or New table) and **Remove from map** from the bar under it. On a phone, the same bar shows icons. Click an outline edge: make it a railing and add a gate from its bar. In Draw outline, click a length, type a new one and press Enter. Save on one device, change something on another and save: the message names who saved.
 
 ## Step 3d: chair and fixture looks, built-in pictures and the Looks page (built 2026-11-11)
 

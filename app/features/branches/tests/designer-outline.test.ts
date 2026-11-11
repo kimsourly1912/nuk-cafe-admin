@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Edge, ShopLayout } from '#shared/contracts/shop-layout'
 import { edgeLength, floorSchema, layoutSchema, LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
 import { describeIssue } from '../composables/useLayoutEditor'
-import { addOpening, areaM2, canClose, closedShape, edgeNames, edgeTakes, fitOpenings, freeSpot, insertCorner, moveCorner, removeCorner, setEdgeKind, setEdgeLength, updateOpening } from '../designer/outline'
+import { addOpening, areaM2, canClose, closedShape, edgeNames, edgeTakes, fitOpenings, freeSpot, insertCorner, moveCorner, openingFits, removeCorner, setEdgeKind, setEdgeLength, updateOpening } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import { canAddFloor, floorName, newFloor, STARTERS } from '../designer/starters'
 import { demoLayout } from './demo-layout'
@@ -119,6 +119,15 @@ describe('an edge\'s kind, length and openings', () => {
     expect(addOpening(full, 0, 'door', 'd')).toBe(full)
     expect(addOpening(setEdgeKind(square(400), 0, 'railing'), 0, 'window', 'w').edges[0]!.openings).toEqual([])
     expect(valid(withDoor)).toEqual([])
+  })
+
+  it('says whether a door or window still fits, as the edge panel and the quick actions offer them', () => {
+    expect(openingFits(square(400), 0, 'door')).toBe(true)
+    expect(openingFits(square(400, [{ id: 'w', kind: 'window', offset: 0, width: 400 }]), 0, 'door')).toBe(false)
+    expect(openingFits(setEdgeKind(square(400), 0, 'railing'), 0, 'window')).toBe(false)
+    expect(openingFits(setEdgeKind(square(400), 0, 'railing'), 0, 'door')).toBe(true)
+    expect(openingFits(setEdgeKind(square(400), 0, 'open'), 0, 'door')).toBe(false)
+    expect(openingFits(setEdgeLength(square(400), 0, 30), 0, 'door')).toBe(false)
   })
 
   it('a widened opening keeps its place and pushes the others out of its way', () => {

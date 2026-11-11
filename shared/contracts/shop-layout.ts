@@ -213,6 +213,8 @@ export interface BranchLayout {
   /** 0 until the first save. */
   version: number
   updatedAt: string | null
+  /** Who saved it last; null before the first save or once that account is gone. */
+  updatedByName: string | null
   floors: Floor[]
   placements: Placement[]
   /** The branch's active tables by label; the unplaced ones are the editor's Unplaced list. */
