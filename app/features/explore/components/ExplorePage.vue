@@ -1,22 +1,35 @@
 <script setup lang="ts">
-import { useMediaQuery, useTimeoutFn } from '@vueuse/core'
-import { DEMO_CAFE_NAME, DEMO_SEED, DEMO_TABLES, demoCafe } from '../demo/demo-cafe'
+import { until, useMediaQuery, useTimeoutFn } from '@vueuse/core'
+import type { PublicExploreLayout } from '#shared/contracts/shop-layout'
+import { useBranchOrderCount, useMenuHandoff } from '~/features/menu'
+import type { ExploreBranch } from '../composables/useExploreBranches'
+import { useExploreBranches } from '../composables/useExploreBranches'
+import { useExploreLocation } from '../composables/useExploreLocation'
+import { DEMO_CAFE_NAME, DEMO_PLACE, DEMO_SEED, DEMO_TABLES, demoCafe } from '../demo/demo-cafe'
 import type { WalkReport } from '../runtime/bench'
 import { formatWalkReport } from '../runtime/bench'
 import { attachDesktopInput } from '../runtime/desktop-input'
+import type { DistrictInput } from '../runtime/district'
 import type { MapColors } from '../runtime/map-draw'
 import { readMapColors } from '../runtime/map-draw'
-import type { ExploreWorld, Prompt, Status } from '../runtime/world'
+import { branchChain } from '../runtime/network'
+import { publicDistrictInput } from '../runtime/public-district'
+import type { ExploreNetwork, ExploreWorld, Prompt, RideStopOption, Status } from '../runtime/world'
 import ExploreFullMap from './ExploreFullMap.vue'
 import ExploreMinimap from './ExploreMinimap.vue'
 import ExploreRidePicker from './ExploreRidePicker.vue'
 import ExploreTouchControls from './ExploreTouchControls.vue'
 
 /**
- * Explore (D275, docs/plans/explore.md): walk a street and a café, or ride as a passenger,
- * with a minimap, a full map and a waypoint. Internal behind `NUXT_PUBLIC_EXPLORE` (404 without
- * it). The 3D runtime loads on demand; this screen owns its lifecycle and the HUD, and every path
- * leads back to the regular menu.
+ * Explore (D275, docs/plans/explore.md): walk a street and a café, or ride as a passenger, with a
+ * minimap, a full map and a waypoint. Internal behind `NUXT_PUBLIC_EXPLORE` (404 without it). The
+ * 3D runtime loads on demand; this screen owns its lifecycle and the HUD, and every path leads
+ * back to the regular menu.
+ *
+ * Step E4: the cafe's branches in Explore are the districts, joined by gateways, starting at
+ * `?at=<branch>` (Back to café, with `&spot=counter`), else the branch chosen on the menu, else the
+ * first by name. With none published (or `?bench=walk`, whose numbers must stay comparable) it
+ * plays the demo street, and says so.
  */
 
 if (!useRuntimeConfig().public.explore) throw createError({ statusCode: 404, statusMessage: 'Page not found', fatal: true })
@@ -26,6 +39,9 @@ const route = useRoute()
 const colorMode = useColorMode()
 const touch = useMediaQuery('(pointer: coarse)')
 const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
+const explore = useExploreBranches()
+const location = useExploreLocation()
+const { openMenu, chosenBranchId } = useMenuHandoff()
 
 const page = useTemplateRef<HTMLElement>('page')
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
@@ -33,14 +49,24 @@ const world = shallowRef<ExploreWorld | null>(null)
 const state = ref<'loading' | 'ready' | 'unavailable'>('loading')
 const prompt = ref<Prompt | null>(null)
 const status = ref<Status>({
+  placeId: '',
+  district: DEMO_CAFE_NAME,
   place: 'Street',
   indoors: false,
   seated: false,
-  waypoint: false,
-  ride: { label: null, canCall: false, canCancel: false, canSkip: false, view: null },
+  waypoint: null,
+  waypointId: null,
+  crossing: null,
+  ride: { label: null, canCall: false, canCancel: false, canSkip: false, canRetry: false, view: null },
 })
+/** The branches this world joins (empty on the demo street). */
+const network = shallowRef<ExploreBranch[]>([])
+const chain = computed(() => branchChain(network.value))
+/** Why the demo street is playing, when the cafe has branches but they can't be shown. */
+const notice = ref<string | null>(null)
 const mapOpen = ref(false)
 const ridePickerOpen = ref(false)
+const rideStops = shallowRef<RideStopOption[]>([])
 const overlayOpen = computed(() => mapOpen.value || ridePickerOpen.value)
 const colors = shallowRef<MapColors | null>(null)
 const hint = ref(true)
@@ -50,13 +76,17 @@ let detachInput: (() => void) | undefined
 let disposed = false
 
 const dark = computed(() => colorMode.value === 'dark')
+const isBranch = computed(() => network.value.some(branch => branch.id === status.value.placeId))
+const orderCount = useBranchOrderCount(() => (isBranch.value ? status.value.placeId : undefined))
 
 function readColors() {
   if (page.value) colors.value = readMapColors(page.value)
 }
 
-function goToMenu() {
-  navigateTo(tenantPath('/'))
+/** A branch's menu with that branch chosen; the demo street's goes to the plain menu. */
+function goToMenu(placeId = status.value.placeId) {
+  if (network.value.some(branch => branch.id === placeId)) return openMenu(placeId)
+  return navigateTo(tenantPath('/'))
 }
 
 function interact() {
@@ -67,9 +97,9 @@ function jump() {
   world.value?.actions.press('jump')
 }
 
-function setWaypoint(on: boolean) {
-  world.value?.setWaypoint(on)
-  if (on) mapOpen.value = false
+function setWaypoint(id: string | null) {
+  world.value?.setWaypoint(id)
+  if (id) mapOpen.value = false
 }
 
 function returnToStreet() {
@@ -79,6 +109,10 @@ function returnToStreet() {
 
 function callFromMap() {
   if (world.value?.rideAction({ type: 'call' })) mapOpen.value = false
+}
+
+function rideHere(stopId: string) {
+  if (world.value?.rideAction({ type: 'call', stopId })) mapOpen.value = false
 }
 
 function confirmRide(id: string) {
@@ -99,16 +133,61 @@ async function copyReport() {
   bench.value.copied = true
 }
 
+/** A published branch's district, from its public drawing (step E3). */
+async function loadBranch(branch: ExploreBranch): Promise<DistrictInput> {
+  const published = await apiFetch<PublicExploreLayout>(`/public/explore/branches/${encodeURIComponent(branch.id)}`)
+  return publicDistrictInput(branch, published)
+}
+
+/** Where to start: the branch asked for, else the one chosen on the menu, else the first by name. */
+function startBranch(branches: readonly ExploreBranch[]): ExploreBranch | undefined {
+  const asked = typeof route.query.at === 'string' ? route.query.at : undefined
+  const byName = [...branches].sort((left, right) => left.name.localeCompare(right.name))
+  return branches.find(branch => branch.id === asked) ?? branches.find(branch => branch.id === chosenBranchId.value) ?? byName[0]
+}
+
+const demo: DistrictInput = { name: DEMO_CAFE_NAME, layout: demoCafe(), tables: DEMO_TABLES, seed: DEMO_SEED }
+
+/** The first district: a real branch when one is in Explore and loads, else the demo street. */
+async function firstDistrict(): Promise<{ input: DistrictInput, placeId: string, network?: ExploreNetwork }> {
+  if (benchmarking) return { input: demo, placeId: DEMO_PLACE }
+  await until(() => explore.pending.value).toBe(false)
+  const branches = explore.branches.value
+  if (explore.error.value) notice.value = 'The cafe\'s branches couldn\'t be loaded, so this is a demo street.'
+  const first = startBranch(branches)
+  if (!first) {
+    notice.value ??= 'No branch is in Explore yet, so this is a demo street.'
+    return { input: demo, placeId: DEMO_PLACE }
+  }
+  try {
+    const input = await loadBranch(first)
+    network.value = branches
+    const load = (id: string) => {
+      const branch = branches.find(entry => entry.id === id)
+      return branch ? loadBranch(branch) : Promise.reject(new Error('Not in Explore'))
+    }
+    return { input, placeId: first.id, network: { chain: branchChain(branches), load } }
+  }
+  catch (error) {
+    console.warn('Explore could not load the branch', error)
+    notice.value = `${first.name}'s café couldn't be loaded right now, so this is a demo street.`
+    return { input: demo, placeId: DEMO_PLACE }
+  }
+}
+
 onMounted(async () => {
   readColors()
   try {
-    const { createExploreWorld } = await import('../runtime/world')
+    const [{ createExploreWorld }, first] = await Promise.all([import('../runtime/world'), firstDistrict()])
     if (disposed || !canvas.value) return
     const created = await createExploreWorld({
       canvas: canvas.value,
       dark: dark.value,
       reducedMotion: reducedMotion.value,
-      district: { name: DEMO_CAFE_NAME, layout: demoCafe(), tables: DEMO_TABLES, seed: DEMO_SEED },
+      district: first.input,
+      placeId: first.placeId,
+      start: route.query.spot === 'counter' ? 'counter' : 'street',
+      network: first.network,
       events: {
         prompt: (next) => {
           prompt.value = next
@@ -120,8 +199,9 @@ onMounted(async () => {
           state.value = 'ready'
         },
         stats: () => {},
-        counter: goToMenu,
+        counter: placeId => goToMenu(placeId),
         chooseRide: () => {
+          rideStops.value = world.value?.rideStops() ?? []
           ridePickerOpen.value = true
         },
         contextLost: () => {
@@ -141,7 +221,7 @@ onMounted(async () => {
       onMap: () => {
         mapOpen.value = true
       },
-      onLeave: goToMenu,
+      onLeave: () => goToMenu(),
     })
     if (benchmarking) void runBenchmark(created)
   }
@@ -185,12 +265,12 @@ onBeforeUnmount(() => {
         ref="canvas"
         class="block size-full touch-none"
         role="img"
-        :aria-label="`A street with ${DEMO_CAFE_NAME}. Move with W, A, S and D or the arrow keys, look with the mouse, press E to act and M for the map.`"
+        :aria-label="`A street with ${status.district}. Move with W, A, S and D or the arrow keys, look with the mouse, press E to act and M for the map.`"
       />
     </div>
 
     <ExploreTouchControls
-      v-if="world && touch && state === 'ready' && !overlayOpen"
+      v-if="world && touch && state === 'ready' && !overlayOpen && !status.crossing"
       :actions="world.actions"
       :passenger="status.seated && Boolean(status.ride.label)"
     />
@@ -204,7 +284,7 @@ onBeforeUnmount(() => {
           color="neutral"
           variant="soft"
           class="pointer-events-auto"
-          @click="goToMenu"
+          @click="goToMenu()"
         />
         <div
           v-if="state === 'ready'"
@@ -212,7 +292,7 @@ onBeforeUnmount(() => {
           aria-live="polite"
         >
           <UBadge
-            :label="status.ride.label ?? status.place"
+            :label="status.crossing && !status.crossing.failed ? `Entering ${status.crossing.name}…` : status.ride.label ?? status.place"
             :icon="status.ride.label ? 'i-lucide-car-front' : status.indoors ? 'i-lucide-coffee' : 'i-lucide-map-pin'"
             color="neutral"
             variant="soft"
@@ -220,9 +300,16 @@ onBeforeUnmount(() => {
           />
           <UBadge
             v-if="status.waypoint && !status.ride.label"
-            :label="`Waypoint: ${DEMO_CAFE_NAME}`"
+            :label="`Waypoint: ${status.waypoint}`"
             icon="i-lucide-navigation"
             color="primary"
+            variant="soft"
+          />
+          <UBadge
+            v-if="orderCount > 0"
+            :label="`${status.district} · ${orderCount} ${orderCount === 1 ? 'item' : 'items'}`"
+            icon="i-lucide-shopping-bag"
+            color="neutral"
             variant="soft"
           />
         </div>
@@ -265,7 +352,44 @@ onBeforeUnmount(() => {
         <UButton
           icon="i-lucide-coffee"
           label="View menu"
-          @click="goToMenu"
+          @click="goToMenu()"
+        />
+      </div>
+      <div
+        v-else-if="status.crossing?.failed"
+        class="pointer-events-auto flex max-w-sm flex-col items-center gap-3 self-center rounded-lg bg-default p-4 text-center ring ring-default"
+        role="alert"
+      >
+        <p class="text-sm">
+          {{ status.crossing.name }}'s street couldn't be loaded. Check your connection and try again, or stay on this street.
+        </p>
+        <div class="flex flex-wrap justify-center gap-2">
+          <UButton
+            icon="i-lucide-refresh-cw"
+            label="Retry"
+            @click="world?.retryCrossing()"
+          />
+          <UButton
+            label="Go back"
+            color="neutral"
+            variant="outline"
+            @click="world?.cancelCrossing()"
+          />
+        </div>
+      </div>
+      <div
+        v-else-if="notice"
+        class="pointer-events-auto flex max-w-sm items-start gap-2 self-center rounded-md bg-default/90 px-3 py-2 text-sm text-muted ring ring-default"
+        role="status"
+      >
+        <span>{{ notice }}</span>
+        <UButton
+          icon="i-lucide-x"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          aria-label="Dismiss"
+          @click="notice = null"
         />
       </div>
       <p
@@ -305,6 +429,15 @@ onBeforeUnmount(() => {
               <UKbd value="V" />
             </template>
           </UButton>
+          <UButton
+            v-if="status.ride.canRetry"
+            label="Retry"
+            icon="i-lucide-refresh-cw"
+            color="neutral"
+            variant="soft"
+            class="pointer-events-auto"
+            @click="world?.rideAction({ type: 'retry' })"
+          />
           <UButton
             v-if="status.ride.canSkip"
             label="Skip ride"
@@ -383,17 +516,24 @@ onBeforeUnmount(() => {
       v-model:open="mapOpen"
       :world="world"
       :colors="colors"
-      :waypoint="status.waypoint"
+      :place-id="status.placeId"
+      :waypoint-id="status.waypointId"
       :can-call-ride="status.ride.canCall"
+      :branches="network"
+      :chain="chain"
+      :location="location.state.value"
+      :position="location.position.value"
       @waypoint="setWaypoint"
       @menu="goToMenu"
       @street="returnToStreet"
       @call-ride="callFromMap"
+      @ride="rideHere"
+      @locate="location.locate"
     />
     <ExploreRidePicker
       v-if="world"
       v-model:open="ridePickerOpen"
-      :stops="world.rideStops"
+      :stops="rideStops"
       @confirm="confirmRide"
     />
   </div>

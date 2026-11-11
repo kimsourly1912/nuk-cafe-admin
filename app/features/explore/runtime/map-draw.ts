@@ -1,4 +1,5 @@
 import type { District, MapAreaKind } from './district'
+import type { NetworkBranch } from './network'
 import type { Vec2 } from './vec'
 
 /**
@@ -99,6 +100,10 @@ export function drawMap(context: CanvasRenderingContext2D, district: District, v
   context.strokeStyle = colors.route
   context.lineWidth = 0.18
   for (const door of district.doors) line(context, door.a, door.b)
+  // Gateways: a bar across the lane where the next district begins.
+  context.strokeStyle = colors.player
+  context.lineWidth = Math.max(0.5, 4 / scale)
+  for (const gateway of district.gateways) line(context, gateway.a, gateway.b)
 
   if (view.route && view.route.length > 1) {
     context.strokeStyle = colors.route
@@ -111,19 +116,20 @@ export function drawMap(context: CanvasRenderingContext2D, district: District, v
   context.restore()
 
   if (options.labels) {
-    const cafe = district.map.areas.find(area => area.kind === 'cafe')
-    if (cafe) {
-      const middle = cafe.points.reduce((sum, point) => ({ x: sum.x + point.x / cafe.points.length, z: sum.z + point.z / cafe.points.length }), { x: 0, z: 0 })
-      const at = toScreen(middle, options)
+    const label = (text: string, point: Vec2) => {
+      const at = toScreen(point, options)
       context.font = '600 14px system-ui, sans-serif'
       context.textAlign = 'center'
       context.textBaseline = 'middle'
       context.lineWidth = 4
       context.strokeStyle = colors.outline
-      context.strokeText(district.name, at.x, at.y)
+      context.strokeText(text, at.x, at.y)
       context.fillStyle = colors.text
-      context.fillText(district.name, at.x, at.y)
+      context.fillText(text, at.x, at.y)
     }
+    const cafe = district.map.areas.find(area => area.kind === 'cafe')
+    if (cafe) label(district.name, cafe.points.reduce((sum, point) => ({ x: sum.x + point.x / cafe.points.length, z: sum.z + point.z / cafe.points.length }), { x: 0, z: 0 }))
+    for (const gateway of district.gateways) label(`To ${gateway.name}`, gateway.position)
   }
 
   // The player's arrow at its place, pointing its heading (screen space, so it keeps its size).
@@ -194,4 +200,72 @@ function pin(context: CanvasRenderingContext2D, point: Vec2, scale: number, colo
   context.beginPath()
   context.arc(point.x, point.z, 4 / scale, 0, Math.PI * 2)
   context.fill()
+}
+
+export interface OverviewOptions {
+  width: number
+  height: number
+  colors: MapColors
+  /** The district the player is in, and the waypoint's branch. */
+  currentId: string
+  waypointId: string | null
+}
+
+/**
+ * The overview (step E4): every branch at its real position (north up, an equirectangular
+ * projection: one cafe's branches span a few kilometres at most) with the gateways joining them
+ * along the chain. Labels name the branches; the player's district has a ring.
+ */
+export function drawOverview(context: CanvasRenderingContext2D, chain: readonly NetworkBranch[], options: OverviewOptions) {
+  const { width, height, colors } = options
+  context.clearRect(0, 0, width, height)
+  context.fillStyle = colors.ground
+  context.fillRect(0, 0, width, height)
+  if (!chain.length) return
+  const points = overviewPoints(chain, width, height)
+  context.lineCap = 'round'
+  context.strokeStyle = colors.lane
+  context.lineWidth = 6
+  context.beginPath()
+  points.forEach((point, index) => (index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)))
+  context.stroke()
+  context.font = '600 14px system-ui, sans-serif'
+  context.textAlign = 'center'
+  context.textBaseline = 'top'
+  chain.forEach((branch, index) => {
+    const point = points[index]!
+    const current = branch.id === options.currentId
+    context.fillStyle = branch.id === options.waypointId ? colors.route : colors.cafe
+    context.strokeStyle = current ? colors.player : colors.outline
+    context.lineWidth = current ? 3 : 2
+    context.beginPath()
+    context.arc(point.x, point.y, current ? 11 : 8, 0, Math.PI * 2)
+    context.fill()
+    context.stroke()
+    const text = current ? `${branch.name} (you)` : branch.name
+    context.lineWidth = 4
+    context.strokeStyle = colors.outline
+    context.strokeText(text, point.x, point.y + 15)
+    context.fillStyle = colors.text
+    context.fillText(text, point.x, point.y + 15)
+  })
+}
+
+/** The branches' canvas points, fitted with room for their labels. */
+export function overviewPoints(chain: readonly NetworkBranch[], width: number, height: number): { x: number, y: number }[] {
+  const middle = chain.reduce((sum, branch) => sum + branch.latitude, 0) / chain.length
+  const squeeze = Math.cos((middle * Math.PI) / 180)
+  const projected = chain.map(branch => ({ x: branch.longitude * squeeze, y: -branch.latitude }))
+  const xs = projected.map(point => point.x)
+  const ys = projected.map(point => point.y)
+  const spanX = Math.max(...xs) - Math.min(...xs)
+  const spanY = Math.max(...ys) - Math.min(...ys)
+  const pad = 56
+  const scale = Math.min((width - pad * 2) / (spanX || 1), (height - pad * 2) / (spanY || 1))
+  const centerX = (Math.max(...xs) + Math.min(...xs)) / 2
+  const centerY = (Math.max(...ys) + Math.min(...ys)) / 2
+  return projected.map(point => ({
+    x: width / 2 + (spanX ? (point.x - centerX) * scale : 0),
+    y: height / 2 - 10 + (spanY ? (point.y - centerY) * scale : 0),
+  }))
 }

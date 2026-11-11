@@ -27,6 +27,7 @@ import { ActiveOrdersBar } from '~/features/orders'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 import { usePublicMenu, useCart, useShopBranch, useTableContext } from '../composables/useShopMenu'
 import { useScrollSpy } from '../composables/useScrollSpy'
+import { FROM_EXPLORE_QUERY } from '../composables/useMenuHandoff'
 import { useOrderSource } from '../composables/useOrderSource'
 import { lineKey, quantityOfItem, resolveCart } from '../utils/cart'
 import { menuItems, menuSections, searchMenu } from '../utils/menu'
@@ -172,6 +173,13 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const linkedItemId = () => (typeof route.query.item === 'string' ? route.query.item : undefined)
+// Opened from Explore's café (D275, step E4): Back to café returns to that branch's counter. The
+// address names the branch, so a reload keeps the way back; Explore's flag decides it's offered.
+const exploreEnabled = useRuntimeConfig().public.explore
+const fromExplore = computed(() => {
+  const value = route.query[FROM_EXPLORE_QUERY]
+  return exploreEnabled && typeof value === 'string' && value ? value : undefined
+})
 /** True a tick after mounting: by then a stored branch choice has asked for its own menu. */
 const settled = ref(false)
 onMounted(() => nextTick(() => {
@@ -403,6 +411,14 @@ watch(detailOpen, (open) => {
 
     <main class="mx-auto max-w-7xl px-4 pt-4 pb-10 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8">
       <div class="min-w-0 space-y-8">
+        <UButton
+          v-if="fromExplore"
+          :to="{ path: tenantPath('/explore'), query: { at: fromExplore, spot: 'counter' } }"
+          icon="i-lucide-arrow-left"
+          label="Back to café"
+          color="neutral"
+          variant="outline"
+        />
         <VerifyEmailBanner />
         <ActiveOrdersBar v-if="account || guest" />
         <UAlert

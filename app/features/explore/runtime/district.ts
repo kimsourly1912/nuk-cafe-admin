@@ -1,8 +1,10 @@
-import type { ItemKind, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import type { ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { SurroundingsPlan } from '~/features/branches'
 import { BUILT_IN_LOOKS, chairPoses, DOOR_HEIGHT_CM, findLook, ITEM_SPECS, outwardNormal, pieceHeight, placementExtent, planLane, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, toPlan } from '~/features/branches'
+import type { GatewaySide } from './network'
 import type { RideCourse } from './ride'
-import { buildRideCourse } from './ride-course'
+import type { RideLegs } from './ride-course'
+import { buildRideCourse, buildRideLegs } from './ride-course'
 import type { Vec2 } from './vec'
 import { distance, insidePolygon, rotate, sub, yawOf } from './vec'
 import type { Solid, Surface, Wall, WalkWorld } from './walk-world'
@@ -53,6 +55,29 @@ export interface FloorArea {
   ceiling: number | null
 }
 
+/** A gateway to the next district (step E4): an arch across the lane at one of its ends. */
+export interface GatewayInfo {
+  side: GatewaySide
+  /** The branch whose district lies through it, and its name for the arch and the button. */
+  branchId: string
+  name: string
+  /** The middle of the lane under the arch: the context button's target. */
+  position: Vec2
+  /** The arch's posts, on the curb and across the lane. */
+  a: Vec2
+  b: Vec2
+  /** Through the arch, out of this district (unit length). */
+  out: Vec2
+  /** Where someone arriving through this gateway stands, facing into the district. */
+  arrival: { position: Vec2, y: number, heading: number }
+}
+
+export interface GatewayInput {
+  side: GatewaySide
+  branchId: string
+  name: string
+}
+
 export type MapAreaKind = 'ground' | 'yard' | 'pavement' | 'lane' | 'planting' | 'building' | 'cafe'
 
 export interface MapArea {
@@ -67,9 +92,14 @@ export interface District {
   street: number
   floors: FloorArea[]
   doors: DoorInfo[]
+  /** The street door: the layout's chosen entrance, else its first ground-floor door. */
+  entrance: DoorInfo | null
   seats: SeatInfo[]
   counter: CounterInfo | null
   rideCourse: RideCourse
+  /** The tuk-tuk's legs to and from each gateway (step E4). */
+  rideLegs: RideLegs
+  gateways: GatewayInfo[]
   spawn: { position: Vec2, y: number, heading: number }
   bounds: { minX: number, maxX: number, minZ: number, maxZ: number }
   map: { areas: MapArea[], walls: { a: Vec2, b: Vec2 }[] }
@@ -80,8 +110,12 @@ export interface DistrictInput {
   layout: ShopLayout
   tables: readonly LayoutTable[]
   looks?: readonly TableLook[]
+  /** The cafe's chair and fixture looks (a published branch's drawing names them). */
+  itemLooks?: readonly ItemLook[]
   /** The surroundings' seed (the branch's id), so the street matches the 3D view's. */
   seed: string
+  /** The neighbouring districts, by the lane end their gateway stands at (step E4). */
+  gateways?: readonly GatewayInput[]
 }
 
 /** Pieces you can sit on, and their seat's height in metres. */
@@ -201,10 +235,16 @@ export function buildDistrict(input: DistrictInput): District {
 
   const world: WalkWorld = { walls, solids, surfaces, openDoors: new Set() }
   const groundFloor = floors[0]!
+  const entrance = doors.find(door => door.id === layout.scene?.entrance) ?? doors[0] ?? null
   // Across the lane from the café, facing its door: the street and the shop front in view.
-  const door = doors[0]
+  const door = entrance
   const spawnPoint = m(toPlan(plan.frame, 260, plan.lane.n1 - 70))
   const look = door ? door.mid : m(toPlan(plan.frame, 0, 0))
+  const gateways = (input.gateways ?? []).map(gateway => buildGateway(plan, gateway, street))
+  // The arches' posts stand on the curb and across the lane: a body passes between them.
+  for (const gateway of gateways) {
+    for (const post of [gateway.a, gateway.b]) solids.push({ shape: 'circle', center: post, radius: 0.22, bottom: street, top: street + GATEWAY_HEIGHT })
+  }
   const xs = base.map(point => point.x)
   const zs = base.map(point => point.z)
   return {
@@ -213,9 +253,12 @@ export function buildDistrict(input: DistrictInput): District {
     street,
     floors,
     doors,
+    entrance,
     seats,
     counter,
     rideCourse: buildRideCourse(plan),
+    rideLegs: buildRideLegs(plan),
+    gateways,
     spawn: { position: spawnPoint, y: street, heading: yawOf(sub(look, spawnPoint)) },
     bounds: { minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) },
     map: {
@@ -230,6 +273,32 @@ export function buildDistrict(input: DistrictInput): District {
       ],
       walls: walls.filter(wall => wall.bottom === groundFloor.y && !wall.door && wall.top > groundFloor.y + 1.2).map(wall => ({ a: wall.a, b: wall.b })),
     },
+  }
+}
+
+/** The arch's height, for its posts and the 3D build. */
+export const GATEWAY_HEIGHT = 4.2
+/** How far in from the lane's ends the arches stand, and where an arrival stands (cm). */
+const GATEWAY_INSET_CM = 120
+const ARRIVAL_INSET_CM = 300
+
+function buildGateway(plan: SurroundingsPlan, gateway: GatewayInput, street: number): GatewayInfo {
+  const { frame, lane, pavement } = plan
+  const atStart = gateway.side === 'start'
+  const u = atStart ? lane.u0 + GATEWAY_INSET_CM : lane.u1 - GATEWAY_INSET_CM
+  const arrivalU = atStart ? lane.u0 + ARRIVAL_INSET_CM : lane.u1 - ARRIVAL_INSET_CM
+  const along = { x: frame.right.x, z: frame.right.y }
+  const out = atStart ? { x: -along.x, z: -along.z } : along
+  const arrival = m(toPlan(frame, arrivalU, lane.n0 + 60))
+  return {
+    side: gateway.side,
+    branchId: gateway.branchId,
+    name: gateway.name,
+    position: m(toPlan(frame, u, (lane.n0 + lane.n1) / 2)),
+    a: m(toPlan(frame, u, pavement.n1 - 15)),
+    b: m(toPlan(frame, u, lane.n1 + 15)),
+    out,
+    arrival: { position: arrival, y: street, heading: yawOf({ x: -out.x, z: -out.z }) },
   }
 }
 

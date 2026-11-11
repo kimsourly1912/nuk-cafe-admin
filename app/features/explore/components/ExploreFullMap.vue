@@ -1,31 +1,57 @@
 <script setup lang="ts">
 import { useResizeObserver } from '@vueuse/core'
+import type { ExploreBranch } from '../composables/useExploreBranches'
+import type { LocationState } from '../composables/useExploreLocation'
 import type { MapColors } from '../runtime/map-draw'
-import { drawMap } from '../runtime/map-draw'
+import { drawMap, drawOverview } from '../runtime/map-draw'
+import type { NetworkBranch, Pin } from '../runtime/network'
 import { distance } from '../runtime/vec'
-import type { ExploreWorld } from '../runtime/world'
+import type { ExploreWorld, RideStopOption } from '../runtime/world'
+import ExploreBranchList from './ExploreBranchList.vue'
 
 /**
  * The full map (D275, docs/plans/explore.md → Full map): north up, dragged to pan, wheel or pinch
- * to zoom, with the café and its actions beside it (below on phones). The world is paused while it
- * is open (the page does that), so it draws only when the view changes. Back closes it (AppModal).
+ * to zoom, with the café and its actions beside it (below on phones). With the cafe's branches in
+ * Explore (step E4) it has two levels, **This street** and **All branches** (each branch at its real
+ * position, joined by its gateways), and the branch list. The world is paused while it is open (the
+ * page does that), so it draws only when the view changes. Back closes it (AppModal).
  */
 
-const { world, colors, waypoint, canCallRide } = defineProps<{ world: ExploreWorld, colors: MapColors, waypoint: boolean, canCallRide: boolean }>()
-const emit = defineEmits<{ waypoint: [on: boolean], menu: [], street: [], callRide: [] }>()
+const props = defineProps<{
+  world: ExploreWorld
+  colors: MapColors
+  /** The district shown (it changes at a gateway). */
+  placeId: string
+  waypointId: string | null
+  canCallRide: boolean
+  /** Step E4: the branches in Explore and their chain; empty on the demo street. */
+  branches: readonly ExploreBranch[]
+  chain: readonly NetworkBranch[]
+  location: LocationState
+  position: Pin | null
+}>()
+const emit = defineEmits<{ waypoint: [id: string | null], menu: [id: string], street: [], callRide: [], ride: [stopId: string], locate: [] }>()
 const open = defineModel<boolean>('open', { required: true })
 
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
 const frame = useTemplateRef<HTMLElement>('frame')
 const view = reactive({ scale: 10, x: 0, z: 0 })
+const level = ref<'street' | 'overview'>('street')
+const levels = [{ label: 'This street', value: 'street' }, { label: 'All branches', value: 'overview' }]
 const pointers = new Map<number, { x: number, y: number }>()
 let pinch: { distance: number, scale: number } | null = null
 let pending = 0
 
-const district = computed(() => world.district)
+// Read again whenever the district changes (`placeId`): the world swaps it at a gateway.
+const district = computed(() => {
+  void props.placeId
+  return props.world.district()
+})
+const networked = computed(() => props.chain.length > 0)
+const rideStops = ref<RideStopOption[]>([])
 const away = computed(() => {
-  const door = district.value.doors[0]
-  return door ? Math.round(distance(world.mapView().player.position, door.mid)) : null
+  const door = district.value.entrance
+  return door ? Math.round(distance(props.world.mapView().player.position, door.mid)) : null
 })
 
 function fit() {
@@ -38,9 +64,10 @@ function fit() {
 }
 
 function centerOnMe() {
-  const player = world.mapView().player.position
+  const player = props.world.mapView().player.position
   view.x = player.x
   view.z = player.z
+  level.value = 'street'
   schedule()
 }
 
@@ -61,7 +88,11 @@ function draw() {
   element.width = Math.round(box.width * ratio)
   element.height = Math.round(box.height * ratio)
   context.setTransform(ratio, 0, 0, ratio, 0, 0)
-  drawMap(context, district.value, world.mapView(), { width: box.width, height: box.height, scale: view.scale, center: { x: view.x, z: view.z }, rotation: 0, colors, labels: true })
+  if (level.value === 'overview') {
+    drawOverview(context, props.chain, { width: box.width, height: box.height, colors: props.colors, currentId: props.placeId, waypointId: props.waypointId })
+    return
+  }
+  drawMap(context, district.value, props.world.mapView(), { width: box.width, height: box.height, scale: view.scale, center: { x: view.x, z: view.z }, rotation: 0, colors: props.colors, labels: true })
 }
 
 function zoom(factor: number) {
@@ -80,7 +111,7 @@ function down(event: PointerEvent) {
 
 function move(event: PointerEvent) {
   const before = pointers.get(event.pointerId)
-  if (!before) return
+  if (!before || level.value === 'overview') return
   pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
   if (pointers.size === 2 && pinch) {
     const [a, b] = [...pointers.values()]
@@ -99,14 +130,17 @@ function up(event: PointerEvent) {
 }
 
 function wheel(event: WheelEvent) {
-  zoom(event.deltaY < 0 ? 1.15 : 1 / 1.15)
+  if (level.value === 'street') zoom(event.deltaY < 0 ? 1.15 : 1 / 1.15)
 }
 
 useResizeObserver(frame, schedule)
 watch(open, (value) => {
-  if (value) nextTick(fit)
+  if (!value) return
+  rideStops.value = props.world.rideStops()
+  level.value = 'street'
+  nextTick(fit)
 })
-watch(() => [colors, waypoint], schedule)
+watch(() => [props.colors, props.waypointId, props.placeId, level.value], schedule)
 onBeforeUnmount(() => cancelAnimationFrame(pending))
 </script>
 
@@ -114,7 +148,7 @@ onBeforeUnmount(() => cancelAnimationFrame(pending))
   <AppModal
     v-model:open="open"
     title="Map"
-    description="The street around the café. Drag to move the map; pinch or scroll to zoom."
+    :description="networked ? 'The street you\'re on and the cafe\'s branches. Drag to move the map; pinch or scroll to zoom.' : 'The street around the café. Drag to move the map; pinch or scroll to zoom.'"
     fullscreen
     :ui="{ body: 'flex min-h-0 flex-1 flex-col p-0 sm:p-0 lg:flex-row' }"
   >
@@ -125,16 +159,29 @@ onBeforeUnmount(() => cancelAnimationFrame(pending))
       >
         <canvas
           ref="canvas"
-          class="absolute inset-0 size-full cursor-grab active:cursor-grabbing"
+          class="absolute inset-0 size-full"
+          :class="level === 'street' ? 'cursor-grab active:cursor-grabbing' : ''"
           role="img"
-          :aria-label="`Map of the street around ${district.name}`"
+          :aria-label="level === 'street' ? `Map of the street around ${district.name}` : `Map of the cafe's ${chain.length} branches in Explore`"
           @pointerdown="down"
           @pointermove="move"
           @pointerup="up"
           @pointercancel="up"
           @wheel.prevent="wheel"
         />
-        <div class="absolute top-3 right-3 flex flex-col gap-2">
+        <UTabs
+          v-if="networked"
+          v-model="level"
+          :items="levels"
+          :content="false"
+          size="sm"
+          class="absolute top-3 left-3"
+          aria-label="Map level"
+        />
+        <div
+          v-if="level === 'street'"
+          class="absolute top-3 right-3 flex flex-col gap-2"
+        >
           <UButton
             icon="i-lucide-plus"
             color="neutral"
@@ -158,38 +205,54 @@ onBeforeUnmount(() => cancelAnimationFrame(pending))
           />
         </div>
       </div>
-      <div class="space-y-4 border-t border-default p-4 lg:w-80 lg:border-t-0 lg:border-l">
-        <div class="space-y-1">
-          <h3 class="font-semibold text-highlighted">
-            {{ district.name }}
-          </h3>
-          <p class="text-sm text-muted">
-            {{ away === null ? 'On this street' : `About ${away} m from you` }}
-          </p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <UButton
-            v-if="!waypoint"
-            icon="i-lucide-map-pin"
-            label="Set waypoint"
-            @click="emit('waypoint', true)"
-          />
-          <UButton
-            v-else
-            icon="i-lucide-map-pin-off"
-            label="Clear waypoint"
-            color="neutral"
-            variant="outline"
-            @click="emit('waypoint', false)"
-          />
-          <UButton
-            icon="i-lucide-coffee"
-            label="View menu"
-            color="neutral"
-            variant="outline"
-            @click="emit('menu')"
-          />
-        </div>
+      <div class="max-h-[50dvh] space-y-4 overflow-y-auto border-t border-default p-4 lg:max-h-none lg:w-96 lg:border-t-0 lg:border-l">
+        <ExploreBranchList
+          v-if="networked"
+          :branches="branches"
+          :current-id="placeId"
+          :waypoint-id="waypointId"
+          :location="location"
+          :position="position"
+          :ride-stops="rideStops"
+          :can-ride="canCallRide"
+          @waypoint="id => emit('waypoint', id)"
+          @ride="stopId => emit('ride', stopId)"
+          @menu="id => emit('menu', id)"
+          @locate="emit('locate')"
+        />
+        <template v-else>
+          <div class="space-y-1">
+            <h3 class="font-semibold text-highlighted">
+              {{ district.name }}
+            </h3>
+            <p class="text-sm text-muted">
+              {{ away === null ? 'On this street' : `About ${away} m from you` }}
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              v-if="waypointId !== placeId"
+              icon="i-lucide-map-pin"
+              label="Set waypoint"
+              @click="emit('waypoint', placeId)"
+            />
+            <UButton
+              v-else
+              icon="i-lucide-map-pin-off"
+              label="Clear waypoint"
+              color="neutral"
+              variant="outline"
+              @click="emit('waypoint', null)"
+            />
+            <UButton
+              icon="i-lucide-coffee"
+              label="View menu"
+              color="neutral"
+              variant="outline"
+              @click="emit('menu', placeId)"
+            />
+          </div>
+        </template>
         <USeparator />
         <UButton
           v-if="canCallRide"

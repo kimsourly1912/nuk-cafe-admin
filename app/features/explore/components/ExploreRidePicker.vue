@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import type { ExploreWorld } from '../runtime/world'
+import type { RideStopOption } from '../runtime/world'
 
-const { stops } = defineProps<{ stops: ExploreWorld['rideStops'] }>()
+const { stops } = defineProps<{ stops: readonly RideStopOption[] }>()
 const emit = defineEmits<{ confirm: [id: string] }>()
 const open = defineModel<boolean>('open', { required: true })
 const selected = ref<string>()
+const networked = computed(() => stops.some(stop => stop.branchId))
 const items = computed(() => stops.map(stop => ({
   value: stop.id,
   label: stop.label,
-  description: `About ${stop.seconds} s in Explore`,
+  description: stop.branchId ? `Another branch · about ${stop.seconds} s in Explore` : `On this street · about ${stop.seconds} s in Explore`,
 })))
 
 watch(open, (visible) => {
-  if (visible) selected.value = stops[0]?.id
+  if (visible) selected.value = (stops.find(stop => stop.branchId) ?? stops[0])?.id
 })
 
 function confirm() {
@@ -24,7 +25,7 @@ function confirm() {
   <AppModal
     v-model:open="open"
     title="Where to?"
-    description="Choose a drop-off on this demo street."
+    :description="networked ? 'Choose another branch, or a drop-off on this street.' : 'Choose a drop-off on this demo street.'"
   >
     <template #body>
       <URadioGroup

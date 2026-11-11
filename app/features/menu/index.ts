@@ -5,3 +5,5 @@ export { openingText } from './utils/opening'
 // Order again from an earlier order (the orders feature's page, step 6.5b, D114).
 export { useOrderAgain } from './composables/useOrderAgain'
 export type { PastLine } from './utils/cart'
+// Explore's café counter opens this branch's menu, and shows its order's size (D275, step E4).
+export { useBranchOrderCount, useMenuHandoff } from './composables/useMenuHandoff'

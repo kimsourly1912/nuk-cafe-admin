@@ -4,7 +4,7 @@ import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { eq } from 'drizzle-orm'
 import { member, organization, user } from '../../../server/db/tables'
-import { createTable, updateBranchSettings } from '../../../server/features/branches'
+import { createTable, saveLayout, updateBranchSettings } from '../../../server/features/branches'
 import type { Actor } from '../../../server/features/identity'
 import { createStaff } from '../../../server/features/identity'
 import { createCategory, createItem, createPromotion, publishItem } from '../../../server/features/menu'
@@ -59,6 +59,12 @@ export interface ShopSeed {
    * Neither has a layout until the tests save one.
    */
   layoutLab: { slug: string, branchId: string, annexBranchId: string }
+  /**
+   * A cafe for Explore's branch tests (D275 step E4, explore-branches.test.ts) and nothing else:
+   * `/c/tuk-trail`, two branches open around the clock about a kilometre apart, each with a pin and
+   * a layout published in Explore, and one item on the menu.
+   */
+  exploreTrail: { slug: string, name: string, marketId: string, riverId: string, itemName: string }
 }
 
 export interface SeedCustomer {
@@ -140,6 +146,49 @@ async function seedLayoutLab(db: Db, qr: { secret: string, baseUrl: string }): P
   return { slug: cafe.slug, branchId, annexBranchId }
 }
 
+/** A shop drawing with its street door, the counter facing it and one table, published in Explore. */
+function exploreLayout(tableId: string) {
+  return {
+    floors: [{
+      id: 'ground', name: 'Ground', height: 320, hasRoof: true,
+      outline: [{ x: 0, y: 0 }, { x: 800, y: 0 }, { x: 800, y: 1000 }, { x: 0, y: 1000 }],
+      edges: [
+        { kind: 'wall' as const, openings: [] },
+        { kind: 'wall' as const, openings: [] },
+        { kind: 'wall' as const, openings: [{ id: 'front-door', kind: 'door' as const, offset: 330, width: 140 }] },
+        { kind: 'wall' as const, openings: [] },
+      ],
+      walls: [],
+      items: [{ id: 'counter', kind: 'service-counter' as const, x: 560, y: 180, rotation: 0, width: 320, depth: 70, finishes: {} }],
+    }],
+    placements: [{ tableId, floorId: 'ground', x: 250, y: 700, rotation: 0, width: 80, depth: 80, lookId: 'round-cafe' }],
+    scene: { preset: 'neighborhood-lane' as const, entrance: 'front-door', explore: true },
+  }
+}
+
+/** Tuk Trail (D275 step E4): two branches in Explore, so a ride crosses a gateway between them. */
+async function seedExploreTrail(db: Db, qr: { secret: string, baseUrl: string }): Promise<ShopSeed['exploreTrail']> {
+  const cafe = { id: 'tenant-5', slug: 'tuk-trail', name: 'Tuk Trail' }
+  await ensureTenant(db, cafe.id, cafe.slug)
+  await db.update(organization).set({ name: cafe.name }).where(eq(organization.id, cafe.id))
+  const owner = await createAdmin(db, 'owner@tuk-trail.example', cafe.id)
+  const actor: Actor = { userId: owner.userId, tenantId: cafe.id, role: 'owner' }
+  const pins = { 'Old Market': [11.5696, 104.9210], 'Riverwalk': [11.5720, 104.9300] } as const
+  const ids: string[] = []
+  for (const [name, [latitude, longitude]] of Object.entries(pins)) {
+    const branchId = await addBranch(db, name, cafe.id)
+    await updateBranchSettings(db, actor, branchId, { version: 1, hours: ALL_DAY, latitude, longitude })
+    const table = await createTable(db, actor, branchId, { label: 'X1', area: null, seats: 2 }, qr)
+    await saveLayout(db, actor, branchId, { version: 0, layout: exploreLayout(table.id) })
+    ids.push(branchId)
+  }
+  const category = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
+  const itemName = 'Trail Iced Coffee'
+  const draft = await createItem(db, actor, { categoryId: category.id, name: itemName, description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 250, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
+  await publishItem(db, actor, draft.id, { version: draft.version })
+  return { slug: cafe.slug, name: cafe.name, marketId: ids[0]!, riverId: ids[1]!, itemName }
+}
+
 /** Brown Bean (D141): its own owner, branch, menu and table, nothing shared with NUK Cafe. */
 async function seedSecondCafe(db: Db, qr: { secret: string, baseUrl: string }): Promise<ShopSeed['secondCafe']> {
   const cafe = { id: 'tenant-2', slug: 'brown-bean', name: 'Brown Bean' }
@@ -200,6 +249,7 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   const spareTable = await createTable(db, actor, openBranchId, { label: 'T02', area: 'Main floor', seats: 2 }, qr)
   const secondCafe = await seedSecondCafe(db, qr)
   const layoutLab = await seedLayoutLab(db, qr)
+  const exploreTrail = await seedExploreTrail(db, qr)
   // NUK Cafe's own Bakong token (T2d, D148), sealed with the e2e server's key: its counter checks
   // KHQRs with the stand-in for Bakong. Brown Bean has none.
   await saveBakongToken(db, actor, { version: 0, token: bakong.token }, { apiUrl: '', encryptionKey: bakong.encryptionKey })
@@ -225,5 +275,5 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   await client.execute('delete from outbox_messages')
 
   client.close()
-  return { dbFile, customers: CUSTOMERS, secondCafe, layoutLab, spareTableToken: tokenOf(spareTable.qrUrl), openBranchId, closedBranchId, popupBranchId, openTableToken: tokenOf(openTable.qrUrl), closedTableToken: tokenOf(closedTable.qrUrl) }
+  return { dbFile, customers: CUSTOMERS, secondCafe, layoutLab, exploreTrail, spareTableToken: tokenOf(spareTable.qrUrl), openBranchId, closedBranchId, popupBranchId, openTableToken: tokenOf(openTable.qrUrl), closedTableToken: tokenOf(closedTable.qrUrl) }
 }
