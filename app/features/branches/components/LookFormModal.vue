@@ -2,8 +2,9 @@
 /**
  * A cafe's own table look (D273, step 3a; the owner's furniture studio references): a name, a
  * shape, a base, chairs and finishes part by part, with the same generated model the building
- * uses on a turntable. New looks start from another look's values. A look is shared: saving an
- * edit changes every table placed with it, in every branch; each table keeps its own size.
+ * uses on a turntable. New looks start from another look's values, but never its photo (step 3b):
+ * an upload is one look's only. A look is shared: saving an edit changes every table placed with
+ * it, in every branch; each table keeps its own size.
  * Open via `useOverlay().create(LookFormModal)`; emits `close(look)` with the look as saved.
  */
 import type { CreateLookInput, CustomLook, Finish, LookChair, TableBase, TableLook, TableShape } from '#shared/contracts/shop-layout'
@@ -51,8 +52,12 @@ const state = reactive({
     frame: lookFinish(source, 'frame'),
     seat: lookFinish(source, 'seat'),
   } as Record<'top' | 'base' | 'frame' | 'seat', Finish>,
+  photoId: props.look?.photo?.id,
+  photoUrl: props.look?.photo?.url,
 })
 const saving = ref(false)
+/** The photo is being made smaller or uploaded: saving waits for it. */
+const uploading = ref(false)
 const { isCompact: fullscreen } = useLayoutContext()
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
 const { create, update, remove } = useLookMutations()
@@ -85,6 +90,7 @@ const body = computed<CreateLookInput>(() => {
     },
     defaultWidth: state.width,
     defaultDepth: round.value ? state.width : state.depth,
+    photoId: state.photoId ?? null,
   }
 })
 
@@ -99,14 +105,16 @@ const sizeIssue = (size: number) =>
   (!Number.isInteger(size) || size < TABLE_SIZE_MIN_CM || size > TABLE_SIZE_MAX_CM ? `${TABLE_SIZE_MIN_CM} to ${TABLE_SIZE_MAX_CM} cm` : undefined)
 const widthIssue = computed(() => sizeIssue(state.width))
 const depthIssue = computed(() => (round.value ? undefined : sizeIssue(state.depth)))
-/** The server's answer, until the name changes. */
+/** The server's answers, until the name or the photo changes. */
 const serverNameIssue = ref<string>()
+const serverPhotoIssue = ref<string>()
 const serverError = ref<string>()
 watch(() => state.name, () => (serverNameIssue.value = undefined))
+watch(() => state.photoId, () => (serverPhotoIssue.value = undefined))
 
 async function save() {
   touched.value = true
-  if (nameIssue.value || widthIssue.value || depthIssue.value || saving.value) return
+  if (nameIssue.value || widthIssue.value || depthIssue.value || saving.value || uploading.value) return
   saving.value = true
   serverError.value = undefined
   const result = props.look
@@ -120,7 +128,9 @@ async function save() {
   }
   if (result.status !== 'error') return
   serverNameIssue.value = result.error.fieldErrors?.name?.[0]
-  if (!serverNameIssue.value) serverError.value = result.error.message
+  // A photo used meanwhile, or cleaned up after a day unsaved: upload it again.
+  serverPhotoIssue.value = result.error.fieldErrors?.photoId?.[0]
+  if (!serverNameIssue.value && !serverPhotoIssue.value) serverError.value = result.error.message
 }
 
 async function removeLook() {
@@ -386,6 +396,23 @@ const resetView = () => viewer?.reset()
             </div>
           </fieldset>
 
+          <UFormField
+            label="Photo"
+            hint="Optional"
+            help="A photo of the real piece, shown in the picker and the table’s details."
+            :error="serverPhotoIssue"
+          >
+            <ImageInput
+              v-model:image-url="state.photoUrl"
+              v-model:image-id="state.photoId"
+              v-model:uploading="uploading"
+              :crop-ratio="4 / 3"
+              :disabled="saving"
+              alt="Photo of the look"
+              noun="photo"
+            />
+          </UFormField>
+
           <USwitch
             v-model="withSeats"
             label="Preview with 4 seats"
@@ -427,7 +454,7 @@ const resetView = () => viewer?.reset()
               form="look-form"
               :label="look ? 'Save' : 'Save look'"
               :loading="saving"
-              :disabled="Boolean(look) && !unsaved.isDirty.value"
+              :disabled="uploading || (Boolean(look) && !unsaved.isDirty.value)"
             />
           </UTooltip>
         </div>

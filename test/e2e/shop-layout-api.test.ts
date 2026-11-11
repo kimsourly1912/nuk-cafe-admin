@@ -83,7 +83,7 @@ describe('the shop layout over HTTP', () => {
     expect((await read(layoutOf(bean.slug, seed.openBranchId), owner)).status).toBe(404)
   })
 
-  it('custom looks: an owner adds, edits and deletes one; a look in use stays; it is the cafe\'s own', async () => {
+  it('custom looks: an owner adds, edits and deletes one; a look in use stays; it and its photo are the cafe\'s own', async () => {
     const owner = await signIn(seed.customers.beanOwner)
     const looks = url(`/api/c/${bean.slug}/admin/furniture-looks`)
     const send = (method: string, path: string, cookie: string, body?: unknown) =>
@@ -114,12 +114,30 @@ describe('the shop layout over HTTP', () => {
     expect(await renamed.json()).toMatchObject({ name: 'HTTP oak', version: 2, tables: 1 })
     expect((await send('PATCH', `${looks}/${look.id}`, owner, { version: 1, ...input })).status).toBe(409)
 
+    // A photo (step 3b): an upload of the cafe's, served from this origin, one look's only.
+    const PNG = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, ...Array.from({ length: 32 }, (_, i) => i)])
+    const form = new FormData()
+    form.append('file', new Blob([PNG], { type: 'image/png' }), 'booth.png')
+    const uploaded = await fetch(url(`/api/c/${bean.slug}/admin/media`), { method: 'POST', headers: { origin, cookie: owner }, body: form })
+    expect(uploaded.status).toBe(201)
+    const photo = await uploaded.json() as { id: string, url: string }
+    const withPhoto = await send('PATCH', `${looks}/${look.id}`, owner, { version: 2, ...input, name: 'HTTP oak', photoId: photo.id })
+    expect(await withPhoto.json()).toMatchObject({ version: 3, photo: { id: photo.id, url: photo.url } })
+    expect((await fetch(url(photo.url))).status).toBe(200)
+    const twice = await send('POST', looks, owner, { ...input, name: 'HTTP copy', photoId: photo.id })
+    expect(twice.status).toBe(422)
+    expect((await twice.json()).data).toMatchObject({ code: 'MEDIA_NOT_AVAILABLE', fieldErrors: { photoId: [expect.any(String)] } })
+    expect((await send('POST', looks, owner, { ...input, name: 'Bad', photoId: 'not-an-id' })).status).toBe(400)
+
     // Another cafe's owner: refused at our address, not found at theirs, and can't place it.
     const lina = await signIn(seed.customers.layoutOwner)
+    // Nor use our upload as their look's photo.
+    const theirsPhoto = await send('POST', url(`/api/c/${seed.layoutLab.slug}/admin/furniture-looks`), lina, { ...input, name: 'Borrowed', photoId: photo.id })
+    expect(theirsPhoto.status).toBe(422)
     expect((await read(looks, lina)).status).toBe(403)
     const theirs = url(`/api/c/${seed.layoutLab.slug}/admin/furniture-looks`)
-    expect((await send('PATCH', `${theirs}/${look.id}`, lina, { version: 2, ...input })).status).toBe(404)
-    expect((await send('DELETE', `${theirs}/${look.id}?version=2`, lina)).status).toBe(404)
+    expect((await send('PATCH', `${theirs}/${look.id}`, lina, { version: 3, ...input })).status).toBe(404)
+    expect((await send('DELETE', `${theirs}/${look.id}?version=3`, lina)).status).toBe(404)
     expect((await read(theirs, lina)).status).toBe(200)
     // A branch manager isn't an owner.
     const manager = await signIn(seed.customers.manager)
@@ -128,7 +146,7 @@ describe('the shop layout over HTTP', () => {
 
     // Off the plan again, it deletes.
     expect((await place(layout.version + 1, 'round-cafe')).status).toBe(200)
-    expect((await send('DELETE', `${looks}/${look.id}?version=2`, owner)).status).toBe(204)
+    expect((await send('DELETE', `${looks}/${look.id}?version=3`, owner)).status).toBe(204)
     expect(await (await read(looks, owner)).json()).toEqual([])
   })
 })

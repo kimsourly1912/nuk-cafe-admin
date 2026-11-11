@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { MAX_BRANCH_TABLES } from './branches'
+import { idSchema as uploadIdSchema } from './common'
 
 /**
  * A branch's shop layout (D273, docs/plans/shop-designer.md): floors drawn as outlines with walls,
@@ -209,6 +210,14 @@ export interface TableLook {
   /** The size a newly placed table starts with; each placement keeps its own. */
   defaultWidth: number
   defaultDepth: number
+  /** A custom look's photo (step 3b), shown in the picker and the table's details; built-in looks have none. */
+  photo?: LookPhoto | null
+}
+
+/** A look's photo: an upload of the cafe's (`id`, for `photoId`) and where it's served. */
+export interface LookPhoto {
+  id: string
+  url: string
 }
 
 /** A look's finishes by part: the table's top and base, and its chairs' frame and upholstery. */
@@ -228,6 +237,11 @@ const lookFields = {
   finishes: lookFinishesSchema,
   defaultWidth: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
   defaultDepth: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
+  /**
+   * An upload of the cafe's (`POST …/admin/media`) to show the real piece by; `null` or left out
+   * for none. Each look has its own: one upload is never two looks' photo (422 `MEDIA_NOT_AVAILABLE`).
+   */
+  photoId: v.optional(v.nullable(uploadIdSchema), null),
 }
 
 /** `POST …/admin/furniture-looks`: a new custom look for the whole cafe (every branch). */
@@ -236,7 +250,8 @@ export type CreateLookInput = v.InferOutput<typeof createLookSchema>
 
 /**
  * `PATCH …/admin/furniture-looks/{id}`: the whole look again, at the version read. Every table
- * using the look changes with it; their own width, depth and rotation stay.
+ * using the look changes with it; their own width, depth and rotation stay. `photoId` too: left
+ * out or `null`, the look's photo is removed (its upload released).
  */
 export const updateLookSchema = v.strictObject({
   version: v.pipe(v.number(), v.integer(), v.minValue(1)),
@@ -246,6 +261,8 @@ export type UpdateLookInput = v.InferOutput<typeof updateLookSchema>
 
 /** One of the cafe's custom looks, as `GET …/admin/furniture-looks` lists them by name. */
 export interface CustomLook extends TableLook {
+  /** `null` without one, or when its upload is gone (the sample menu's reset deletes every upload). */
+  photo: LookPhoto | null
   version: number
   /** How many placed tables use it, in every branch's saved layout. It can't be deleted while any does. */
   tables: number

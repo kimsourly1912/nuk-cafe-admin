@@ -802,7 +802,7 @@ A form keeps `phone` and `phoneCountry` in its draft, validates them together (`
 
 ## `<ImageInput>`
 
-An image for a record (the cafe's logo, D143, cropped square with `crop-ratio`, D180; a menu item's photo has its own editor since D158, `PhotoEditorModal` in the products feature): a preview with Upload / Replace / Remove. A picked file is checked (JPEG, PNG or WebP; at most `IMAGE_MAX_ORIGINAL_BYTES` before shrinking), made smaller in the browser (`shrinkImage`: the longest side at most 1600 px, WebP; D122), checked against `IMAGE_MAX_BYTES`, and uploaded at once through `useImageUpload()` (`POST /admin/media`, mutation `media:upload`, keyed per input). The form then holds the upload's `url` (the preview) and asset `id` (what the record saves); Remove clears both (saved as `null`). A form waits for `uploading` before saving.
+An image for a record (the cafe's logo, D143, cropped square with `crop-ratio`, D180; a table look's photo, 4:3, D273; a menu item's photo has its own editor since D158, `PhotoEditorModal` in the products feature): a preview with Upload / Replace / Remove. A picked file is checked (JPEG, PNG or WebP; at most `IMAGE_MAX_ORIGINAL_BYTES` before shrinking), made smaller in the browser (`shrinkImage`: the longest side at most 1600 px, WebP; D122), checked against `IMAGE_MAX_BYTES`, and uploaded at once through `useImageUpload()` (`POST /admin/media`, mutation `media:upload`, keyed per input). The form then holds the upload's `url` (the preview) and asset `id` (what the record saves); Remove clears both (saved as `null`). A form waits for `uploading` before saving.
 
 Source: `app/components/ImageInput.vue`, `app/composables/useImageUpload.ts`, `app/utils/shrink-image.ts` (all auto-imported).
 
