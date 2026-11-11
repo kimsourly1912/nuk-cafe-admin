@@ -3,7 +3,7 @@ import type { BufferGeometry, Material, Object3D } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Floor, Point } from '#shared/contracts/shop-layout'
 import { edgeLength, signedArea } from '#shared/contracts/shop-layout'
-import { DOOR_HEIGHT_CM, floorInteriorPoint, outwardNormal, RAILING_HEIGHT_CM, rectCorners, WALL_THICKNESS_CM, wallPieces, WINDOW_SILL_CM, WINDOW_TOP_CM } from '../geometry'
+import { DOOR_HEIGHT_CM, floorInteriorPoint, outwardNormal, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, WALL_THICKNESS_CM, wallPieces, WINDOW_SILL_CM, WINDOW_TOP_CM } from '../geometry'
 import type { BuildContext } from './furniture'
 import { cm, yRotation } from './units'
 
@@ -13,7 +13,7 @@ import { cm, yRotation } from './units'
  * Walls stand outside the outline, so the room keeps the size drawn on the plan.
  */
 
-export const SLAB_THICKNESS_CM = 20
+export { SLAB_THICKNESS_CM }
 
 export interface WallNode {
   object: Object3D
@@ -228,9 +228,12 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
     }
     else {
       const doorHeight = Math.min(DOOR_HEIGHT_CM, height)
-      addBox(context, group, opening.width - 6, doorHeight - 3, 4, context.materials.finish('walnut'), { x, y: (doorHeight - 3) / 2, z: -WALL_THICKNESS_CM / 2 + 4 })
+      // The leaf and its handle name their door, so Explore (D275) can swing them on a hinge.
+      const leaf = addBox(context, group, opening.width - 6, doorHeight - 3, 4, context.materials.finish('walnut'), { x, y: (doorHeight - 3) / 2, z: -WALL_THICKNESS_CM / 2 + 4 })
       addBox(context, group, opening.width, 5, WALL_THICKNESS_CM + 1, frame, { x, y: doorHeight - 2.5, z: 0 })
-      addBox(context, group, 2, 18, 4, context.materials.finish('brass'), { x: x + opening.width / 2 - 14, y: 105, z: -WALL_THICKNESS_CM / 2 + 1 })
+      const handle = addBox(context, group, 2, 18, 4, context.materials.finish('brass'), { x: x + opening.width / 2 - 14, y: 105, z: -WALL_THICKNESS_CM / 2 + 1 })
+      leaf.userData.doorId = opening.id
+      handle.userData.doorId = opening.id
     }
   }
 }
@@ -277,10 +280,11 @@ function railingEdge(context: BuildContext, group: Group, length: number, openin
   group.add(mesh)
 }
 
-function addBox(context: BuildContext, group: Group, width: number, height: number, depth: number, material: Material, at: { x: number, y: number, z: number }, shadow = true) {
+function addBox(context: BuildContext, group: Group, width: number, height: number, depth: number, material: Material, at: { x: number, y: number, z: number }, shadow = true): Mesh {
   const mesh = new Mesh(blockGeometry(context, Math.round(width * 10) / 10, Math.round(height * 10) / 10, depth), material)
   mesh.position.set(cm(at.x), cm(at.y), cm(at.z))
   mesh.castShadow = shadow
   mesh.receiveShadow = shadow
   group.add(mesh)
+  return mesh
 }

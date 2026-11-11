@@ -9,6 +9,8 @@ import { edgeLength, signedArea } from '#shared/contracts/shop-layout'
 export const GRID_CM = 25
 export const FINE_GRID_CM = 5
 export const WALL_THICKNESS_CM = 20
+/** A floor's slab, under its surface: the ground floor stands this much above the street. */
+export const SLAB_THICKNESS_CM = 20
 export const DOOR_HEIGHT_CM = 210
 export const WINDOW_SILL_CM = 90
 export const WINDOW_TOP_CM = 220
