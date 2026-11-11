@@ -570,14 +570,13 @@ function onLibraryCancel(event: PointerEvent) {
 function onLibraryUp(event: PointerEvent) {
   const drag = libraryDrag
   if (drag?.pointerId !== event.pointerId) return
-  if (drag.dragging) onLibraryMove(event)
   const dropped = ghost.value
   clearLibraryDrag()
   // A press that didn't move is a click: the card's own button handles it, keyboard and pointer alike.
   if (!drag.dragging) return
   suppressClickUntil = performance.now() + 100
   event.preventDefault()
-  if (!dropped) return
+  if (!dropped || !canvas.value?.toPlan(event.clientX, event.clientY, true)) return
   mode.value = 'select'
   place(drag.piece, dropped)
 }
