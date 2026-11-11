@@ -7,7 +7,7 @@
 import type { EdgeKind, OpeningKind } from '#shared/contracts/shop-layout'
 import { edgeLength } from '#shared/contracts/shop-layout'
 import { newLayoutId } from '../designer/geometry'
-import { addOpening, edgeTakes, freeSpot, OPENING_DEFAULT_WIDTH, OPENING_MIN_WIDTH, removeOpening, setEdgeKind, setEdgeLength, updateOpening } from '../designer/outline'
+import { addOpening, OPENING_MIN_WIDTH, openingFits, removeOpening, setEdgeKind, setEdgeLength, updateOpening } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 
 const props = defineProps<{
@@ -31,7 +31,7 @@ const HELP: Record<EdgeKind, string> = {
 }
 const doorLabel = computed(() => (edge.value.kind === 'railing' ? 'Gate' : 'Door'))
 const openingName = (kind: OpeningKind) => (kind === 'window' ? 'Window' : doorLabel.value)
-const fits = (kind: OpeningKind) => edgeTakes(edge.value.kind, kind) && freeSpot(edge.value, length.value, Math.min(OPENING_DEFAULT_WIDTH[kind], length.value)) !== null && length.value >= OPENING_MIN_WIDTH
+const fits = (kind: OpeningKind) => openingFits(props.shape, props.index, kind)
 
 function setNumber(value: number | null | undefined, apply: (value: number) => FloorShape) {
   if (typeof value === 'number' && Number.isFinite(value)) emit('change', apply(Math.round(value)))

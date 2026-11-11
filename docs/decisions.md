@@ -3096,8 +3096,10 @@ Verification: migrated SQLite forced interleavings, populated local workerd/D1 r
   - **A new look never copies another look's photo**: an upload is one record's at a time.
 
   [Plan → Step 3b](plans/shop-designer.md#step-3b-look-photos-built-2026-11-11).
-- **Step 2d (2026-11-11, built before the pilot at the owner's choice):** frame 2B's quick actions beside the selection (a table: Rotate 90°, Duplicate look, Remove from map; furniture: Rotate 90°, Duplicate, Delete) and corner handles that resize tables and furniture on the plan. Decided:
+- **Step 2d (2026-11-11, built before the pilot at the owner's choice):** step 2b's deferred editor items: frame 2B's quick actions beside the selection (a table: Rotate 90°, Duplicate look, Remove from map; furniture: Rotate 90°, Duplicate, Delete; a wall: Delete wall; an edge: its type, a door or gate, a window), corner handles that resize tables and furniture, lengths typed on the plan's labels in Draw outline (3A), and "Saved by" in the stale-save message (6A). Decided:
+  - **The editor stays usable on phones** (owner, 2026-11-11): acceptance criterion 10's "view only on phone" is dropped, so a later user can edit from their phone.
+  - **"Saved by" reads `user.name`** through the layout's `updated_by` (a left join, as a branch's pause names who paused it), not a copy kept on the layout: a renamed account shows its new name and a deleted one shows none.
   - **Duplicate look asks which table** (the library look's dialog) and copies only the look, size and turn: a placement is a real table, so a copy of the table itself would be a second QR code nobody asked for.
   - **A corner keeps the opposite corner fixed** and sizes snap to 5 cm, the panel's step, not the 25 cm grid: café tables come in 70, 75 and 80 cm. The handles hide when the piece is small on screen, where they'd cover it and turn every drag into a resize.
 
-  [Plan → Step 2d](plans/shop-designer.md#step-2d-quick-actions-and-corner-handles-built-2026-11-11).
+  [Plan → Step 2d](plans/shop-designer.md#step-2d-the-editor-finish-built-2026-11-11).

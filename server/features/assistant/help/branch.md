@@ -71,9 +71,9 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 
 **Walls, doors and windows:**
 
-- **Draw outline:** with no outline yet, click on the grid to add corners; click the first corner, double-click or press Enter to close the shape. With an outline, drag a corner (it keeps right angles unless you hold Alt), click a round handle on an edge to add a corner, or click a corner and press Delete to remove it. **Cancel** puts the shape back as it was; **Done** finishes.
-- Click an **edge** of the outline to choose what it is: **Wall**, **Railing** or **Open**, and to set its length. **Door** and **Window** add one on that edge; set its width and how far it is from the corner. On a railing a door is a **gate**, and windows need a wall.
-- **Draw wall** adds walls inside the floor (a stair kiosk, a kitchen): click where it starts and where it ends; walls carry on from the last end until Escape. Click a wall to delete it.
+- **Draw outline:** with no outline yet, click on the grid to add corners; click the first corner, double-click or press Enter to close the shape. With an outline, drag a corner (it keeps right angles unless you hold Alt), click a round handle on an edge to add a corner, or click a corner and press Delete to remove it. Click an edge's length to type a new one: **Enter** sets it (the end corner moves, right angles kept), **Escape** leaves it. **Cancel** puts the shape back as it was; **Done** finishes.
+- Click an **edge** of the outline to choose what it is: **Wall**, **Railing** or **Open**, and to set its length. **Door** and **Window** add one on that edge; set its width and how far it is from the corner. On a railing a door is a **gate**, and windows need a wall. The bar under a selected edge does the same quickly: **Wall**, **Railing**, **Open**, **Door** (or **Gate**) and **Window**.
+- **Draw wall** adds walls inside the floor (a stair kiosk, a kitchen): click where it starts and where it ends; walls carry on from the last end until Escape. Click a wall, then **Delete wall** (in the bar under it or the panel).
 
 **View in 3D:** the same layout as a small building. Drag to turn it, scroll or pinch to zoom. **Exterior** shows it from outside; **Cutaway** takes the roof and the near walls away and pulls the floors apart. Pick a floor in **Floors**, then **Enter floor** to stand inside it. To find a table, pick it in **Tables** (on a phone: **Floors and tables**) or tap it in the building: its card shows its area, seats and floor, **View QR** (its code, to scan or download) and **Show on plan** (opens Design shop with that table selected). A table that is not on the plan is not in 3D. **Unsaved changes shown** means the building includes changes you haven't saved yet.
 
@@ -81,7 +81,7 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 
 ## Common problems
 
-- **"This layout was changed somewhere else"**: someone saved the layout on another device after you opened it. Your plan is kept. **Load latest** shows theirs instead (Undo brings yours back on top of it, then save); **Overwrite with mine** saves yours over theirs after asking. QR codes are not affected either way.
+- **"This layout was changed somewhere else"**: someone saved the layout on another device after you opened it; the message says who and when. Your plan is kept. **Load latest** shows theirs instead (Undo brings yours back on top of it, then save); **Overwrite with mine** saves yours over theirs after asking. QR codes are not affected either way.
 - **"… is no longer an active table here"**: a table on your plan was archived or deleted since you opened it. Press **Remove from map**, then save.
 - **"3D view is not available here"**: this browser or device can't draw 3D right now (an old device, or a phone that put the page to sleep). Press **Try again**. The floor and table lists, **View QR** and **Design shop** work without it; the layout itself is fine.
 - **"The look of … was deleted"**: a look this plan used was deleted on another device before you saved. Press **Use Round café table**, save, then choose another look.

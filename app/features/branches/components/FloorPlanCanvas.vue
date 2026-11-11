@@ -48,6 +48,8 @@ const emit = defineEmits<{
   /** The outline changed (Draw outline): corners and edges together. */
   shape: [shape: FloorShape]
   addWall: [wall: Omit<InnerWall, 'id'>]
+  /** Draw outline: an edge's length label was clicked, to type its length there (3A). */
+  editLength: [index: number, at: Point]
 }>()
 
 const svg = useTemplateRef<SVGSVGElement>('svg')
@@ -185,29 +187,48 @@ const selectionFrames = computed(() => {
   return item ? { pose: item, width: item.width + 16, depth: item.depth + 16, handle: 50 } : null
 })
 
+/** The plan points a selection covers: a piece's frame and turn handle, a wall's or an edge's ends. */
+const selectionPoints = computed((): Point[] | null => {
+  const selection = props.selection
+  if (props.mode !== 'select' || !selection) return null
+  const frame = selectionFrames.value
+  if (frame) {
+    const { pose, width, depth, handle } = frame
+    const turnHandle = rotatePoint({ x: 0, y: -depth / 2 - handle - 8 }, pose.rotation)
+    return [...rectCorners(pose, width, depth, pose.rotation), { x: pose.x + turnHandle.x, y: pose.y + turnHandle.y }]
+  }
+  const reach = WALL_THICKNESS_CM
+  const ends = (from: Point, to: Point) => [from, to].flatMap(point => [{ x: point.x - reach, y: point.y - reach }, { x: point.x + reach, y: point.y + reach }])
+  if (selection.kind === 'wall') {
+    const wall = floor.value.walls.find(candidate => candidate.id === selection.id)
+    return wall ? ends(wall.from, wall.to) : null
+  }
+  const edge = selection.kind === 'edge' ? edges.value[Number(selection.id)] : undefined
+  return edge ? ends(edge.from, edge.to) : null
+})
+
 /**
  * Where the selection is on screen, in pixels from the plan's top-left corner, or null while it's
  * moved, turned or resized: the editor puts its quick actions next to it (frame 2B).
  */
 const selectionBox = computed(() => {
-  const frame = selectionFrames.value
-  const screen = { width: screenWidth.value, height: screenHeight.value }
-  if (!frame || preview.value || !screen.width || !screen.height) return null
-  const { pose, width, depth, handle } = frame
-  const turnHandle = rotatePoint({ x: 0, y: -depth / 2 - handle - 8 }, pose.rotation)
-  const bounds = boundsOf([...rectCorners(pose, width, depth, pose.rotation), { x: pose.x + turnHandle.x, y: pose.y + turnHandle.y }])
-  // The viewBox is fitted whole into the element (xMidYMid meet).
-  const { x, y, width: viewWidth, height: viewHeight } = view.value
-  const scale = Math.min(screen.width / viewWidth, screen.height / viewHeight)
-  const left = (screen.width - viewWidth * scale) / 2
-  const top = (screen.height - viewHeight * scale) / 2
-  return {
-    left: left + (bounds.minX - x) * scale,
-    right: left + (bounds.maxX - x) * scale,
-    top: top + (bounds.minY - y) * scale,
-    bottom: top + (bounds.maxY - y) * scale,
-  }
+  const points = selectionPoints.value
+  if (!points || preview.value || !screenWidth.value || !screenHeight.value) return null
+  const bounds = boundsOf(points)
+  const topLeft = toScreen({ x: bounds.minX, y: bounds.minY })
+  const bottomRight = toScreen({ x: bounds.maxX, y: bounds.maxY })
+  return { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y }
 })
+
+/** Plan centimetres → pixels from the plan's top-left corner (the viewBox fitted whole: xMidYMid meet). */
+function toScreen(point: Point): Point {
+  const { x, y, width, height } = view.value
+  const scale = Math.min(screenWidth.value / width, screenHeight.value / height)
+  return {
+    x: (screenWidth.value - width * scale) / 2 + (point.x - x) * scale,
+    y: (screenHeight.value - height * scale) / 2 + (point.y - y) * scale,
+  }
+}
 
 /**
  * The four corner handles of a selection frame, in its own (unturned) directions. None while the
@@ -303,6 +324,13 @@ function onPointerDown(event: PointerEvent) {
   }
   if (kind === 'first-corner') {
     closeDrawing()
+    return
+  }
+  if (kind === 'edge-length') {
+    // No mousedown follows, so the plan doesn't take the focus from the length's input.
+    event.preventDefault()
+    const edge = edges.value[Number(id)]
+    if (edge) emit('editLength', edge.index, toScreen(edge.label))
     return
   }
   if (kind === 'edge' || kind === 'wall') {
@@ -1153,8 +1181,11 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       <g
         v-for="edge in edges"
         :key="`label-${edge.index}`"
-        pointer-events="none"
+        data-kind="edge-length"
+        :data-id="edge.index"
+        class="cursor-text"
       >
+        <title>Click to type the length</title>
         <rect
           :x="edge.label.x - chipSize(metres(edge.length)).width / 2"
           :y="edge.label.y - chipSize(metres(edge.length)).height / 2"

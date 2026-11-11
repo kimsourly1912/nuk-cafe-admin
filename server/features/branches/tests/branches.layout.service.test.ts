@@ -77,7 +77,7 @@ describe('reading a layout', () => {
     const gone = await table('Table 3')
     await archiveTable(db, actor, branch, gone.id, { version: 1 }, qr)
     const layout = await getLayout(db, TEST_TENANT, branch)
-    expect(layout).toMatchObject({ version: 0, updatedAt: null, floors: [], placements: [] })
+    expect(layout).toMatchObject({ version: 0, updatedAt: null, updatedByName: null, floors: [], placements: [] })
     expect(layout.tables.map(t => [t.label, t.seats])).toEqual([['Table 2', 4], ['Table 10', 4]])
   })
 
@@ -98,6 +98,8 @@ describe('saving a layout', () => {
     const saved = await save({ version: 0, layout: { floors, placements } })
     expect(saved.version).toBe(1)
     expect(saved.updatedAt).toEqual(expect.any(String))
+    // Who saved it, for "Saved by …" when another device's save is refused (6A).
+    expect(saved.updatedByName).toBe('Test User')
     expect(saved.floors).toEqual(floors)
     expect(saved.placements).toEqual([...placements].sort((a, b) => a.tableId.localeCompare(b.tableId)))
     expect(await getLayout(db, TEST_TENANT, branch)).toEqual(saved)
