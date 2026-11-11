@@ -149,7 +149,7 @@ const WORKER_OBSERVABILITY = { enabled: true, redact_query_string: true }
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
   $development: {
-    runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' }, shopDesignerScenes: true } },
+    runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' }, shopDesignerScenes: true, explore: true } },
   },
   $env: {
     // Named `prod`, not `production`: without `--envName`, c12 uses NODE_ENV, so a block named
@@ -227,6 +227,8 @@ export default defineNuxtConfig({
               NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT: 'Staging',
               // The shop designer's surroundings, internal until they pass the benchmark (D274, 3h).
               NUXT_PUBLIC_SHOP_DESIGNER_SCENES: 'true',
+              // Explore (D275): internal until the owner's phone review (step E6).
+              NUXT_PUBLIC_EXPLORE: 'true',
               // The AI assistant (D107, D108; owner, 2026-09-30): OpenAI. The key is the Worker
               // secret NUXT_AI_API_KEY, set by the owner; without it the assistant stays off.
               NUXT_AI_PROVIDER: 'openai',
@@ -323,6 +325,10 @@ export default defineNuxtConfig({
       // server, staging and the e2e server (NUXT_PUBLIC_SHOP_DESIGNER_SCENES) until the Neighborhood
       // lane passes its benchmark; off in production.
       shopDesignerScenes: false,
+      // Explore, the café world (D275, docs/plans/explore.md): internal, on for the dev server, staging
+      // and the e2e server (NUXT_PUBLIC_EXPLORE) until the owner's phone review; off in production,
+      // where its page answers 404.
+      explore: false,
     },
   },
   routeRules: {
@@ -338,6 +344,7 @@ export default defineNuxtConfig({
     // Checkout and a customer's order are theirs alone and read browser storage and the session:
     // browser work only, like a table's QR link (D100).
     '/c/*/checkout': { ssr: false },
+    '/c/*/explore': { ssr: false },
     '/c/*/orders': { ssr: false },
     '/c/*/orders/**': { ssr: false },
     // The counter workspace, like the admin: the staff session, no search engines (D102).

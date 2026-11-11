@@ -1,6 +1,6 @@
 # Explore plan: walk, ride and map your way to a café
 
-Owner brief 2026-11-11 ([brief](explore/brief.md), mockups below); decision [D275](../decisions.md#d275-explore-a-third-person-café-world-with-a-map-built-on-the-shop-designer-2026-11-11). Builds on the [shop designer](shop-designer.md) (D273) and its [scenes](shop-designer-scenes.md) (D274). Status: **planned**. The owner delegated the open choices to Claude (2026-11-11: "help me decide all the way"); they are recorded in [Decisions](#decisions-2026-11-11) with their reasons, and the owner may override any of them before its step starts.
+Owner brief 2026-11-11 ([brief](explore/brief.md), mockups below); decision [D275](../decisions.md#d275-explore-a-third-person-café-world-with-a-map-built-on-the-shop-designer-2026-11-11). Builds on the [shop designer](shop-designer.md) (D273) and its [scenes](shop-designer-scenes.md) (D274). Status: **E1 (walk and map) built** (2026-11-11, [below](#step-e1-walk-and-map-built-2026-11-11)), behind `NUXT_PUBLIC_EXPLORE`, waiting for the owner's Android benchmark and feel review. The owner delegated the open choices to Claude (2026-11-11: "help me decide all the way"); they are recorded in [Decisions](#decisions-2026-11-11) with their reasons, and the owner may override any of them before its step starts.
 
 ## Mockups (owner, 2026-11-11)
 
@@ -95,7 +95,7 @@ Drag or mouse to look from the seat (yaw ±110°, pitch ±30°). **Outside view*
 
 - A 128 px circle bottom left (the mockups), **rotating with the camera's heading** with the **N** marker on its rim, as in the reference; the player's arrow stays in the centre.
 - Shows streets, building footprints, café markers (cup), gateways (arch), the tuk-tuk pickup, the waypoint pin and the **route line**. An off-map waypoint clamps to the rim, pointing the way.
-- Drawn from the district's plan: the static layer is drawn once to an offscreen canvas, then rotated and translated each frame. Tapping it opens the full map.
+- Drawn from the district's plan after the world's frames, at most 30 times a second (a few dozen polygons: cheaper than caching a layer). Tapping it opens the full map.
 
 ### Full map (M or tap the minimap)
 
@@ -203,7 +203,9 @@ Any other event in any state is ignored. The vehicle never moves during `boardin
 - **Enter** loads the destination first, plays the crossing, places the player (or the vehicle) at the arrival anchor and keeps the activity and waypoint. If loading fails, the player stays at the gateway with **Retry** and **Go back**.
 - The tuk-tuk's route is one leg per district, generated from the lane graph, split at gateways; the ride controller handles the switch.
 
-## Steps (one branch and PR each)
+## Steps
+
+**Grouping (owner, 2026-11-11):** consecutive small or medium steps go in one PR, one commit each; a large step gets its own PR (AGENTS.md). E1, E2 and E4 are large (their own PRs). E3 and E5 are medium: each shares a PR with whichever small or medium step is next to it when it starts (for example, follow-up fixes from a review).
 
 | Step | Deliverable | Review gate |
 |---|---|---|
@@ -236,3 +238,19 @@ Any other event in any state is ignored. The vehicle never moves during `boardin
 | Projection fields | No version, author, table ids or photo ids | Server |
 
 CI's software renderer proves flows and errors, never speed; the owner's devices decide the frame-time gates.
+
+## Step E1: walk and map (built 2026-11-11)
+
+Internal: `/c/<slug>/explore`, client-only (`ssr: false`), 404 unless `NUXT_PUBLIC_EXPLORE` (on for the dev server, staging and the e2e server). It plays Explore's own demo café (`app/features/explore/demo/demo-cafe.ts`: two floors, a front door, the counter facing it, six tables, a sofa corner, stairs), not a real branch: real branches join in E4. **View menu** and the counter's **View drinks** open the cafe's real menu.
+
+- **Shared code (branches feature):** `index.ts` exports the pure plan helpers Explore needs (`chairPoses`, `planLane`, `ITEM_SPECS`…) and `loadSceneKit()`, a dynamic import of the three.js builders, so three.js never joins the bundles that import the index (the admin shell does). `createStage({ orbit: false })` keeps the orbit controls off the camera (their `update()` turns the camera even when disabled). A door's leaf and handle carry `userData.doorId`, so Explore hinges them. `SLAB_THICKNESS_CM` moved to the pure `geometry.ts` (re-exported where it was).
+- **Runtime** (`app/features/explore/runtime/`, plain TypeScript): `actions` (held vs one-shot, cleared on blur, page hide, pointer cancel, overlays), `walk-world` and `motor` (capsule on the plan: walls, turned boxes, circles, floors, stair ramps solid underneath, ledges between a step and head height; constant acceleration, a 720°/s turn, jump with coyote time and buffer), `district` (the layout plus `planLane` → walls, seats from table chairs and seat pieces, the counter's customer spot, the spawn across the lane facing the door, map shapes), `interaction`, `player` (sit and stand with a deadline), `route` (a 0.5 m walk grid, A*, smoothing), `camera` (follow, recentre after 1.5 s, walls tested at the height the ray crosses them so the camera follows through an open doorway), `fixed-step`, `avatar` (generated, gait from distance travelled, hidden when the camera is pulled within 0.75 m of its head), `map-draw`, `desktop-input`, `bench`, `world`.
+- **Screen:** `ExplorePage` (HUD: View menu, place and waypoint badges, map button, minimap, the context button with its key, Jump on touch, the keyboard hint on desktop, loading and "can't run here" states), `ExploreTouchControls`, `ExploreMinimap`, `ExploreFullMap` (`AppModal`, so Back closes it). The full map pauses the world.
+- **Decided while building:**
+  - A **ledge** (a floor more than a step up and below the head) blocks; the first motor ignored a higher surface over the same point and walked into it.
+  - **Acceleration is constant** (jog to stop in exactly 0.1 s); an exponential ease never quite stopped.
+  - The **beacon fades within 1.5–6.5 m** of the door: up close it tinted the whole view.
+  - The **player's arrow is the primary color**; a black arrow read as the mouse pointer on the full map.
+  - The minimap and the HUD use Nuxt UI's tokens (`soft` neutral buttons and badges, safe-area padding); no blur, no hex.
+- **Not in E1:** the open door's leaf is not an obstacle; table chairs are seats but sitting at a booth is not; no railings around the stairwell; the upper floors aren't on the route grid (waypoints are on the ground floor); the moto, the tuk-tuk and gateways (E2, E4, E5).
+- **Evidence:** see [progress](../progress.md#explore-e1-walk-and-map-d275-2026-11-11).
