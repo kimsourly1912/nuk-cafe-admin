@@ -32,6 +32,12 @@ export interface StageOptions {
   /** The first frame is on screen (a software renderer can take seconds to get there). */
   onFirstFrame?: () => void
   onContextLost?: () => void
+  /**
+   * The orbit controls own the camera (default). Explore (D275) moves the camera itself: its stage
+   * keeps the controls disabled and never updates them, since `update()` turns the camera to their
+   * target even when disabled.
+   */
+  orbit?: boolean
 }
 
 export interface StageDetails {
@@ -77,7 +83,7 @@ const BACKGROUND = { light: '#efe9e2', dark: '#1d1714' }
 
 /** Throws when WebGL isn't available; the caller shows the lists instead (frame 6D). */
 export function createStage(options: StageOptions): Stage {
-  const { canvas } = options
+  const { canvas, orbit = true } = options
   const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
   renderer.outputColorSpace = SRGBColorSpace
   renderer.toneMapping = ACESFilmicToneMapping
@@ -121,6 +127,7 @@ export function createStage(options: StageOptions): Stage {
   controls.enableDamping = true
   controls.dampingFactor = 0.09
   controls.screenSpacePanning = true
+  controls.enabled = orbit
 
   const materials = createMaterialLibrary()
   const context = createBuildContext(materials)
@@ -168,7 +175,7 @@ export function createStage(options: StageOptions): Stage {
 
   function loop(now: number) {
     frame = 0
-    let again = controls.update()
+    let again = orbit ? controls.update() : false
     for (const task of [...tasks.keys()]) {
       if (task(now)) again = true
       else tasks.delete(task)

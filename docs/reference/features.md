@@ -19,7 +19,8 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 | `counter` | `useCounterSession` (the counter workspace's own session: `user` with its `branches`, `signIn`, `signOut`, `changePassword`, `clearSession`, `generation`), `isCounterPath`, `counterRedirectTarget`, `COUNTER_HOME_PATH`, `COUNTER_SIGN_IN_PATH`, `COUNTER_CHANGE_PASSWORD_PATH`: for the shell (middleware, the API plugin, tab titles) (D102) |
 | `menu` | `openingText` ("Opens tomorrow at 7:00 AM"; also the counter's closed banner, D102); `useOrderAgain()` → `orderAgain({ branchId, lines: PastLine[] })`: adds an earlier order's lines still on that branch's menu to the order in this browser, returns `{ added, skipped }` (D114) |
 | `exchange-rates` | `exchangeRatesNavigation` ("Payments", D102) |
-| `branches` | [`useBranchOptions`](#usebranchoptions), `branchesNavigation`, `branchesSetup` |
+| `branches` | [`useBranchOptions`](#usebranchoptions), `branchesNavigation`, `branchesSetup`; for Explore (D275): [`loadSceneKit`](#loadscenekit) and the pure plan helpers beside it |
+| `explore` | Nothing yet: the route imports `ExplorePage.vue` (D275) |
 
 When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).
 
@@ -187,3 +188,21 @@ const { data: branches } = useBranchOptions() // `data`: BranchOption[] | undefi
 
 - Key: `branches:options`, the only query for this endpoint, so a branch change (`invalidate('branches')`) refreshes every screen that shows branches.
 - Calls `GET /api/admin/branches/options`.
+
+### `loadSceneKit`
+
+The shop designer's three.js builders for another feature's 3D view (Explore, D275): one renderer for the editor and Explore. A dynamic import, so three.js joins only the chunk that awaits it, never the bundles that import the index (the admin shell does).
+
+```ts
+import type { Stage } from '~/features/branches'
+import { loadSceneKit } from '~/features/branches'
+const kit = await loadSceneKit()
+const stage: Stage = kit.createStage({ canvas, dark, orbit: false }) // orbit: false, the caller moves the camera
+const built = kit.buildScene(stage.context, { layout, tables, looks })
+const street = kit.buildSurroundings(stage.materials, layout, 'neighborhood-lane', seed) // dispose its `context`
+```
+
+- `kit`: `createStage`, `buildScene`, `buildSurroundings`, `createBuildContext`, `disposeBuildContext`, `cm`, `yRotation`. Types (`Stage`, `BuiltScene`, `BuiltSurroundings`, `BuildContext`, `MaterialLibrary`) are type exports of the index.
+- `createStage({ orbit: false })` keeps the orbit controls disabled and never updates them: their `update()` turns the camera toward their target even when disabled.
+- A door's leaf and handle carry `userData.doorId` (the opening's id), to hinge them.
+- Pure helpers exported beside it, no three.js: `chairPoses`, `placementExtent`, `rectCorners`, `outwardNormal`, `DOOR_HEIGHT_CM`, `RAILING_HEIGHT_CM`, `SLAB_THICKNESS_CM`, `BUILT_IN_LOOKS`, `findLook`, `ITEM_SPECS`, `pieceHeight`, `planLane`, `toPlan`, `summarizeFrames`.
