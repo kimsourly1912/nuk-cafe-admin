@@ -110,7 +110,7 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 | 3e. Heights and picking pieces (**built**, one PR with 3f at the owner's choice) | A chair's or fixture's own height (QS2), on pieces and looks, in each kind's range; a piece picked in 3D with its card and Show on plan | Make a counter stool (65 cm) look, place it, raise a shelf; tap a chair in 3D and go back to it on the plan |
 | 3f. More furniture (**built**, with 3e) | Lounge seating, bar and service, decor and lighting, outdoor: 11 kinds generated from code, with looks, heights and pictures; overhead pieces never warn | Furnish a lounge corner and a terrace; a parasol over a table and a pendant lamp over the bar give no warning |
 | 3c. Pilot | Pilot with a real café; prioritize more furniture from what the owner reaches for | The owner recreates part of their café and explores it without help |
-| 3g, 3h, 4a–4d. Scenes | People and pets (3g), the Neighborhood lane test scene and benchmark (3h) before the pilot; the saved scene preset and Neighborhood lane (4a), then Riverside, Seaside and City street (4b–4d) after it. [Scenes plan](shop-designer-scenes.md) | Per step, in that plan |
+| 3g, 3h, 4a–4d. Scenes | People and pets (3g), the Neighborhood lane test scene and benchmark (3h) before the pilot, and 4a's groundwork (the saved scene and the Scene panel, flag kept, **built**); 4a's finish (the flag removed, the sign) and Riverside, Seaside and City street (4b–4d) after it. [Scenes plan](shop-designer-scenes.md) | Per step, in that plan |
 
 ## Edge cases and verification
 

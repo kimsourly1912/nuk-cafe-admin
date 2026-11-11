@@ -1,6 +1,6 @@
 import * as v from 'valibot'
-import { layoutSchema } from '#shared/contracts/shop-layout'
-import type { BranchLayout, ItemLook, LayoutItem, LayoutTable, Placement, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { layoutSchema, NO_SCENE } from '#shared/contracts/shop-layout'
+import type { BranchLayout, ItemLook, LayoutItem, LayoutTable, Placement, ScenePreset, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, NEW_TABLE_LOOK } from '../designer/catalog'
 import type { PlanSelection } from '../designer/plan'
 import { fetchBranchLayout, useBranchLayout, useItemLooks, useLayoutMutations, useLooks } from './useBranches'
@@ -27,6 +27,8 @@ import type { LayoutDraft } from './useLayoutDraft'
  *   `resetUnknownLooks` gives those tables the default look. The same for a piece of furniture
  *   whose chair or fixture look is gone (step 3d, `unknownItemLooks`): it goes back to its own
  *   finishes.
+ * - **The scene** (step 4a, the surroundings in 3D) is part of the draft: choosing one is a change
+ *   like moving a table, undone the same way, saved with the layout by Save layout, at its version.
  * - **Leaving with unsaved changes asks first** (`useUnsavedChanges`, the app's guard); Discard
  *   puts the saved layout back.
  *
@@ -46,7 +48,7 @@ export function useLayoutEditor(branchId: string) {
   const itemLooksQuery = useItemLooks({ immediate: false })
   const { save: saveMutation } = useLayoutMutations()
   const confirm = useConfirm()
-  const draft: LayoutDraft = useLayoutDraft({ floors: [], placements: [] })
+  const draft: LayoutDraft = useLayoutDraft({ floors: [], placements: [], scene: NO_SCENE })
 
   /** The version the draft started from; 0 until the branch's first save. */
   const version = ref(0)
@@ -93,7 +95,7 @@ export function useLayoutEditor(branchId: string) {
   function start(layout: BranchLayout) {
     applied = layout
     version.value = layout.version
-    draft.reset({ floors: cloneFormValue(layout.floors), placements: cloneFormValue(layout.placements) })
+    draft.reset({ floors: cloneFormValue(layout.floors), placements: cloneFormValue(layout.placements), scene: cloneFormValue(layout.scene) })
     unsaved.markClean(draft.layout.value)
     conflict.value = null
     problem.value = null
@@ -103,9 +105,10 @@ export function useLayoutEditor(branchId: string) {
 
   watch(query.data, (layout) => {
     if (!layout || layout === applied || unsaved.isDirty.value) return
-    // The same drawing again (a refetch after a table or a look changed): the selection and the
-    // undo history stay. Only its tables are news, and those are read from the query.
-    if (applied && isSameFormValue(layout.floors, draft.layout.value.floors) && isSameFormValue(layout.placements, draft.layout.value.placements)) {
+    // The same drawing and scene again (a refetch after a table or a look changed): the selection
+    // and the undo history stay. Only its tables are news, and those are read from the query.
+    const { floors, placements, scene } = draft.layout.value
+    if (applied && isSameFormValue(layout.floors, floors) && isSameFormValue(layout.placements, placements) && isSameFormValue(layout.scene, scene)) {
       applied = layout
       version.value = layout.version
       return
@@ -187,6 +190,7 @@ export function useLayoutEditor(branchId: string) {
     draft.change((layout) => {
       layout.floors = cloneFormValue(latest.floors)
       layout.placements = cloneFormValue(latest.placements)
+      layout.scene = cloneFormValue(latest.scene)
     })
     unsaved.markClean(draft.layout.value)
     conflict.value = null
@@ -241,7 +245,15 @@ export function useLayoutEditor(branchId: string) {
     if (selection.value?.kind !== 'table') selection.value = null
   }
 
-  /** Starts an empty layout from a starter (frame 6C). */
+  /** Chooses the surroundings everyone sees in 3D (step 4a): a change to the draft, saved with it. */
+  function setScene(preset: ScenePreset) {
+    if ((draft.layout.value.scene ?? NO_SCENE).preset === preset) return
+    draft.change((layout) => {
+      layout.scene = { preset }
+    })
+  }
+
+  /** Starts an empty layout from a starter (frame 6C); the scene stays. */
   function begin(layout: ShopLayout) {
     draft.change((current) => {
       current.floors = layout.floors
@@ -278,6 +290,7 @@ export function useLayoutEditor(branchId: string) {
     overwrite,
     removeUnavailable,
     showFloor,
+    setScene,
     begin,
   }
 }

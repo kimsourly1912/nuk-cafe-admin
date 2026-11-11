@@ -4,7 +4,7 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js'
 import type { Viewpoint } from '../geometry'
 import { BENCHMARK } from '../benchmark'
 import { floorViewpoints } from '../geometry'
-import type { SurroundingsPreset } from '../surroundings'
+import type { ScenePreset } from '#shared/contracts/shop-layout'
 import { disposeBuildContext, meshesOf } from './furniture'
 import { createModelLibrary } from './models'
 import type { BuiltSurroundings } from './surroundings'
@@ -46,7 +46,7 @@ export interface BuildingViewer {
   setScene: (input: SceneInput) => void
   setPlayback: (playback: Playback) => void
   /** The street around the café (step 3h); `seed` keeps it the same for everyone (the branch id). */
-  setSurroundings: (preset: SurroundingsPreset, seed: string) => void
+  setSurroundings: (preset: ScenePreset, seed: string) => void
   /**
    * The benchmark (step 3h): a warm-up, then full orbits around the café at a steady pace, timing
    * every frame. `onProgress` gets the phase. Resolves null when interrupted.
@@ -91,7 +91,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   /** The current scene's figures' idle motion: generated, or a model file's own loop. */
   let animators = new Map<FigureNode | 'surroundings', (delta: number) => void>()
   let surroundings: BuiltSurroundings | null = null
-  let surroundingsChoice: { preset: SurroundingsPreset, seed: string } = { preset: 'none', seed: '' }
+  let surroundingsChoice: { preset: ScenePreset, seed: string } = { preset: 'none', seed: '' }
   let ground: Mesh | null = null
   /** The model loops, stopped when their scene goes. */
   let mixers: AnimationMixer[] = []
@@ -330,7 +330,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     })
   }
 
-  function setSurroundings(preset: SurroundingsPreset, seed: string) {
+  function setSurroundings(preset: ScenePreset, seed: string) {
     if (preset === surroundingsChoice.preset && seed === surroundingsChoice.seed) return
     const wasShown = surroundings !== null
     surroundingsChoice = { preset, seed }

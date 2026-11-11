@@ -626,3 +626,24 @@ describe('0062_item_look_heights', () => {
     for (const file of files.slice(at + 1)) await applyMigration(client, file)
   })
 })
+
+describe('0063_layout_scene', () => {
+  it('adds the scene in place: a saved layout keeps its version and floors (their parent is not rebuilt), with no scene', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0063_layout_scene.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    await client.batch([
+      `insert into organization (id, name, slug, created_at) values ('t1', 'NUK Cafe', 'nuk', 1)`,
+      `insert into branches (id, tenant_id, name, timezone) values ('b1', 't1', 'Riverside', 'Asia/Phnom_Penh')`,
+      `insert into branch_layouts (tenant_id, branch_id, version) values ('t1', 'b1', 7)`,
+      `insert into branch_layout_floors (tenant_id, branch_id, id, position, name, height_cm, has_roof, geometry) values ('t1', 'b1', 'ground', 0, 'Ground', 300, 1, '{"items":[]}')`,
+    ])
+    await applyMigration(client, files[at]!)
+    expect((await client.execute('select version, scene from branch_layouts')).rows).toMatchObject([{ version: 7, scene: null }])
+    expect((await client.execute('select name from branch_layout_floors')).rows).toMatchObject([{ name: 'Ground' }])
+    await client.execute(`update branch_layouts set scene = '{"preset":"neighborhood-lane"}'`)
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+})

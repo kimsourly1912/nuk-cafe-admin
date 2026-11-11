@@ -1,5 +1,5 @@
 import { FIGURE_SIZES, ITEM_HEIGHTS, isItemLookKind } from '#shared/contracts/shop-layout'
-import type { FigureKind, Finish, ItemKind, ItemLook, LayoutItem, TableLook } from '#shared/contracts/shop-layout'
+import type { FigureKind, Finish, ItemKind, ItemLook, LayoutItem, ScenePreset, TableLook } from '#shared/contracts/shop-layout'
 
 /**
  * What the shop designer can place and how it looks (D273). The 2D editor and the 3D builders both
@@ -198,3 +198,19 @@ export function pieceFinishes(item: Pick<LayoutItem, 'kind' | 'finishes' | 'look
 export function pieceHeight(item: Pick<LayoutItem, 'kind' | 'height'>): number {
   return isItemLookKind(item.kind) && item.height !== undefined ? item.height : ITEM_SPECS[item.kind].height
 }
+
+/** A scene card in View in 3D's Scene panel (step 4a, D274). */
+export interface SceneCard {
+  preset: ScenePreset
+  label: string
+  description: string
+  /** Rendered from the same builders by `scripts/render-look-photos.mjs` (`public/shop-designer/scenes/`). */
+  photo: string
+}
+
+export const SCENE_CARDS: readonly SceneCard[] = [
+  { preset: 'none', label: 'No surroundings', description: 'The café alone on the ground', photo: '/shop-designer/scenes/none.webp' },
+  { preset: 'neighborhood-lane', label: 'Neighborhood lane', description: 'Shophouses, a lane and a passer-by', photo: '/shop-designer/scenes/neighborhood-lane.webp' },
+]
+
+export const sceneCard = (preset: ScenePreset): SceneCard => SCENE_CARDS.find(card => card.preset === preset)!

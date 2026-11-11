@@ -269,10 +269,31 @@ export const placementSchema = v.strictObject({
 })
 export type Placement = v.InferOutput<typeof placementSchema>
 
+// --- The branch's scene (step 4a, D274) ---
+
+/**
+ * The surroundings around the café in 3D, the same for everyone who opens the branch. Checked here,
+ * not by a `CHECK`: a new preset would otherwise need a table rebuild (as for item kinds, step 3d).
+ */
+export const SCENE_PRESETS = ['none', 'neighborhood-lane'] as const
+export type ScenePreset = typeof SCENE_PRESETS[number]
+/** The saved scene's JSON: room for later fields (sign text, awning, entrance), never a drawing. */
+export const LAYOUT_SCENE_MAX_BYTES = 2 * 1024
+
+export const layoutSceneSchema = v.pipe(
+  v.strictObject({ preset: v.picklist(SCENE_PRESETS, 'Unknown scene') }),
+  v.check(scene => jsonBytes(scene) <= LAYOUT_SCENE_MAX_BYTES, 'The scene is too large'),
+)
+export type LayoutScene = v.InferOutput<typeof layoutSceneSchema>
+/** A branch that never chose one. */
+export const NO_SCENE: LayoutScene = { preset: 'none' }
+
 export const layoutSchema = v.pipe(
   v.strictObject({
     floors: v.pipe(v.array(floorSchema), v.minLength(1, 'A layout needs a floor'), v.maxLength(LAYOUT_MAX_FLOORS)),
     placements: v.pipe(v.array(placementSchema), v.maxLength(MAX_BRANCH_TABLES)),
+    /** Saved with the layout, at its version (step 4a). Left out: the saved scene stays (an app tab from before 4a). */
+    scene: v.optional(layoutSceneSchema),
   }),
   v.check(layout => unique(layout.floors.map(floor => floor.id)), 'Floor ids repeat'),
   v.check(layout => unique(layout.placements.map(placement => placement.tableId)), 'A table is placed twice'),
@@ -301,6 +322,8 @@ export interface BranchLayout {
   updatedByName: string | null
   floors: Floor[]
   placements: Placement[]
+  /** The surroundings everyone sees in 3D (step 4a); `NO_SCENE` until one is chosen. */
+  scene: LayoutScene
   /** The branch's active tables by label; the unplaced ones are the editor's Unplaced list. */
   tables: LayoutTable[]
 }

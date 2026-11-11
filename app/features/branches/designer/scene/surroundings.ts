@@ -1,8 +1,8 @@
 import { Box3, BoxGeometry, CatmullRomCurve3, CylinderGeometry, Group, IcosahedronGeometry, LatheGeometry, Mesh, PlaneGeometry, Shape, ShapeGeometry, TorusGeometry, TubeGeometry, Vector2, Vector3 } from 'three'
 import type { BufferGeometry, Material, Object3D } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import type { ShopLayout } from '#shared/contracts/shop-layout'
-import type { Neighbour, Prop, Span, SurroundingsPlan, SurroundingsPreset } from '../surroundings'
+import type { ScenePreset, ShopLayout } from '#shared/contracts/shop-layout'
+import type { Neighbour, Prop, Span, SurroundingsPlan } from '../surroundings'
 import { planLane } from '../surroundings'
 import { SLAB_THICKNESS_CM } from './building'
 import { buildFigure } from './figures'
@@ -47,7 +47,7 @@ const AWNINGS: LaneSurface[] = ['awning-red', 'awning-green', 'awning-blue']
 /** Walking pace, metres a second. */
 const WALK_SPEED = 0.75
 
-export function buildSurroundings(materials: MaterialLibrary, layout: Pick<ShopLayout, 'floors'>, preset: SurroundingsPreset, seed: string): BuiltSurroundings | null {
+export function buildSurroundings(materials: MaterialLibrary, layout: Pick<ShopLayout, 'floors'>, preset: ScenePreset, seed: string): BuiltSurroundings | null {
   if (preset !== 'neighborhood-lane') return null
   const plan = planLane(layout, seed)
   if (!plan) return null

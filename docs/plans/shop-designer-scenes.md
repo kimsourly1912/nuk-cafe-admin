@@ -169,14 +169,14 @@ The first commit of step 3g loads one textured model **on the built server**, wh
 | 3g. People and pets (**built**) | Before the pilot (owner: before 3e and 3f) | The model pipeline: model list, loader, CSP fix (QS4). Figures in a **People and pets** library section (the owner's list: a person, a girl, a boy, an old man, someone lazing, a cat, a dog; plus a seated customer and a barista), generated from code until CC0 models arrive. Placed, turned and saved like furniture, fixed size, no look, no warnings for overlapping a chair. Shown in 3D with an idle loop; **Show people and pets** and **Animate** in View in 3D | Place a cat and a seated customer, save, reopen, see them in 3D on a phone and a desktop |
 | 3h. Neighborhood lane test scene (**built**) | Before the pilot | Internal only (`NUXT_PUBLIC_SHOP_DESIGNER_SCENES`, on in dev and staging, off in production): `buildSurroundings` with the lane (neighbours, lane, drain, rear yard, parked moto, pedestrian, cat at its bowl), Fit, cutaway hiding, shadows kept on the café, animation rules, a **Scene** select in View in 3D, and the benchmark mode (below) | The benchmark on the owner's Android phone and a desktop, recorded in progress; full orbit behind the café on both |
 | 3c. Pilot (Riverside branch) | — | As planned in D273: the core workflow, with no scenes | As planned |
-| 4a. Ship Neighborhood lane | After the pilot, once 3h passes the targets | The saved scene (migration, contract, GET and PUT); the **Scene** panel (right sidebar on desktop, a slide-over on phones) with scene cards (pictures rendered from our own scenes by the pictures script), Show surroundings, Show people and pets, Animate; the storefront sign with the cafe's name; the flag removed | Choose Neighborhood lane on one device, save; another device opening the branch sees it. Playback changes on one don't reach the other |
+| 4a. Ship Neighborhood lane (**groundwork built** before the pilot, flag kept: the saved scene and the Scene panel) | Flag removal and the sign after the pilot, once 3h passes the targets | The saved scene (migration, contract, GET and PUT); the **Scene** panel (right sidebar on desktop, a slide-over on phones) with scene cards (pictures rendered from our own scenes by the pictures script), Show surroundings, Show people and pets, Animate; the storefront sign with the cafe's name; the flag removed | Choose Neighborhood lane on one device, save; another device opening the branch sees it. Playback changes on one don't reach the other |
 | 4b. Riverside | After 4a | Shophouses, a stone riverwalk and landing, a covered wooden passenger boat; water as its own performance case (simple water, a slow wake) | Benchmark rerun on the same devices |
 | 4c. Seaside | After 4b | Coastal road, sand, palms, a seafood stall, a fishing boat | Benchmark rerun |
 | 4d. City street | After 4c | Street corner, zebra crossing, motos, the tuk-tuk (commission decision if the CC0 one feels generic) | Benchmark rerun |
 
 The order of 4b–4d is the owner's. City street reuses most of the lane's parts, so it is the cheapest of the three if the order ever needs to change.
 
-**If the pilot runs on staging (QS5):** the 3h flag is turned off on staging for the pilot's duration, so the pilot café doesn't see an internal scene.
+**The pilot runs on production (QS5, answered 2026-11-11)**, where the scenes flag is off: the pilot café sees no surroundings and no Scene panel.
 
 ## Performance check (step 3h, repeated for 4b–4d)
 
@@ -234,7 +234,7 @@ The person running it records the device, OS, browser and network.
 ## Open questions
 
 - **QS4:** allow `blob:` in `connect-src` so textured `.glb` models load in production (option A above), or ship split `.gltf` files (option B)? Suggested: A. Blocks step 3g's models.
-- **QS5:** does the Riverside pilot run on staging or production? If staging, the 3h flag is switched off there during the pilot. Blocks nothing until 3c.
+- **QS5 (answered 2026-11-11):** the Riverside pilot runs on **production**, where the scenes flag is already off.
 
 ## Step 3g: people and pets (built 2026-11-11)
 
@@ -298,5 +298,28 @@ Internal: on for the dev server, staging and the e2e server (`NUXT_PUBLIC_SHOP_D
   - `test/e2e/shop-designer.test.ts` (19): the lane chosen in View in 3D, **Fit scene**, L1 found from the list with the lane shown, the cutaway, the benchmark panel, back to No surroundings.
 - **Guards checked by removing them:** the cutaway's hiding, freeing the old lane, the benchmark's stop when interrupted, Fit including the lane, the shadow kept on the café, and neighbours kept out of the café's box each make a test fail.
 - **Not verified:** the numbers on real hardware (the reason for this step), and how the lane looks on a phone.
-- **Run the benchmark (owner):** on staging, open a branch → Dining tables → View in 3D, and add `&bench=orbit` to the address. Choose **No surroundings**, press **Run benchmark**, keep the tab in front for about 65 s, **Copy report**. Then choose **Neighborhood lane** (Show people and pets and Animate on), run it again, copy. On the phone, do the same in Chrome. Send the four reports. The targets: the phone's p95 at or under 33.3 ms, the desktop's median near 16.7 ms (60 Hz).
+- **Run the benchmark (owner):** on staging, open a branch → Dining tables → View in 3D, and add `&bench=orbit` to the address. Open **Scene** and choose **No surroundings**, close the panel, press **Run benchmark**, keep the tab in front for about 65 s, **Copy report**. Then choose **Neighborhood lane** (Show people and pets and Animate on), run it again, copy. Since step 4a choosing a scene is a layout change: **Save layout** or leave with Discard afterwards. On the phone, do the same in Chrome. Send the four reports. The targets: the phone's p95 at or under 33.3 ms, the desktop's median near 16.7 ms (60 Hz).
 
+## Step 4a groundwork: the saved scene (built 2026-11-11)
+
+Built before the pilot at the owner's choice (2026-11-11), with the scenes flag kept: production shows no Scene panel and no surroundings. Left for 4a's finish, after the pilot and the benchmark: **removing the flag**, **the storefront sign with the cafe's name**, and the help page.
+
+- **Where:**
+  - `shared/contracts/shop-layout.ts`: `SCENE_PRESETS` (moved from the app's `surroundings.ts`), `layoutSceneSchema`, `NO_SCENE`, `layout.scene` (optional) and `BranchLayout.scene`;
+  - `server/features/branches/branches.schema.ts`, migration `0063_layout_scene`: `branch_layouts.scene`, nullable JSON, added in place;
+  - `branches.layout.repository.ts`: the scene read with the layout's row; the first save's insert and the version bump set it only when one came;
+  - `branches.layout.service.ts`: `scene` in the GET (`NO_SCENE` when null), the audit's `scene` when the preset changes;
+  - `useLayoutEditor.ts`: the scene in the draft, `setScene`, the refetch check comparing scenes too, Load latest taking the latest scene;
+  - `BuildingView3D.vue`: `v-model:scene`; the **Scene** button and panel (a right sidebar from `lg`, a slide-over below) with the scene cards, then **On this device**: Show surroundings, Show people and pets, Animate; without the flag, the 3g People and pets popover as before;
+  - `catalog.ts`: `SCENE_CARDS`; `scripts/render-look-photos.mjs` renders their pictures (`public/shop-designer/scenes/`) from the demo shophouse, alone and in the lane.
+- **Decided while building:**
+  - **The scene is part of the layout's draft**, not its own setting: one Save layout, one version, undo, "Unsaved changes shown", Load latest and Overwrite all cover it with no new code paths.
+  - **A refetch with the same drawing and another scene starts the draft again** from the server: kept as before, this device's next save would put its old scene back over another device's choice, at the new version, unseen.
+  - **Show surroundings is this viewer's**, like Show people and pets: hiding the lane on one phone changes nothing saved.
+  - **No `CHECK` and no size bound in the database**, as for a floor's drawing: the contract checks the preset and the 2 KB limit.
+- **Tests:**
+  - `branches.layout.service.test.ts` (+5): none until chosen, saved at the version and read back, the audit naming a changed preset only; a first save with one; a save without one keeps it; a stale save changes none; the contract refuses an unknown preset, extra fields and null. The two-cafe test: our cafe's id sets no scene on theirs.
+  - `migrations.test.ts`: `0063` keeps a saved layout's version and floors, with no scene.
+  - `test/e2e/shop-designer.test.ts`: the 3h test became 4a's: the lane chosen in the Scene panel (unsaved, Fit scene), L1 found, the cutaway, the benchmark panel, saved; Show surroundings off is not a change; a phone opening the branch sees the lane with its own playback, fits the screen, chooses none and saves; the first device, back online, takes it. The 3g test reaches its switches through the panel.
+- **Guards checked by removing them:** keeping the saved scene when a save has none (server), the cafe in the version bump's condition (two-cafe test), and the refetch comparing scenes (e2e) each make a test fail.
+- **Not verified:** the panel on a real phone and tablet; the production path without the flag (the 3g popover) runs in no e2e, because the e2e server has the flag on.

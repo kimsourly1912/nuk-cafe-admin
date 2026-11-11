@@ -3,6 +3,16 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 4a groundwork: the saved scene (D274, 2026-11-11)
+
+Branch `claude/zen-keller-wqnniy`, restarted from `main` after PR #291. The owner chose (2026-11-11) to build 4a's decided parts before the pilot, keeping the scenes flag on, and answered **QS5: the pilot runs on production**. [Plan → Step 4a](plans/shop-designer-scenes.md#step-4a-groundwork-the-saved-scene-built-2026-11-11).
+
+- **Built:** `branch_layouts.scene` (migration `0063_layout_scene`), `layoutSceneSchema` and `SCENE_PRESETS` in the shared contract, the scene in GET and PUT `…/layout` (left out: kept), the audit noting a changed preset; in the app the scene is part of the layout's draft, chosen in View in 3D's **Scene** panel (cards with pictures rendered from our own scenes; Show surroundings, Show people and pets and Animate for this device only). Still behind `NUXT_PUBLIC_SHOP_DESIGNER_SCENES`.
+- **Left for 4a's finish** (after the pilot and the owner's benchmark): removing the flag, the storefront sign with the cafe's name, the help page (`branch.md`; the panel isn't in production yet, as in 3h).
+- **Evidence (local, Playwright's Chromium):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 184 files, 2,850 passed, 1 skipped; `test/e2e/shop-designer.test.ts` 21 passed (the 3h test now 4a's, the 3g test through the panel); `server/tests/d1-search.test.ts` (local D1, migrations through `0063`) 19 passed. Migration generated with `drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts` (the `#auth/schema` pitfall), one `ALTER TABLE … ADD`; a second run says "No schema changes". Guards removed one at a time, each failing a named test and restored: keeping the saved scene when a save has none, the cafe in the version bump's condition, the editor's refetch comparing scenes.
+- **Not verified:** the Scene panel on a real phone and tablet; the flag-off path (the 3g People and pets popover) in any e2e, since the e2e server runs with the flag on.
+- **How to verify (staging, flag on):** a branch → Dining tables → View in 3D → **Scene** → Neighborhood lane → Save layout. Open the same branch on a phone: the lane is there; turn Show surroundings off there, and the desktop still shows it. Choose No surroundings and save to put it back.
+
 ### Counter sold-out e2e flake (fix, 2026-11-11)
 
 PR [#291](https://github.com/kimsourly1912/nuk-cafe-admin/pull/291) CI run 42993631922, e2e 6/6: `counter.test.ts` "sold out at the counter … switching back restores it" failed with `expect.poll() function didn't resolve in time` on `available.isChecked()` after switching back on. Also failed in PR #236 (D249, no cause found then). The run's artifact couldn't be downloaded from the cloud session (its storage host is blocked).
@@ -1764,7 +1774,7 @@ Business decisions the build still needs, with the step each blocks. Answered on
 | QM1 | **Facebook posting for every cafe** (M2): a Meta app owned by the platform, its **App Review** (`pages_manage_posts`), **Business Verification**, a privacy policy page, and our own domain (Q4). Until then Facebook posting works only for the Meta app's testers (the owner's own Page) | M2 for other cafes | Telegram channels first (no approval needed), Facebook for NUK Cafe as a tester. **Owner (2026-10-30):** Telegram only for now; Meta review when cafes ask for Facebook |
 | QS1 | **Pictures on the built-in looks** (shop designer step 3d): we ship renders of our own 3D models (the same builders as the plan and the building), 480 × 360. Photos of real furniture instead would need a source and a license for each | Nothing (renders shipped) | Keep the renders: they show exactly what the plan places, and are made again when a model changes |
 | QS4 | **Answered 2026-11-11: add `blob:`.** **Textured 3D models and the CSP** (shop designer step 3g, D274): a `.glb`'s textures load through `fetch()` of a `blob:` URL, refused by the deployed `connect-src 'self'`. Add `blob:` to `connect-src` (a `blob:` URL only points at data the page made), or ship split `.gltf` files with separate textures | Step 3g's models | Add `blob:` to `connect-src`; an e2e test on the built server loads a textured model |
-| QS5 | **Where the Riverside pilot runs** (step 3c, D274): on staging, the internal Neighborhood lane flag is turned off there for the pilot | Step 3c's setup | Production (the flag is already off there) |
+| QS5 | **Answered 2026-11-11: production.** **Where the Riverside pilot runs** (step 3c, D274): on staging, the internal Neighborhood lane flag is turned off there for the pilot | Step 3c's setup | Production (the flag is already off there) |
 
 ## Known limitations
 
