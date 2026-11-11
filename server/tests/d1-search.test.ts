@@ -466,7 +466,7 @@ describe('the shop layout on real D1 (D273)', { timeout: 60_000, tags: ['slow'] 
     const owner: Actor = { ...ourOwner, userId: (await createUser(db)).id }
     const tableId = newId()
     await db.insert(diningTables).values({ id: tableId, tenantId: ours, branchId, label: 'L1', qrTokenHash: newId() })
-    const input = { name: 'D1 walnut', shape: 'rect', base: 'legs', chair: 'cafe-chair', finishes: { top: 'walnut', base: 'graphite' }, defaultWidth: 160, defaultDepth: 80 } as const
+    const input = { name: 'D1 walnut', shape: 'rect', base: 'legs', chair: 'cafe-chair', finishes: { top: 'walnut', base: 'graphite' }, defaultWidth: 160, defaultDepth: 80, photoId: null } as const
     const look = await createLook(db, owner, input)
     await expectApiError(() => createLook(db, owner, { ...input, name: 'd1 WALNUT' }), 409, 'LOOK_NAME_TAKEN', ['name'])
     const floor = largestLayout([]).layout.floors[0]!

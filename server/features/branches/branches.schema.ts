@@ -174,6 +174,12 @@ export const customFurnitureLooks = sqliteTable('custom_furniture_looks', {
   finishes: text({ mode: 'json' }).$type<LookFinishes>().notNull(),
   defaultWidthCm: integer().notNull(),
   defaultDepthCm: integer().notNull(),
+  /**
+   * A `media_assets` id of the same cafe (step 3b): the photo the picker and the table's details
+   * show. No foreign key, like a menu item's image: the media feature owns that table, attaches
+   * the upload in the look's batch and releases it when the look drops it or is deleted.
+   */
+  photoAssetId: text(),
   version: integer().notNull().default(1),
   createdAt: instant().notNull().default(nowMs),
   updatedAt: instant().notNull().default(nowMs),

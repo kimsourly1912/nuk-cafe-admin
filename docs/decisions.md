@@ -3091,3 +3091,8 @@ Verification: migrated SQLite forced interleavings, populated local workerd/D1 r
   - **Raw `$fetch` is gone from the app and server code** (4 calls, now `ofetch`): with these routes added, TypeScript gave up (TS2589) on whichever `$fetch` call it checked first, because Nitro types an address against every route. `apiFetch` was already built on `ofetch` for this reason.
 
   [Plan → Step 3a](plans/shop-designer.md#step-3a-custom-looks-built-2026-11-10).
+- **Step 3b (2026-11-11):** a custom look's optional photo (`custom_furniture_looks.photo_asset_id`, migration `0060_look_photos`), uploaded through the existing media route and cropped 4:3, shown in Table looks, a table's panel and the 3D table card; the plan and 3D keep the simple shape. Decided:
+  - **No foreign key to `media_assets`**, as for every other upload a record uses: the media feature owns the asset's lifecycle and attaches and releases it in the look's batch; a missing upload reads as no photo.
+  - **A new look never copies another look's photo**: an upload is one record's at a time.
+
+  [Plan → Step 3b](plans/shop-designer.md#step-3b-look-photos-built-2026-11-11).

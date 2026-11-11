@@ -3,6 +3,17 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 3b: look photos (D273, 2026-11-11)
+
+- Steps 2c and 3a merged (PR #281). **Built:** an optional photo on a custom look: **Photo** in the look's form (the shared `<ImageInput>`, cropped 4:3, uploaded through the existing media route), shown on the look under Table looks, beside **Look** in a table's panel and on the 3D table card. The plan and 3D keep the simple shape. Migration `0060_look_photos` (`custom_furniture_looks.photo_asset_id`, nullable, no foreign key like every other upload a record uses). The look's batch attaches the photo and releases the one it replaces, removes or is deleted with; a new look never copies another look's photo. [Plan → Step 3b](plans/shop-designer.md#step-3b-look-photos-built-2026-11-11).
+- **Evidence:**
+  - `pnpm lint`, `pnpm typecheck` clean.
+  - `pnpm test:unit`: 2698 passed, 1 skipped (179 files), with `branches.looks.service.test.ts` (27, 8 new).
+  - Guards removed one at a time (release on replace, release on delete, the no-op for an unchanged photo, the create and edit race answers): each made a test fail.
+  - `pnpm vitest run --project e2e test/e2e/shop-designer.test.ts test/e2e/shop-layout-api.test.ts`: 16 passed on the built server (no mocks), including the photo flow in the browser and over HTTP. Screenshots of the form and the panel checked by eye.
+- **Not verified:** the migration on staging's D1 (a nullable column added; local D1 only); real devices; the full e2e suite (no shared code changed).
+- How to verify: on staging, Design shop → New look → **Upload photo**, frame it, save; the photo shows under Table looks, beside **Look** for a table using it and on that table's card in View in 3D. **Remove** in the look's form brings the shape icon back.
+
 ### Shop designer step 3a: custom table looks (D273, 2026-11-10)
 
 - **Built:**

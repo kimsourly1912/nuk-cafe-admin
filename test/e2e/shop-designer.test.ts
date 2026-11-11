@@ -83,6 +83,21 @@ async function clickPlan(page: Page, point: Point) {
   await page.mouse.click(at.x, at.y)
 }
 
+/** A real PNG of `width` × `height`, drawn in the page (the crop dialog has to open it). */
+async function pngFile(page: Page, width: number, height: number) {
+  const bytes = await page.evaluate(async ([w, h]) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = w!
+    canvas.height = h!
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#3f6b55'
+    context.fillRect(0, 0, w!, h!)
+    const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+    return [...new Uint8Array(await blob.arrayBuffer())]
+  }, [width, height])
+  return { name: 'booth.png', mimeType: 'image/png', buffer: Buffer.from(bytes) }
+}
+
 const positionOf = async (page: Page, label: string) => {
   const transform = await plan(page).getByTestId(`plan-table-${label}`).getAttribute('transform')
   const [, x, y] = /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(transform ?? '') ?? []
@@ -444,6 +459,70 @@ describe('the shop designer on saved layouts', () => {
     await page.getByText('Look "Walnut bar" deleted').first().waitFor()
     await expect.poll(() => library.getByTestId('look-custom-Walnut bar').count()).toBe(0)
     expect(await looks()).toEqual([])
+  })
+
+  it('a look\'s photo: uploaded in its form, shown in the picker, the table\'s panel and its 3D card, and removed again', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').waitFor()
+    const library = page.getByRole('complementary', { name: 'Library' })
+    const form = () => page.getByRole('dialog', { name: /look$/i })
+    const looks = () => page.evaluate(path => fetch(path).then(response => response.json()), `/api/c/${lab.slug}/admin/furniture-looks`) as Promise<CustomLook[]>
+
+    // New look with a photo: framed 4:3 in the crop dialog, uploaded before the look is saved.
+    await library.getByRole('button', { name: 'New look' }).click()
+    await form().getByLabel('Name').fill('Corner sofa')
+    const uploaded = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/admin/media'))
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), form().getByRole('button', { name: 'Upload photo' }).click()])
+    await chooser.setFiles(await pngFile(page, 800, 600))
+    await page.getByRole('dialog', { name: 'Crop photo' }).getByRole('button', { name: 'Use photo' }).click()
+    expect((await uploaded).status()).toBe(201)
+    await form().getByRole('button', { name: 'Replace photo' }).waitFor()
+    await shot(page, 'look-form-photo')
+    await form().getByRole('button', { name: 'Save look' }).click()
+    await page.getByText('Look "Corner sofa" saved').first().waitFor()
+
+    // The picker shows the real piece, served from the cafe's media.
+    const look = (await looks()).find(candidate => candidate.name === 'Corner sofa')!
+    expect(look.photo?.url).toMatch(/^\/media\//)
+    const pickerPhoto = library.getByTestId('look-custom-Corner sofa').getByTestId('look-photo')
+    expect(await pickerPhoto.getAttribute('src')).toBe(look.photo!.url)
+    await expect.poll(() => pickerPhoto.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+
+    // L1 takes it: its panel and, after saving, its 3D card show the photo.
+    await plan(page).getByTestId('plan-table-L1').click()
+    await page.getByRole('combobox', { name: 'Look' }).click()
+    await page.getByRole('option', { name: 'Corner sofa' }).click()
+    await page.getByTestId('selected-table').getByRole('img', { name: 'Photo of Corner sofa' }).waitFor()
+    await save(page)
+    await shot(page, 'look-photo-panel')
+    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await page.getByTestId('table-card').getByRole('img', { name: 'Photo of Corner sofa' }).waitFor()
+
+    // Save as new look starts from its shape, never its photo: an upload is one look's only.
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').click()
+    await page.getByRole('button', { name: 'Save as new look' }).click()
+    await form().getByRole('button', { name: 'Upload photo' }).waitFor()
+    await form().getByRole('button', { name: 'Cancel' }).click()
+    await expect.poll(() => form().count()).toBe(0)
+
+    // Removed in the form: the picker shows the shape again.
+    await library.getByRole('button', { name: 'Edit the look Corner sofa' }).click()
+    await form().getByRole('button', { name: 'Remove' }).click()
+    await form().getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByText('Look "Corner sofa" saved').first().waitFor()
+    await expect.poll(() => library.getByTestId('look-custom-Corner sofa').getByTestId('look-photo').count()).toBe(0)
+    expect((await looks()).find(candidate => candidate.id === look.id)).toMatchObject({ photo: null, version: 2 })
+
+    // Back on the standard look, the look deletes, leaving the branch as the next test expects.
+    await page.getByRole('combobox', { name: 'Look' }).click()
+    await page.getByRole('option', { name: 'Round café table' }).click()
+    await save(page)
+    await library.getByRole('button', { name: 'Edit the look Corner sofa' }).click()
+    await form().getByRole('button', { name: 'Delete' }).click()
+    await page.getByRole('dialog', { name: 'Delete the look "Corner sofa"?' }).getByRole('button', { name: 'Delete look' }).click()
+    await page.getByText('Look "Corner sofa" deleted').first().waitFor()
   })
 
   it('a look deleted elsewhere while a draft uses it is named, and the standard look lets the layout save', { timeout: 60_000 }, async () => {

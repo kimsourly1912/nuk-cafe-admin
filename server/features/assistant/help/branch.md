@@ -64,6 +64,7 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - The pencil on a look (or **Edit look** in a table's panel) changes it. A look is shared: **every table that uses it changes**, in every branch. Each table keeps its own size and turn. The form says how many tables use it.
 - **Delete** (in the look's form) works only when no saved layout uses the look. Give its tables another look and save the layout first.
 - The built-in looks (Round café table, Square bistro table, Oak rectangle, Communal table, Green velvet booth) can't be changed or deleted; use **Save as new look** to start from one.
+- **Photo** (optional, in the look's form): **Upload photo** of the real piece, framed 4:3. It shows on the look under Table looks, next to **Look** in a table's panel, and on the table's card in 3D. The plan and the 3D building keep the simple shape. **Remove** takes it off. A new look (also **Save as new look**) starts without a photo: each look has its own.
 
 **Floors:** the tabs above the plan. **Add floor** puts a floor on top with the same outline. The **⋯** menu next to the tabs renames the floor, sets its **height** (200–800 cm, the wall height in 3D), turns its **roof** on or off (off: an open patio), or **Remove floor…**: it names the tables that go back to Unplaced tables. Up to 10 floors. **Floor below** shows the floor underneath faintly, so stairs and walls line up.
 
@@ -85,6 +86,7 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - **"The look of … was deleted"**: a look this plan used was deleted on another device before you saved. Press **Use Round café table**, save, then choose another look.
 - **"This look is used by …"**: a look can't be deleted while tables use it. The message names them; give them another look, save the layout, then delete.
 - **"There is already a look named …"**: another look has that name (in any capitals). Choose another name.
+- **"Upload the image again"** under a look's photo: the photo can't be used (it was given to another look meanwhile, or uploaded more than a day ago and never saved). Press **Replace photo** and choose it again.
 - **"… is outside the … floor"**: after the outline changed, a table or piece of furniture sits outside it. Saving still works; move it back in or remove it.
 - **"Draw the … floor's outline first"**: a floor has no outline yet (Blank). Use **Draw outline**, then save.
 - **"Closed every day"**: no day is switched on, so nobody can order. Switch on the days it opens.

@@ -523,7 +523,17 @@ function chooseStarter(starter: Starter) {
               @pointerdown="startLibraryDrag($event, { kind: 'look', lookId: look.id })"
               @click="placeInMiddle({ kind: 'look', lookId: look.id })"
             >
+              <!-- A custom look's photo of the real piece (step 3b); the plan and 3D keep the simple shape. -->
+              <img
+                v-if="look.photo"
+                :src="look.photo.url"
+                alt=""
+                draggable="false"
+                class="aspect-4/3 w-full rounded-sm bg-muted object-cover"
+                data-testid="look-photo"
+              >
               <UIcon
+                v-else
                 :name="LOOK_ICONS[look.shape]"
                 class="size-5 text-primary"
               />
@@ -537,6 +547,7 @@ function chooseStarter(starter: Starter) {
               variant="ghost"
               size="xs"
               class="absolute top-1 right-1"
+              :class="look.photo && 'bg-default/80'"
               :aria-label="`Edit the look ${look.name}`"
               @click="editLook(look)"
             />
@@ -697,12 +708,21 @@ function chooseStarter(starter: Starter) {
         label="Look"
         :help="lookUsers.length ? `Also used by ${lookUsers.join(', ')}. Editing a look changes every table that uses it.` : 'Only this table uses it.'"
       >
-        <USelect
-          :model-value="selectedPlacement.lookId"
-          :items="lookItems"
-          class="w-full"
-          @update:model-value="value => { const look = findLook(looks, String(value)); updateTable(selectedPlacement!.tableId, { lookId: look.id, width: look.defaultWidth, depth: look.defaultDepth }) }"
-        />
+        <div class="flex items-center gap-2">
+          <img
+            v-if="selectedLook.photo"
+            :src="selectedLook.photo.url"
+            :alt="`Photo of ${selectedLook.name}`"
+            class="aspect-4/3 w-14 shrink-0 rounded-md bg-muted object-cover"
+            data-testid="selected-look-photo"
+          >
+          <USelect
+            :model-value="selectedPlacement.lookId"
+            :items="lookItems"
+            class="min-w-0 flex-1"
+            @update:model-value="value => { const look = findLook(looks, String(value)); updateTable(selectedPlacement!.tableId, { lookId: look.id, width: look.defaultWidth, depth: look.defaultDepth }) }"
+          />
+        </div>
       </UFormField>
       <div class="flex flex-wrap gap-2">
         <UButton
