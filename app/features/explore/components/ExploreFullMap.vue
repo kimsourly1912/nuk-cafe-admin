@@ -11,8 +11,8 @@ import type { ExploreWorld } from '../runtime/world'
  * is open (the page does that), so it draws only when the view changes. Back closes it (AppModal).
  */
 
-const { world, colors, waypoint } = defineProps<{ world: ExploreWorld, colors: MapColors, waypoint: boolean }>()
-const emit = defineEmits<{ waypoint: [on: boolean], menu: [], street: [] }>()
+const { world, colors, waypoint, canCallRide } = defineProps<{ world: ExploreWorld, colors: MapColors, waypoint: boolean, canCallRide: boolean }>()
+const emit = defineEmits<{ waypoint: [on: boolean], menu: [], street: [], callRide: [] }>()
 const open = defineModel<boolean>('open', { required: true })
 
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
@@ -191,6 +191,14 @@ onBeforeUnmount(() => cancelAnimationFrame(pending))
           />
         </div>
         <USeparator />
+        <UButton
+          v-if="canCallRide"
+          icon="i-lucide-car-front"
+          label="Call tuk-tuk"
+          color="neutral"
+          variant="outline"
+          @click="emit('callRide')"
+        />
         <div class="space-y-1">
           <UButton
             icon="i-lucide-undo-2"

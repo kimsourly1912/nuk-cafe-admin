@@ -142,13 +142,14 @@ export interface PoseOptions {
   feet: Point3
   /** The ceiling above the character indoors, if any. */
   ceiling: number | null
+  shoulder?: number
 }
 
 export function cameraPose(camera: FollowCamera, options: PoseOptions): CameraPose {
-  const { world, feet, ceiling } = options
+  const { world, feet, ceiling, shoulder = CAMERA.shoulder } = options
   const right = cameraRight(camera.yaw)
   const forward = cameraForward(camera.yaw)
-  const pivot = { x: feet.x + right.x * CAMERA.shoulder, z: feet.z + right.z * CAMERA.shoulder }
+  const pivot = { x: feet.x + right.x * shoulder, z: feet.z + right.z * shoulder }
   const pivotY = feet.y + CAMERA.pivotHeight
   const horizontal = Math.cos(camera.pitch) * camera.distance
   const wanted = { x: pivot.x - forward.x * horizontal, z: pivot.z - forward.z * horizontal }

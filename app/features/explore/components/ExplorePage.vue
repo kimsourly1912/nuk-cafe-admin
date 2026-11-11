@@ -9,10 +9,11 @@ import { readMapColors } from '../runtime/map-draw'
 import type { ExploreWorld, Prompt, Status } from '../runtime/world'
 import ExploreFullMap from './ExploreFullMap.vue'
 import ExploreMinimap from './ExploreMinimap.vue'
+import ExploreRidePicker from './ExploreRidePicker.vue'
 import ExploreTouchControls from './ExploreTouchControls.vue'
 
 /**
- * Explore (D275, docs/plans/explore.md), step E1: walk a street and a café in the third person,
+ * Explore (D275, docs/plans/explore.md): walk a street and a café, or ride as a passenger,
  * with a minimap, a full map and a waypoint. Internal behind `NUXT_PUBLIC_EXPLORE` (404 without
  * it). The 3D runtime loads on demand; this screen owns its lifecycle and the HUD, and every path
  * leads back to the regular menu.
@@ -31,8 +32,16 @@ const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
 const world = shallowRef<ExploreWorld | null>(null)
 const state = ref<'loading' | 'ready' | 'unavailable'>('loading')
 const prompt = ref<Prompt | null>(null)
-const status = ref<Status>({ place: 'Street', indoors: false, seated: false, waypoint: false })
+const status = ref<Status>({
+  place: 'Street',
+  indoors: false,
+  seated: false,
+  waypoint: false,
+  ride: { label: null, canCall: false, canCancel: false, canSkip: false, view: null },
+})
 const mapOpen = ref(false)
+const ridePickerOpen = ref(false)
+const overlayOpen = computed(() => mapOpen.value || ridePickerOpen.value)
 const colors = shallowRef<MapColors | null>(null)
 const hint = ref(true)
 const benchmarking = route.query.bench === 'walk'
@@ -66,6 +75,14 @@ function setWaypoint(on: boolean) {
 function returnToStreet() {
   world.value?.returnToStreet()
   mapOpen.value = false
+}
+
+function callFromMap() {
+  if (world.value?.rideAction({ type: 'call' })) mapOpen.value = false
+}
+
+function confirmRide(id: string) {
+  if (world.value?.rideAction({ type: 'confirm', id })) ridePickerOpen.value = false
 }
 
 async function runBenchmark(target: ExploreWorld) {
@@ -104,6 +121,9 @@ onMounted(async () => {
         },
         stats: () => {},
         counter: goToMenu,
+        chooseRide: () => {
+          ridePickerOpen.value = true
+        },
         contextLost: () => {
           state.value = 'unavailable'
         },
@@ -117,7 +137,7 @@ onMounted(async () => {
     detachInput = attachDesktopInput({
       canvas: canvas.value,
       actions: created.actions,
-      active: () => !mapOpen.value && state.value === 'ready',
+      active: () => !overlayOpen.value && state.value === 'ready',
       onMap: () => {
         mapOpen.value = true
       },
@@ -139,9 +159,7 @@ watch(() => status.value.place, (place, before) => {
   if (before && place !== before) hint.value = false
 })
 
-watch(mapOpen, (open) => {
-  world.value?.setPaused(open)
-})
+watch(overlayOpen, open => world.value?.setPaused(open), { flush: 'sync' })
 watch(dark, (value) => {
   world.value?.setTheme(value)
   nextTick(readColors)
@@ -172,8 +190,9 @@ onBeforeUnmount(() => {
     </div>
 
     <ExploreTouchControls
-      v-if="world && touch && state === 'ready' && !mapOpen"
+      v-if="world && touch && state === 'ready' && !overlayOpen"
       :actions="world.actions"
+      :passenger="status.seated && Boolean(status.ride.label)"
     />
 
     <!-- The HUD: the frame passes taps through to the world; its controls catch them. -->
@@ -190,16 +209,17 @@ onBeforeUnmount(() => {
         <div
           v-if="state === 'ready'"
           class="flex min-w-0 flex-col items-center gap-1"
+          aria-live="polite"
         >
           <UBadge
-            :label="status.place"
-            :icon="status.indoors ? 'i-lucide-coffee' : 'i-lucide-map-pin'"
+            :label="status.ride.label ?? status.place"
+            :icon="status.ride.label ? 'i-lucide-car-front' : status.indoors ? 'i-lucide-coffee' : 'i-lucide-map-pin'"
             color="neutral"
             variant="soft"
-            class="max-w-full truncate"
+            class="max-w-full whitespace-normal"
           />
           <UBadge
-            v-if="status.waypoint"
+            v-if="status.waypoint && !status.ride.label"
             :label="`Waypoint: ${DEMO_CAFE_NAME}`"
             icon="i-lucide-navigation"
             color="primary"
@@ -249,14 +269,17 @@ onBeforeUnmount(() => {
         />
       </div>
       <p
-        v-else-if="hint && !touch"
+        v-else-if="hint && !touch && !status.ride.label"
         class="self-center rounded-md bg-default/90 px-3 py-2 text-center text-sm text-muted ring ring-default"
       >
         Click the street to look around. <UKbd value="W" /><UKbd value="A" /><UKbd value="S" /><UKbd value="D" /> to move,
         <UKbd value="Shift" /> to sprint, <UKbd value="Space" /> to jump, <UKbd value="E" /> to act, <UKbd value="M" /> for the map.
       </p>
 
-      <div class="flex items-end justify-between gap-2">
+      <div
+        v-if="state === 'ready'"
+        class="flex items-end justify-between gap-2"
+      >
         <ExploreMinimap
           v-if="world && colors && state === 'ready'"
           :world="world"
@@ -265,29 +288,64 @@ onBeforeUnmount(() => {
           @open="mapOpen = true"
         />
         <span v-else />
-        <div class="flex items-end gap-2">
+        <div class="flex min-w-0 flex-col items-end gap-2">
           <UButton
-            v-if="touch && state === 'ready' && !status.seated"
-            icon="i-lucide-arrow-big-up"
+            v-if="status.ride.view"
+            :label="status.ride.view === 'inside' ? 'Outside view' : 'Inside view'"
+            icon="i-lucide-camera"
             color="neutral"
             variant="soft"
             class="pointer-events-auto"
-            aria-label="Jump"
-            @click="jump"
-          />
-          <UButton
-            v-if="prompt"
-            :label="prompt.label"
-            class="pointer-events-auto"
-            @click="interact"
+            @click="world?.actions.press('camera')"
           >
             <template
               v-if="!touch"
               #trailing
             >
-              <UKbd value="E" />
+              <UKbd value="V" />
             </template>
           </UButton>
+          <UButton
+            v-if="status.ride.canSkip"
+            label="Skip ride"
+            icon="i-lucide-skip-forward"
+            color="neutral"
+            variant="soft"
+            class="pointer-events-auto"
+            @click="world?.rideAction({ type: 'skip' })"
+          />
+          <UButton
+            v-if="status.ride.canCancel"
+            label="Cancel ride"
+            color="neutral"
+            variant="soft"
+            class="pointer-events-auto"
+            @click="world?.rideAction({ type: 'cancel' })"
+          />
+          <div class="flex flex-wrap justify-end gap-2">
+            <UButton
+              v-if="touch && state === 'ready' && !status.seated"
+              icon="i-lucide-arrow-big-up"
+              color="neutral"
+              variant="soft"
+              class="pointer-events-auto"
+              aria-label="Jump"
+              @click="jump"
+            />
+            <UButton
+              v-if="prompt"
+              :label="prompt.label"
+              class="pointer-events-auto"
+              @click="interact"
+            >
+              <template
+                v-if="!touch"
+                #trailing
+              >
+                <UKbd value="E" />
+              </template>
+            </UButton>
+          </div>
         </div>
       </div>
     </div>
@@ -295,7 +353,7 @@ onBeforeUnmount(() => {
       class="sr-only"
       aria-live="polite"
     >
-      {{ prompt ? `${prompt.label} is available. Press E.` : '' }}
+      {{ prompt ? `${prompt.label} is available.${touch ? '' : ' Press E.'}` : '' }}
     </p>
 
     <div
@@ -326,9 +384,17 @@ onBeforeUnmount(() => {
       :world="world"
       :colors="colors"
       :waypoint="status.waypoint"
+      :can-call-ride="status.ride.canCall"
       @waypoint="setWaypoint"
       @menu="goToMenu"
       @street="returnToStreet"
+      @call-ride="callFromMap"
+    />
+    <ExploreRidePicker
+      v-if="world"
+      v-model:open="ridePickerOpen"
+      :stops="world.rideStops"
+      @confirm="confirmRide"
     />
   </div>
 </template>

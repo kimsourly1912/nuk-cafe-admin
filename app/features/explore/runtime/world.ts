@@ -7,7 +7,7 @@ import { createActions } from './actions'
 import { createAvatar } from './avatar'
 import type { WalkReport } from './bench'
 import { WALK_BENCHMARK } from './bench'
-import type { FollowCamera } from './camera'
+import type { CameraPose, FollowCamera } from './camera'
 import { cameraPose, createFollowCamera, firstWall, HIDE_AVATAR_WITHIN, lookBy, updateFollow, worldMove } from './camera'
 import type { District, DistrictInput, DoorInfo, SeatInfo } from './district'
 import { buildDistrict, floorAt } from './district'
@@ -19,10 +19,18 @@ import type { MotorState } from './motor'
 import { createMotor, MOTOR, stepMotor } from './motor'
 import type { PlayerMode } from './player'
 import { canWalk, nextMode, TRANSITIONS, WALKING } from './player'
+import type { Ride, RideEvent, VehiclePose } from './ride'
+import { IDLE_RIDE, nextRide, RIDE_TIMING, rideCanCancel, rideOwnsPlayer, routePose, vehiclePose } from './ride'
+import type { PassengerView } from './ride-camera'
+import { lookFromSeat, passengerCamera } from './ride-camera'
+import type { PassengerPose } from './ride-player'
+import { passengerCurb, rideDoor, riderPose, safeRideCurb } from './ride-player'
 import type { WalkGrid } from './route'
 import { buildWalkGrid, findRoute } from './route'
+import { createTukTuk } from './tuk-tuk'
 import type { Vec2 } from './vec'
 import { add, angleBetween, closestOnSegment, distance, facing, insidePolygon, length, normalize, sub } from './vec'
+import type { Solid } from './walk-world'
 import { groundAt, isClear } from './walk-world'
 
 /**
@@ -39,12 +47,21 @@ export interface Prompt {
   kind: Target['kind'] | 'stand'
 }
 
+interface RideHud {
+  label: string | null
+  canCall: boolean
+  canCancel: boolean
+  canSkip: boolean
+  view: 'inside' | 'outside' | null
+}
+
 export interface Status {
   /** Where the player is ("Demo café · Ground", "Street"). */
   place: string
   indoors: boolean
   seated: boolean
   waypoint: boolean
+  ride: RideHud
 }
 
 export interface ExploreEvents {
@@ -54,6 +71,7 @@ export interface ExploreEvents {
   stats: (stats: StageStats) => void
   /** View drinks at the counter. */
   counter: () => void
+  chooseRide: () => void
   contextLost: () => void
 }
 
@@ -68,6 +86,8 @@ export interface ExploreWorldOptions {
 export interface ExploreWorld {
   actions: Actions
   district: District
+  rideStops: readonly { id: string, label: string, seconds: number }[]
+  rideAction: (event: { type: 'call' | 'cancel' | 'skip' } | { type: 'confirm', id: string }) => boolean
   /** Pauses the simulation and drawing (an overlay has focus); held input is cleared both ways. */
   setPaused: (paused: boolean) => void
   setTheme: (dark: boolean) => void
@@ -161,6 +181,16 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   // The avatar and its ground shadow.
   const avatar = createAvatar(own)
   stage.scene.add(avatar.root, avatar.shadow)
+  const tukTuk = createTukTuk(own)
+  tukTuk.root.visible = false
+  stage.scene.add(tukTuk.root)
+  const pickupMarker = new Mesh(
+    new CylinderGeometry(0.43, 0.43, 0.045, 16),
+    stage.materials.surface('highlight'),
+  )
+  own.geometries.set('explore:pickup', pickupMarker.geometry)
+  pickupMarker.visible = false
+  stage.scene.add(pickupMarker)
 
   // The waypoint's beacon: a soft column of light above the door's street side.
   const beaconMaterial = new MeshBasicMaterial({ color: '#f59e0b', transparent: true, opacity: 0.22, depthWrite: false, side: DoubleSide })
@@ -195,6 +225,25 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   let running = false
   let paused = false
   let disposed = false
+  const course = district.rideCourse
+  const pickupVehicle = routePose(course.approach, course.approach.duration)
+  const pickup = safeRideCurb(world, pickupVehicle, district.street) ?? { ...passengerCurb(pickupVehicle), y: district.street }
+  pickupMarker.position.set(pickup.x, pickup.y + 0.035, pickup.z)
+  const rideTarget: Target = { id: 'tuk-tuk', kind: 'ride', position: pickup, y: pickup.y, reach: 2.5, anyFacing: true }
+  const vehicleSolid: Extract<Solid, { shape: 'box' }> = {
+    shape: 'box', center: pickupVehicle.position, halfWidth: 0.72, halfDepth: 1.44,
+    rotation: 0, bottom: district.street, top: district.street + 1.85,
+  }
+  let ride: Ride = IDLE_RIDE
+  let vehicle: VehiclePose | null = null
+  let previousVehicle: VehiclePose | null = null
+  let distanceDriven = 0
+  const passengerView: PassengerView = { outside: false, yaw: 0, pitch: 0 }
+  let boardFrom: PassengerPose = { ...district.spawn.position, y: district.spawn.y, heading: district.spawn.heading, seated: 0 }
+  let exitTo: PassengerPose | null = null
+  let cameraBlendFrom: CameraPose | null = null
+  let cameraBlendElapsed = 0
+  let lastCameraPose: CameraPose | null = null
   let currentTarget: Target | null = null
   let promptKey = ''
   let statusKey = ''
@@ -206,11 +255,13 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   let lastFrameAt: number | null = null
   const frameCallbacks = new Set<() => void>()
 
-  const targets = buildTargets(district)
+  const targets = [...buildTargets(district), rideTarget]
 
   function emitPrompt() {
     let prompt: Prompt | null = null
-    if (mode.kind === 'seated') prompt = { label: 'Stand up', kind: 'stand' }
+    if (ride.phase === 'stopped') prompt = { label: 'Exit', kind: 'ride' }
+    else if (rideOwnsPlayer(ride)) prompt = null
+    else if (mode.kind === 'seated') prompt = { label: 'Stand up', kind: 'stand' }
     else if (mode.kind === 'walking' && currentTarget) prompt = { label: labelFor(currentTarget), kind: currentTarget.kind }
     const key = prompt ? `${prompt.kind}:${prompt.label}` : ''
     if (key !== promptKey) {
@@ -224,8 +275,9 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     const status: Status = {
       place: floor ? `${district.name} · ${floor.name}` : 'Street',
       indoors: Boolean(floor),
-      seated: mode.kind !== 'walking',
+      seated: mode.kind !== 'walking' || rideOwnsPlayer(ride),
       waypoint,
+      ride: rideHud(),
     }
     const key = JSON.stringify(status)
     if (key !== statusKey) {
@@ -234,7 +286,29 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     }
   }
 
+  function rideHud(): RideHud {
+    let label: string | null = null
+    if (ride.phase === 'approaching') label = 'Tuk-tuk arriving'
+    if (ride.phase === 'waiting') label = ride.stop ? `To ${ride.stop.label}` : 'Meet your driver at the pickup'
+    if (ride.phase === 'boarding') label = 'Getting in…'
+    if (ride.phase === 'travelling') label = `Riding to ${ride.stop.label}`
+    if (ride.phase === 'stopped') label = `Arrived · ${ride.stop.label}`
+    if (ride.phase === 'exiting') label = 'Getting out…'
+    return {
+      label,
+      canCall: ride.phase === 'idle' && mode.kind === 'walking',
+      canCancel: rideCanCancel(ride),
+      canSkip: ride.phase === 'travelling',
+      view: ride.phase === 'travelling' || ride.phase === 'stopped' ? passengerView.outside ? 'outside' : 'inside' : null,
+    }
+  }
+
   function labelFor(target: Target): string {
+    if (target.kind === 'ride') {
+      if (ride.phase === 'idle') return 'Call tuk-tuk'
+      if (ride.phase !== 'waiting' || !ride.stop) return 'Talk to driver'
+      return ride.doorTime === undefined ? 'Open passenger door' : 'Get in'
+    }
     if (target.kind === 'door') return doors.get(target.id.slice(5))?.target ? 'Close door' : 'Open door'
     if (target.kind === 'seat') return 'Sit'
     return 'View drinks'
@@ -247,6 +321,17 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   }
 
   function eligible(target: Target): boolean {
+    if (target.kind === 'ride') {
+      if (ride.phase !== 'idle' && ride.phase !== 'waiting') return false
+      if (ride.phase === 'waiting' && ride.stop) {
+        if (distance(pickup, motor.position) > 1.6 || !motor.grounded) return false
+        if (ride.doorTime !== undefined && ride.doorTime < RIDE_TIMING.open) return false
+        // Only the curb side of the cabin can be used for boarding.
+        const side = facing(pickupVehicle.heading + Math.PI / 2)
+        const offset = sub(motor.position, pickupVehicle.position)
+        if (offset.x * side.x + offset.z * side.z < 0.85) return false
+      }
+    }
     if (target.kind === 'door') {
       const state = doors.get(target.id.slice(5))
       if (state?.target && !doorwayClear(state)) return false
@@ -259,6 +344,10 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   }
 
   function interact() {
+    if (rideOwnsPlayer(ride)) {
+      applyRide({ type: 'exit' })
+      return
+    }
     if (mode.kind === 'seated' && seatedOn) {
       standUp(seatedOn)
       return
@@ -269,6 +358,13 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     if (!target || target.id !== currentTarget.id) return
     if (target.kind === 'door') toggleDoor(target.id.slice(5))
     else if (target.kind === 'seat') sitDown(district.seats.find(seat => `seat:${seat.id}` === target.id)!)
+    else if (target.kind === 'ride') {
+      if (ride.phase === 'idle') rideAction({ type: 'call' })
+      else if (ride.phase === 'waiting') {
+        if (!ride.stop) events.chooseRide()
+        else applyRide({ type: ride.doorTime === undefined ? 'open' : 'board', atDoor: true })
+      }
+    }
     else events.counter()
   }
 
@@ -351,13 +447,104 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     return { position: motor.position, y: motor.y, heading: motor.heading }
   }
 
+  function startCameraBlend() {
+    cameraBlendFrom = reducedMotion ? null : lastCameraPose
+    cameraBlendElapsed = 0
+  }
+
+  function applyRide(event: RideEvent): boolean {
+    const before = ride
+    ride = nextRide(course, before, event)
+    if (ride === before) return false
+    if (ride.phase === before.phase) {
+      if (event.type !== 'tick') emitStatus()
+      return true
+    }
+    if (ride.phase === 'boarding') {
+      boardFrom = { ...motor.position, y: motor.y, heading: motor.heading, seated: 0 }
+      motor.velocity = { x: 0, z: 0 }
+      passengerView.outside = false
+      passengerView.yaw = 0
+      passengerView.pitch = 0
+      actions.clear()
+    }
+    if (ride.phase === 'exiting') {
+      exitTo = safeRideCurb(world, vehiclePose(course, ride)!, district.street)
+    }
+    if (ride.phase === 'leaving' && before.phase === 'exiting') {
+      // With no clear curb, reset from the seat to the known street spawn after the door closes.
+      const spawn = district.spawn
+      motor = exitTo ? createMotor(exitTo, exitTo.y, exitTo.heading) : createMotor(spawn.position, spawn.y, spawn.heading)
+      previous = { x: motor.position.x, y: motor.y, z: motor.position.z }
+      follow = createFollowCamera(motor.heading)
+      if (exitTo) startCameraBlend()
+      avatar.sit(0, 0.48)
+      actions.clear()
+      setWaypoint(true)
+    }
+    if (event.type === 'skip') {
+      // A skip jumps to the same pose as a natural arrival, without a one-frame sweep.
+      vehicle = vehiclePose(course, ride)
+      previousVehicle = vehicle
+      const seat = riderPose(ride, vehicle!, district.street, boardFrom, exitTo)
+      previous = seat
+      motor.position = { x: seat.x, z: seat.z }
+      motor.y = seat.y
+      motor.heading = seat.heading
+    }
+    route = null
+    routeAge = Infinity
+    emitStatus()
+    return true
+  }
+
+  function rideAction(event: Parameters<ExploreWorld['rideAction']>[0]): boolean {
+    if (disposed || (paused && event.type !== 'confirm' && event.type !== 'call')) return false
+    if (event.type === 'call' && mode.kind !== 'walking') return false
+    return applyRide(event)
+  }
+
+  function updateVehicle() {
+    previousVehicle = vehicle
+    vehicle = vehiclePose(course, ride)
+    if (vehicle && previousVehicle) distanceDriven += distance(vehicle.position, previousVehicle.position)
+    const index = world.solids.indexOf(vehicleSolid)
+    if (vehicle && !rideOwnsPlayer(ride)) {
+      vehicleSolid.center = vehicle.position
+      vehicleSolid.rotation = -vehicle.heading * 180 / Math.PI
+      if (index < 0) world.solids.push(vehicleSolid)
+    }
+    else if (index >= 0) {
+      world.solids.splice(index, 1)
+    }
+  }
+
   function simulate(dt: number) {
     simTime += dt
     const look = actions.takeLook()
-    lookBy(follow, look.x, look.y)
-    if (actions.take('camera')) follow.far = !follow.far
+    const changeCamera = actions.take('camera')
     const jump = actions.take('jump')
     const pressed = actions.take('interact')
+    const beforeRide = ride
+    const occupied = rideOwnsPlayer(beforeRide)
+    applyRide({ type: 'tick', dt, reducedMotion })
+    updateVehicle()
+    if (vehicle && rideOwnsPlayer(ride)) {
+      const rider = riderPose(ride, vehicle, district.street, boardFrom, exitTo)
+      motor.position = { x: rider.x, z: rider.z }
+      motor.y = rider.y
+      motor.heading = rider.heading
+      avatar.sit(rider.seated, 0.48)
+      if (ride.phase === 'boarding' || ride.phase === 'exiting') {
+        avatar.locomotion(Math.min(2, Math.hypot(rider.x - previous.x, rider.z - previous.z) / dt), true, dt)
+      }
+      lookFromSeat(passengerView, look.x, look.y)
+      if (changeCamera && (ride.phase === 'travelling' || ride.phase === 'stopped')) passengerView.outside = !passengerView.outside
+    }
+    else if (!occupied) {
+      lookBy(follow, look.x, look.y)
+      if (changeCamera) follow.far = !follow.far
+    }
 
     // A transition ends with its animation or, at the latest, at its deadline.
     if (transition) {
@@ -377,7 +564,7 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     if (mode !== before) finishTransition()
 
     const floor = floorAt(district, motor.position, motor.y)
-    if (canWalk(mode)) {
+    if (canWalk(mode) && !occupied && !rideOwnsPlayer(ride)) {
       let move = worldMove(follow.yaw, actions.move())
       let sprint = actions.sprint()
       if (autopilot) {
@@ -394,15 +581,16 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     }
     updateFollow(follow, dt, { heading: motor.heading, moving: length(motor.velocity) > 0.3, indoors: Boolean(floor), reducedMotion })
 
-    currentTarget = mode.kind === 'walking' ? chooseTarget(targets, viewer(), currentTarget?.id ?? null, eligible) : null
-    if (pressed) interact()
+    currentTarget = mode.kind === 'walking' && !rideOwnsPlayer(ride) ? chooseTarget(targets, viewer(), currentTarget?.id ?? null, eligible) : null
+    if (pressed && (!occupied || beforeRide.phase === 'stopped')) interact()
 
     // The waypoint clears once the player is inside its café.
     if (waypoint && floor) setWaypoint(false)
     routeAge += dt
-    if (waypoint && waypointPoint && routeAge >= ROUTE_EVERY) {
+    const walkingGoal = rideCanCancel(ride) ? pickup : waypoint ? waypointPoint : null
+    if (walkingGoal && routeAge >= ROUTE_EVERY) {
       routeAge = 0
-      route = findRoute(grid, motor.position, waypointPoint)
+      route = findRoute(grid, motor.position, walkingGoal)
     }
     emitPrompt()
     emitStatus()
@@ -428,18 +616,48 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     const z = previous.z + (motor.position.z - previous.z) * alpha
     avatar.root.position.set(x, y, z)
     avatar.root.rotation.y = motor.heading
-    if (mode.kind === 'walking') avatar.locomotion(motor.grounded ? length(motor.velocity) : 0, motor.grounded, Math.min(elapsed, 0.1))
+    if (mode.kind === 'walking' && !rideOwnsPlayer(ride)) avatar.locomotion(motor.grounded ? length(motor.velocity) : 0, motor.grounded, Math.min(elapsed, 0.1))
     const shadowGround = groundAt(world, { x, z }, y) ?? y
     avatar.shadow.position.set(x, shadowGround + 0.012, z)
 
     const floor = floorAt(district, motor.position, motor.y)
-    const pose = cameraPose(follow, { world, feet: { x, y, z }, ceiling: floor?.ceiling ?? null })
+    const renderedVehicle = vehicle && previousVehicle
+      ? {
+          position: add(previousVehicle.position, sub(vehicle.position, previousVehicle.position), alpha),
+          heading: previousVehicle.heading + angleBetween(previousVehicle.heading, vehicle.heading) * alpha,
+        }
+      : vehicle
+    tukTuk.root.visible = Boolean(renderedVehicle)
+    pickupMarker.visible = rideCanCancel(ride)
+    if (renderedVehicle) {
+      tukTuk.root.position.set(renderedVehicle.position.x, district.street, renderedVehicle.position.z)
+      tukTuk.root.rotation.y = renderedVehicle.heading
+      tukTuk.update(rideDoor(ride), distanceDriven, Math.min(elapsed, 0.1))
+      distanceDriven = 0
+    }
+
+    const inVehicle = ride.phase === 'travelling' || ride.phase === 'stopped' || ride.phase === 'exiting'
+    const pose = inVehicle && renderedVehicle
+      ? passengerCamera(passengerView, renderedVehicle, district.street, world)
+      : cameraPose(follow, { world, feet: { x, y, z }, ceiling: floor?.ceiling ?? null })
+    if (cameraBlendFrom && !reducedMotion) {
+      cameraBlendElapsed += elapsed
+      const t = Math.min(1, cameraBlendElapsed / 0.32)
+      const blend = (from: CameraPose['position'], to: CameraPose['position']) => ({
+        x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t, z: from.z + (to.z - from.z) * t,
+      })
+      pose.position = blend(cameraBlendFrom.position, pose.position)
+      pose.target = blend(cameraBlendFrom.target, pose.target)
+      if (t === 1) cameraBlendFrom = null
+    }
+    lastCameraPose = pose
     camera.position.set(pose.position.x, pose.position.y, pose.position.z)
     camera.lookAt(pose.target.x, pose.target.y, pose.target.z)
     // A wall right behind pulls the camera to the character's head: hide the avatar there rather
     // than look out from inside it.
     const head = Math.hypot(pose.position.x - x, pose.position.y - (y + 1.55), pose.position.z - z)
-    avatar.root.visible = head > HIDE_AVATAR_WITHIN
+    avatar.root.visible = head > HIDE_AVATAR_WITHIN && !(inVehicle && ride.phase !== 'exiting' && !passengerView.outside)
+    avatar.shadow.visible = !rideOwnsPlayer(ride)
 
     let doorsMoving = false
     for (const state of doors.values()) {
@@ -479,7 +697,10 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     paused = next
     actions.clear()
     if (!next) start()
-    else stage.invalidate()
+    else {
+      if (document.pointerLockElement === options.canvas) document.exitPointerLock()
+      stage.invalidate()
+    }
   }
 
   function visibility() {
@@ -499,6 +720,12 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   function returnToStreet() {
     transition = null
     seatedOn = null
+    ride = IDLE_RIDE
+    updateVehicle()
+    previousVehicle = null
+    cameraBlendFrom = null
+    currentTarget = null
+    route = null
     mode = WALKING
     avatar.sit(0, 0.46)
     motor = createMotor(district.spawn.position, district.spawn.y, district.spawn.heading)
@@ -570,13 +797,20 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   return {
     actions,
     district,
+    rideStops: course.stops.map(stop => ({ id: stop.id, label: stop.label, seconds: Math.ceil(stop.route.duration) })),
+    rideAction,
     setPaused,
     setTheme,
     setReducedMotion: (reduced) => {
       reducedMotion = reduced
     },
     setWaypoint,
-    mapView: () => ({ player: { position: motor.position, heading: motor.heading }, cameraYaw: follow.yaw, route, waypoint: waypoint ? waypointPoint : null }),
+    mapView: () => ({
+      player: { position: motor.position, heading: motor.heading },
+      cameraYaw: rideOwnsPlayer(ride) ? motor.heading + Math.PI + (passengerView.outside ? 0 : passengerView.yaw) : follow.yaw,
+      route: ride.phase === 'boarding' || ride.phase === 'travelling' ? ride.stop.route.points : rideCanCancel(ride) || waypoint ? route : null,
+      waypoint: rideCanCancel(ride) ? pickup : waypoint ? waypointPoint : null,
+    }),
     onFrame: (callback) => {
       frameCallbacks.add(callback)
       return () => frameCallbacks.delete(callback)

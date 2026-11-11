@@ -3,6 +3,11 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Explore E2: tuk-tuk (D275, 2026-11-11)
+
+- Players can call a generated tuk-tuk from the curb or map, choose a stop, open the passenger door, board, switch between cabin and chase views, skip the trip and exit at the curb. Two demo stops reuse the E1 street. Returning to street resets the ride. [Plan → Step E2](plans/explore.md#step-e2-tuk-tuk).
+- Local lint, typecheck and the high-severity audit passed. The unit and server run passed 2,897 tests with one existing skip. The Explore browser file passed all five scenarios on software WebGL after each test began closing its browser context. The new ride scenario checks the destination picker at five widths and in landscape. Removing the curbside boarding guard or the stopped-only exit guard failed its targeted unit test. The owner's Android and desktop hardware review is pending.
+
 ### Explore E1: walk and map (D275, 2026-11-11)
 
 Branch `ccr-bb57b73a-ufdsic`, after the plan below. The owner asked to start, and set the rule that small or medium steps share one PR (AGENTS.md); E1 is large, so it is its own. [Plan → Step E1](plans/explore.md#step-e1-walk-and-map-built-2026-11-11).

@@ -1,6 +1,8 @@
 import type { ItemKind, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { SurroundingsPlan } from '~/features/branches'
 import { BUILT_IN_LOOKS, chairPoses, DOOR_HEIGHT_CM, findLook, ITEM_SPECS, outwardNormal, pieceHeight, placementExtent, planLane, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, toPlan } from '~/features/branches'
+import type { RideCourse } from './ride'
+import { buildRideCourse } from './ride-course'
 import type { Vec2 } from './vec'
 import { distance, insidePolygon, rotate, sub, yawOf } from './vec'
 import type { Solid, Surface, Wall, WalkWorld } from './walk-world'
@@ -67,6 +69,7 @@ export interface District {
   doors: DoorInfo[]
   seats: SeatInfo[]
   counter: CounterInfo | null
+  rideCourse: RideCourse
   spawn: { position: Vec2, y: number, heading: number }
   bounds: { minX: number, maxX: number, minZ: number, maxZ: number }
   map: { areas: MapArea[], walls: { a: Vec2, b: Vec2 }[] }
@@ -212,6 +215,7 @@ export function buildDistrict(input: DistrictInput): District {
     doors,
     seats,
     counter,
+    rideCourse: buildRideCourse(plan),
     spawn: { position: spawnPoint, y: street, heading: yawOf(sub(look, spawnPoint)) },
     bounds: { minX: Math.min(...xs), maxX: Math.max(...xs), minZ: Math.min(...zs), maxZ: Math.max(...zs) },
     map: {
