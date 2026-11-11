@@ -84,9 +84,9 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - Click an **edge** of the outline to choose what it is: **Wall**, **Railing** or **Open**, and to set its length. **Door** and **Window** add one on that edge; set its width and how far it is from the corner. On a railing a door is a **gate**, and windows need a wall. The bar under a selected edge does the same quickly: **Wall**, **Railing**, **Open**, **Door** (or **Gate**) and **Window**.
 - **Draw wall** adds walls inside the floor (a stair kiosk, a kitchen): click where it starts and where it ends; walls carry on from the last end until Escape. Click a wall, then **Delete wall** (in the bar under it or the panel).
 
-**View in 3D:** the same layout as a small building. Drag to turn it, scroll or pinch to zoom. **Exterior** shows it from outside; **Cutaway** takes the roof and the near walls away and pulls the floors apart. Pick a floor in **Floors**, then **Enter floor** to stand inside it. To find a table, pick it in **Tables** (on a phone: **Floors and tables**) or tap it in the building: its card shows its area, seats and floor, **View QR** (its code, to scan or download) and **Show on plan** (opens Design shop with that table selected). A table that is not on the plan is not in 3D. **Unsaved changes shown** means the building includes changes you haven't saved yet.
+**View in 3D:** the same layout as a small building. Drag to turn it, scroll or pinch to zoom. **Fit building** frames the whole building. **Exterior** shows it from outside; **Cutaway** takes the roof and the near walls away and pulls the floors apart. Pick a floor in **Floors**, then **Enter floor** to stand inside it. To find a table, pick it in **Tables** (on a phone: **Floors and tables**) or tap it in the building: its card shows its area, seats and floor, **View QR** (its code, to scan or download) and **Show on plan** (opens Design shop with that table selected). A table that is not on the plan is not in 3D. **Unsaved changes shown** means the building includes changes you haven't saved yet.
 
-**Save:** every change can be undone (**Undo**, Ctrl/⌘ Z) until you press **Save layout** (top right; **Unsaved changes** shows next to it). The whole layout saves at once. Leaving the page with unsaved changes asks first.
+**Save:** **Save layout** and its recovery actions are available in both Design shop and View in 3D. Every change can be undone (**Undo**, Ctrl/⌘ Z) until you press **Save layout** (top right; **Unsaved changes** shows next to it). The whole layout saves at once. Leaving the page with unsaved changes asks first.
 
 ## Common problems
 
@@ -99,7 +99,7 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - **"This look is used by 3 pieces: …"**: a chair or fixture look can't be deleted while pieces use it. The message names the floors; give those pieces **Own finishes** or another look, save the layout, then delete.
 - **"There is already a look named …"** or **"… chair or fixture look named …"**: another look of that type has that name (in any capitals). Choose another name.
 - **"Upload the image again"** under a look's photo: the photo can't be used (it was given to another look meanwhile, or uploaded more than a day ago and never saved). Press **Replace photo** and choose it again.
-- **"… is outside the … floor"**: after the outline changed, a table or piece of furniture sits outside it. Saving still works; move it back in or remove it.
+- **"Check placement on …"**: highlighted tables, their chairs, or other pieces overlap or extend outside the floor. You can still save. **Show** selects a piece so you can adjust it.
 - **"Draw the … floor's outline first"**: a floor has no outline yet (Blank). Use **Draw outline**, then save.
 - **"Closed every day"**: no day is switched on, so nobody can order. Switch on the days it opens.
 - **Two times on one day overlap**: the error shows on that time; fix it and save again.

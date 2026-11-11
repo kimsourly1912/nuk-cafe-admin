@@ -24,9 +24,4 @@ export type PlanMode = 'select' | 'outline' | 'wall'
  */
 export type PlanGhost
   = | { kind: 'table', tableId: string | null, lookId: string, x: number, y: number }
-    | { kind: 'item', itemKind: ItemKind, x: number, y: number }
-
-/** Whether a selection can be moved and turned (the move pad, arrow keys, R). */
-export function isMovable(selection: PlanSelection | null): selection is PlanSelection & { kind: 'table' | 'item' } {
-  return selection?.kind === 'table' || selection?.kind === 'item'
-}
+    | { kind: 'item', itemKind: ItemKind, width: number, depth: number, x: number, y: number }

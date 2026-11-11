@@ -32,7 +32,7 @@ Design references:
 - **A look is shared.** Shape, finishes and photo come from the look; editing a look changes every table that uses it. Width, depth and rotation belong to each placement (the look gives defaults). To change one table only, save a new look. A look in use can't be deleted (the dialog lists its tables).
 - **Archiving a table removes its placement** in the same batch; restoring it brings it back to Unplaced tables. Deleting a table for good (D200) removes its placement by cascade.
 - **Removing a floor removes its placements** (cascade): those tables become unplaced.
-- **Items outside the outline** are flagged in the editor and saved anyway: a reminder, not an integrity rule.
+- **Placement warnings** flag pieces that overlap walls or other pieces, or extend outside the outline, including table seating. The editor still saves the layout.
 
 ## Data model (migration `0058_shop_layout`)
 

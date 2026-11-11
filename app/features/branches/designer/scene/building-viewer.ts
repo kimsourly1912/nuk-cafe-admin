@@ -8,7 +8,7 @@ import type { BuiltScene, SceneInput } from './scene'
 import { buildGround, buildScene } from './scene'
 import type { StageOptions } from './stage'
 import { createStage, tween } from './stage'
-import { cm } from './units'
+import { cm, fitDistance } from './units'
 
 /**
  * The finished building (D273, frames 4–5): orbit the exterior, cut it away (roof and the walls
@@ -52,6 +52,8 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   let insideFloor: string | null = null
   let selected: string | null = null
   let explode = 0
+  let overviewMaxDistance = 80
+  let cameraFlight = 0
   let saved: { position: Vector3, target: Vector3 } | null = null
   const floorLabels: CSS2DObject[] = []
   let tableLabel: CSS2DObject | null = null
@@ -87,10 +89,19 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     stage.shadowsChanged()
   }
 
+  function distanceToFit(radius: number) {
+    const distance = Math.max(2, fitDistance(radius, camera.fov, camera.aspect))
+    overviewMaxDistance = Math.max(80, distance * 1.25)
+    controls.maxDistance = overviewMaxDistance
+    camera.far = Math.max(400, overviewMaxDistance + radius * 2)
+    camera.updateProjectionMatrix()
+    return distance
+  }
+
   function placeCamera(direction: Vector3) {
     if (!built) return
     const sphere = currentBounds().getBoundingSphere(new Sphere())
-    const distance = sphere.radius / Math.sin((camera.fov * Math.PI) / 360) * 1.05
+    const distance = distanceToFit(sphere.radius)
     controls.target.copy(sphere.center)
     camera.position.copy(sphere.center).add(direction.normalize().multiplyScalar(distance))
     exteriorLimits()
@@ -102,7 +113,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     controls.enableZoom = true
     controls.enablePan = true
     controls.minDistance = 2
-    controls.maxDistance = 80
+    controls.maxDistance = overviewMaxDistance
     controls.minPolarAngle = 0.12 * Math.PI
     controls.maxPolarAngle = 0.48 * Math.PI
     controls.rotateSpeed = 0.8
@@ -201,13 +212,15 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   }
 
   async function flyTo(position: Vector3, target: Vector3, duration: number) {
+    const flight = ++cameraFlight
     const fromPosition = camera.position.clone()
     const fromTarget = controls.target.clone()
     await tween(stage, duration, (progress) => {
+      if (flight !== cameraFlight) return
       camera.position.lerpVectors(fromPosition, position, progress)
       controls.target.lerpVectors(fromTarget, target, progress)
     })
-    controls.update()
+    if (flight === cameraFlight) controls.update()
   }
 
   async function focusFloor(floorId: string) {
@@ -223,6 +236,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     highlighted.clear()
     tableLabel?.removeFromParent()
     tableLabel = null
+    if (tableId !== selected) cameraFlight++
     selected = tableId
     const node = tableId ? built?.tables.get(tableId) : undefined
     if (!node) {
@@ -249,7 +263,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     if (mode === 'inside') return
     const sphere = currentBounds().getBoundingSphere(new Sphere())
     const direction = camera.position.clone().sub(controls.target).normalize()
-    const distance = sphere.radius / Math.sin((camera.fov * Math.PI) / 360) * 1.05
+    const distance = distanceToFit(sphere.radius)
     await flyTo(sphere.center.clone().add(direction.multiplyScalar(distance)), sphere.center, 450)
   }
 

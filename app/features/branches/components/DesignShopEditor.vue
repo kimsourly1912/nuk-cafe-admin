@@ -14,11 +14,10 @@ import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, It
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory } from '../designer/catalog'
 import { FINISH_SWATCHES, findItemLook, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK, pieceFinishes } from '../designer/catalog'
-import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, outsideOutline, placementExtent, snap } from '../designer/geometry'
+import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, placementExtent, snap } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
-import { isMovable } from '../designer/plan'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
 import { canAddFloor, newFloor } from '../designer/starters'
 import type { Starter } from '../designer/starters'
@@ -98,7 +97,7 @@ const unplaced = computed(() => tables.value.filter(table => !placedIds.value.ha
 const tablesOn = (id: string) => layout.value.placements.filter(placement => placement.floorId === id).length
 const tableLabel = (id: string) => tables.value.find(table => table.id === id)?.label ?? props.diningTables.find(table => table.id === id)?.label
 
-const selectedPlacement = computed(() => selection.value?.kind === 'table' ? layout.value.placements.find(placement => placement.tableId === selection.value!.id) : undefined)
+const selectedPlacement = computed(() => selection.value?.kind === 'table' ? layout.value.placements.find(placement => placement.tableId === selection.value!.id && placement.floorId === floor.value?.id) : undefined)
 const selectedTable = computed(() => selectedPlacement.value && tables.value.find(table => table.id === selectedPlacement.value!.tableId))
 const selectedDiningTable = computed(() => selectedPlacement.value && props.diningTables.find(table => table.id === selectedPlacement.value!.tableId))
 const selectedItem = computed(() => selection.value?.kind === 'item' ? floor.value?.items.find(item => item.id === selection.value!.id) : undefined)
@@ -108,6 +107,14 @@ const selectedEdge = computed(() => {
   const index = Number(selection.value.id)
   return index < floor.value.edges.length ? index : undefined
 })
+watch([selection, selectedPlacement, selectedItem, selectedWall, selectedEdge], ([current, table, item, wall, edge]) => {
+  if (!current) return
+  if ({ table, item, wall, edge }[current.kind] === undefined) {
+    selection.value = null
+    detailsOpen.value = false
+  }
+}, { immediate: true })
+
 const names = computed(() => (floor.value ? edgeNames(floor.value.outline) : []))
 const selectedLook = computed(() => selectedPlacement.value && findLook(props.looks, selectedPlacement.value.lookId))
 const lookUsers = computed(() => {
@@ -120,16 +127,16 @@ const lookUsers = computed(() => {
 })
 const lookItems = computed(() => props.looks.map(look => ({ label: look.name, value: look.id })))
 const floorItems = computed(() => floors.value.map(candidate => ({ label: candidate.name, value: candidate.id })))
-const outsideLabels = computed(() => {
-  if (!floor.value || floor.value.outline.length < 3) return []
-  const outside = outsideOutline(floor.value, layout.value.placements)
-  return [
-    ...layout.value.placements.filter(placement => outside.has(placement.tableId)).map(placement => ({ selection: { kind: 'table' as const, id: placement.tableId }, label: tableLabel(placement.tableId) ?? 'A table' })),
-    ...floor.value.items.filter(item => outside.has(item.id)).map(item => ({ selection: { kind: 'item' as const, id: item.id }, label: ITEM_SPECS[item.kind].label })),
+const placementAlerts = computed(() => {
+  const warnings = canvas.value?.warnings
+  const current = floor.value
+  if (!warnings?.size || !current) return []
+  const pieces = [
+    ...layout.value.placements.filter(placement => placement.floorId === current.id).map(placement => ({ selection: { kind: 'table' as const, id: placement.tableId }, label: tableLabel(placement.tableId) ?? 'A table' })),
+    ...current.items.map(item => ({ selection: { kind: 'item' as const, id: item.id }, label: ITEM_SPECS[item.kind].label })),
   ]
+  return pieces.filter(piece => warnings.has(piece.selection.id))
 })
-const unavailableLabels = computed(() => props.editor.unavailable.value.map(placement => tableLabel(placement.tableId) ?? 'A deleted table'))
-const conflict = computed(() => props.editor.conflict.value)
 
 // --- Changes, each one undo step ---
 
@@ -147,7 +154,7 @@ function placeTable(tableId: string, at: Point, lookId: string = NEW_TABLE_LOOK)
   const floorId = floor.value?.id
   if (!floorId) return
   draft.change((next) => {
-    next.placements.push({ tableId, floorId, x: snap(at.x), y: snap(at.y), rotation: 0, width: look.defaultWidth, depth: look.defaultDepth, lookId: look.id })
+    next.placements.push({ tableId, floorId, x: at.x, y: at.y, rotation: 0, width: look.defaultWidth, depth: look.defaultDepth, lookId: look.id })
   })
   selection.value = { kind: 'table', id: tableId }
 }
@@ -157,7 +164,7 @@ function placeItem(kind: ItemKind, at: Point, lookId?: string) {
   const look = findItemLook(itemLooks.value, lookId)
   const size = look ?? { defaultWidth: ITEM_SPECS[kind].width, defaultDepth: ITEM_SPECS[kind].depth }
   const id = newLayoutId('item')
-  const item: LayoutItem = { id, kind: look?.kind ?? kind, x: snap(at.x), y: snap(at.y), rotation: 0, width: size.defaultWidth, depth: size.defaultDepth, finishes: {}, ...(look && { lookId: look.id }) }
+  const item: LayoutItem = { id, kind: look?.kind ?? kind, x: at.x, y: at.y, rotation: 0, width: size.defaultWidth, depth: size.defaultDepth, finishes: {}, ...(look && { lookId: look.id }) }
   changeFloor(target => target.items.push(item))
   selection.value = { kind: 'item', id }
 }
@@ -470,7 +477,6 @@ function editItemLook(look: ItemLook) {
   if (isCustomItem(look)) itemLookModal.open({ look })
 }
 
-const unknownItemLookLabels = computed(() => props.editor.unknownItemLooks.value.map(item => ITEM_SPECS[item.kind].label))
 
 // --- The cafe's own looks (step 3a) ---
 
@@ -489,7 +495,6 @@ function editLook(look: CustomLook) {
   lookModal.open({ look })
 }
 
-const unknownLookLabels = computed(() => props.editor.unknownLooks.value.map(placement => tableLabel(placement.tableId) ?? 'A table'))
 
 function editTable() {
   const table = selectedDiningTable.value
@@ -514,7 +519,8 @@ function placeInMiddle(piece: LibraryPiece) {
   if (performance.now() < suppressClickUntil) return
   libraryOpen.value = false
   mode.value = 'select'
-  place(piece, canvas.value?.viewCenter() ?? { x: 0, y: 0 })
+  const center = canvas.value?.viewCenter() ?? { x: 0, y: 0 }
+  place(piece, { x: snap(center.x), y: snap(center.y) })
   canvas.value?.focus()
 }
 
@@ -522,23 +528,28 @@ function placeInMiddle(piece: LibraryPiece) {
 // places); a press that doesn't move is a click and places in the middle.
 const ghost = ref<PlanGhost | null>(null)
 let suppressClickUntil = 0
-let libraryDrag: { piece: LibraryPiece, start: Point, dragging: boolean } | null = null
+let libraryDrag: { pointerId: number, piece: LibraryPiece, start: Point, dragging: boolean } | null = null
 
 function startLibraryDrag(event: PointerEvent, piece: LibraryPiece) {
-  if (event.button !== 0) return
-  libraryDrag = { piece, start: { x: event.clientX, y: event.clientY }, dragging: false }
+  if (event.button !== 0 || libraryDrag) return
+  libraryDrag = { pointerId: event.pointerId, piece, start: { x: event.clientX, y: event.clientY }, dragging: false }
   window.addEventListener('pointermove', onLibraryMove)
-  window.addEventListener('pointerup', onLibraryUp, { once: true })
+  window.addEventListener('pointerup', onLibraryUp)
+  window.addEventListener('pointercancel', onLibraryCancel)
 }
 
 function ghostOf(piece: LibraryPiece, at: Point): PlanGhost {
-  if (piece.kind === 'item') return { kind: 'item', itemKind: piece.itemKind, ...at }
+  if (piece.kind === 'item') {
+    const look = findItemLook(itemLooks.value, piece.lookId)
+    const spec = ITEM_SPECS[piece.itemKind]
+    return { kind: 'item', itemKind: piece.itemKind, width: look?.defaultWidth ?? spec.width, depth: look?.defaultDepth ?? spec.depth, ...at }
+  }
   if (piece.kind === 'look') return { kind: 'table', tableId: null, lookId: piece.lookId, ...at }
   return { kind: 'table', tableId: piece.tableId, lookId: NEW_TABLE_LOOK, ...at }
 }
 
 function onLibraryMove(event: PointerEvent) {
-  if (!libraryDrag) return
+  if (libraryDrag?.pointerId !== event.pointerId) return
   if (!libraryDrag.dragging && Math.hypot(event.clientX - libraryDrag.start.x, event.clientY - libraryDrag.start.y) < 6) return
   libraryDrag.dragging = true
   const at = canvas.value?.toPlan(event.clientX, event.clientY, true)
@@ -546,13 +557,24 @@ function onLibraryMove(event: PointerEvent) {
   ghost.value = at ? ghostOf(libraryDrag.piece, { x: snap(at.x, fine), y: snap(at.y, fine) }) : null
 }
 
-function onLibraryUp(event: PointerEvent) {
+function clearLibraryDrag() {
   window.removeEventListener('pointermove', onLibraryMove)
-  const drag = libraryDrag
-  const dropped = ghost.value
+  window.removeEventListener('pointerup', onLibraryUp)
+  window.removeEventListener('pointercancel', onLibraryCancel)
   libraryDrag = null
   ghost.value = null
-  if (!drag) return
+}
+
+function onLibraryCancel(event: PointerEvent) {
+  if (libraryDrag?.pointerId === event.pointerId) clearLibraryDrag()
+}
+
+function onLibraryUp(event: PointerEvent) {
+  const drag = libraryDrag
+  if (drag?.pointerId !== event.pointerId) return
+  if (drag.dragging) onLibraryMove(event)
+  const dropped = ghost.value
+  clearLibraryDrag()
   // A press that didn't move is a click: the card's own button handles it, keyboard and pointer alike.
   if (!drag.dragging) return
   suppressClickUntil = performance.now() + 100
@@ -562,7 +584,7 @@ function onLibraryUp(event: PointerEvent) {
   place(drag.piece, dropped)
 }
 
-onBeforeUnmount(() => window.removeEventListener('pointermove', onLibraryMove))
+onBeforeUnmount(clearLibraryDrag)
 
 defineShortcuts({
   meta_z: () => draft.undo(),
@@ -596,13 +618,6 @@ const quickBarStyle = computed((): { left: string, top: string } | undefined => 
     top: `${within(top, barHeight.value, area.height)}px`,
   }
 })
-
-/** 6A: who saved the newer version and when, if the editor has read it. */
-function conflictText(latest: { updatedAt: string | null, updatedByName: string | null } | null | undefined): string {
-  const by = latest?.updatedByName ? ` by ${latest.updatedByName}` : ''
-  const when = latest?.updatedAt ? ` ${formatTimeAgo(latest.updatedAt)}` : ''
-  return `${by || when ? `Saved${by}${when}. ` : ''}Your draft is kept here until you choose.`
-}
 
 const position = computed(() => {
   const current = selectedPlacement.value ?? selectedItem.value
@@ -1677,74 +1692,16 @@ function chooseStarter(starter: Starter) {
           </div>
         </div>
 
-        <!-- Someone else saved (6A): the draft stays until the owner chooses. -->
         <UAlert
-          v-if="conflict"
+          v-if="placementAlerts.length && mode === 'select'"
           color="warning"
           variant="subtle"
           icon="i-lucide-triangle-alert"
           class="pointer-events-auto max-w-xl"
-          title="This layout was changed somewhere else"
-          :description="conflictText(conflict.latest)"
-          :actions="[
-            { label: 'Load latest', color: 'neutral', variant: 'outline', onClick: () => editor.loadLatest() },
-            { label: 'Overwrite with mine', color: 'error', variant: 'outline', onClick: () => editor.overwrite() },
-          ]"
-          data-testid="layout-conflict"
-        />
-        <UAlert
-          v-if="editor.problem.value"
-          color="error"
-          variant="subtle"
-          icon="i-lucide-circle-alert"
-          class="pointer-events-auto max-w-xl"
-          title="Not saved"
-          :description="editor.problem.value"
-          close
-          @update:open="editor.dismissProblem()"
-        />
-        <UAlert
-          v-if="unavailableLabels.length"
-          color="warning"
-          variant="subtle"
-          icon="i-lucide-triangle-alert"
-          class="pointer-events-auto max-w-xl"
-          :title="`${listLabels(unavailableLabels)} ${unavailableLabels.length === 1 ? 'is' : 'are'} no longer an active table here.`"
-          description="Archived or deleted since this layout was opened. Remove it from the map to save."
-          :actions="[{ label: 'Remove from map', color: 'neutral', variant: 'outline', onClick: () => editor.removeUnavailable() }]"
-          data-testid="layout-unavailable"
-        />
-        <UAlert
-          v-if="unknownLookLabels.length"
-          color="warning"
-          variant="subtle"
-          icon="i-lucide-triangle-alert"
-          class="pointer-events-auto max-w-xl"
-          :title="`The look of ${listLabels(unknownLookLabels)} was deleted.`"
-          description="Deleted since this layout was opened. Give it the standard look to save, then choose another."
-          :actions="[{ label: 'Use Round café table', color: 'neutral', variant: 'outline', onClick: () => editor.resetUnknownLooks() }]"
-          data-testid="layout-unknown-looks"
-        />
-        <UAlert
-          v-if="unknownItemLookLabels.length"
-          color="warning"
-          variant="subtle"
-          icon="i-lucide-triangle-alert"
-          class="pointer-events-auto max-w-xl"
-          :title="`The look of ${unknownItemLookLabels.length === 1 ? 'a piece' : `${unknownItemLookLabels.length} pieces`} (${listLabels([...new Set(unknownItemLookLabels)])}) was deleted.`"
-          description="Deleted since this layout was opened. Give the pieces their own finishes to save, then choose another look."
-          :actions="[{ label: 'Use own finishes', color: 'neutral', variant: 'outline', onClick: () => editor.resetUnknownLooks() }]"
-          data-testid="layout-unknown-item-looks"
-        />
-        <UAlert
-          v-if="outsideLabels.length && mode === 'select'"
-          color="warning"
-          variant="subtle"
-          icon="i-lucide-triangle-alert"
-          class="pointer-events-auto max-w-xl"
-          :title="`${outsideLabels.map(entry => entry.label).join(', ')} ${outsideLabels.length === 1 ? 'is' : 'are'} outside the ${floor.name} floor.`"
-          description="Saving still works. Move it back in or remove it from the map."
-          :actions="[{ label: 'Show', color: 'neutral', variant: 'outline', onClick: () => { selection = outsideLabels[0]!.selection } }]"
+          :title="`Check placement on ${floor.name}`"
+          :description="`${listLabels(placementAlerts.slice(0, 3).map(entry => entry.label))}${placementAlerts.length > 3 ? ` (+${placementAlerts.length - 3} more)` : ''}. Highlighted pieces overlap or extend outside the floor. You can still save.`"
+          :actions="[{ label: 'Show', color: 'neutral', variant: 'outline', onClick: () => { selection = placementAlerts[0]!.selection } }]"
+          data-testid="placement-warning"
         />
       </div>
 
@@ -1770,7 +1727,7 @@ function chooseStarter(starter: Starter) {
 
       <!-- The move pad: no dragging needed (2C). -->
       <div
-        v-if="mode === 'select' && isMovable(selection)"
+        v-if="mode === 'select' && (selectedPlacement || selectedItem)"
         class="absolute bottom-3 left-3 flex items-center gap-3 rounded-lg border border-default bg-default p-2 shadow-md"
         role="group"
         aria-label="Move the selection"

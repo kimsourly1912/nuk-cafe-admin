@@ -4,8 +4,10 @@ import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { besideOf, chairPoses, floorViewpoints, outsideOutline, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, snap, wallPieces } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
+import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
+import { fitDistance } from '../designer/scene/units'
 
 const messages = (layout: unknown) => (v.safeParse(layoutSchema, layout).issues ?? []).map(issue => issue.message)
 const round = { shape: 'round', chair: 'cafe-chair' } as const
@@ -126,12 +128,29 @@ describe('the plan', () => {
     expect(pointInPolygon({ x: 800, y: 700 }, floor.outline)).toBe(false)
   })
 
-  it('flags a table that leaves the outline', () => {
-    const layout = demoLayout()
-    const floor = layout.floors[0]!
-    expect(outsideOutline(floor, layout.placements).size).toBe(0)
-    layout.placements[3]!.y = 520
-    expect([...outsideOutline(floor, layout.placements)]).toEqual(['demo-t04'])
+  it('flags a rotated table crossing a concave cutout even when all four corners are inside', () => {
+    const floor = { ...demoLayout().floors[0]!, walls: [] }
+    const table = { tableId: 'table', x: 570, y: 420, width: 380, depth: 380, rotation: 45 }
+    const piece = tableFootprint(table, { shape: 'rect', chair: 'none' }, [])
+    expect(piece.parts[0]!.every(point => pointInPolygon(point, floor.outline))).toBe(true)
+    expect(placementWarnings(floor, [piece]).get('table')?.outside).toBe(true)
+    const within = tableFootprint({ ...table, width: 100, depth: 100 }, { shape: 'rect', chair: 'none' }, [])
+    expect(placementWarnings(floor, [within]).has('table')).toBe(false)
+  })
+
+  it('warns about a table chair hitting a wall or a fixture and keeps touching pieces valid', () => {
+    const floor = { ...demoLayout().floors[0]!, walls: [] }
+    const table = { tableId: 'table', x: 300, y: 300, width: 80, depth: 80, rotation: 90 }
+    const chairs = chairPoses(round, table.width, table.depth, 1)
+    const piece = tableFootprint(table, round, chairs)
+    const fixture = itemFootprint({ id: 'divider', kind: 'room-divider', x: 390, y: 300, width: 100, depth: 20, rotation: 90 })
+    const clear = itemFootprint({ id: 'divider', kind: 'room-divider', x: 402.5, y: 300, width: 100, depth: 20, rotation: 90 })
+    expect(placementWarnings(floor, [fixture], piece).get('table')).toEqual({ outside: false, overlap: true })
+    expect(placementWarnings(floor, [clear, piece]).size).toBe(0)
+    const withWall = { ...floor, walls: [{ id: 'wall', from: { x: 390, y: 250 }, to: { x: 390, y: 350 } }] }
+    expect(placementWarnings(withWall, [piece]).get('table')).toEqual({ outside: false, overlap: true })
+    const nearEdge = tableFootprint({ ...table, x: 530, y: 700 }, round, chairs)
+    expect(placementWarnings(floor, [nearEdge]).get('table')?.outside).toBe(true)
   })
 
   it('works out viewpoints from the layout: no Entrance where there is no door', () => {
@@ -182,5 +201,17 @@ describe('corner handles and Duplicate (2B)', () => {
   it('puts a copy beside the original, clear of it, turned the same way', () => {
     expect(besideOf({ x: 0, y: 40, rotation: 0 }, 100, 60)).toEqual({ x: 125, y: 40 })
     expect(besideOf({ x: 0, y: 40, rotation: 90 }, 200, 60)).toEqual({ x: 75, y: 40 })
+  })
+})
+
+describe('building fit', () => {
+  it('fits the bounding sphere into the narrower horizontal field of view on a phone', () => {
+    const radius = 6
+    const portrait = 390 / 660
+    const distance = fitDistance(radius, 32, portrait)
+    const horizontal = Math.atan(Math.tan(16 * Math.PI / 180) * portrait)
+    expect(Math.asin(radius / distance)).toBeLessThan(horizontal)
+    expect(distance).toBeGreaterThan(fitDistance(radius, 32, 1))
+    expect(fitDistance(radius, 32, 2)).toBe(fitDistance(radius, 32, 1))
   })
 })

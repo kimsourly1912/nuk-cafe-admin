@@ -119,7 +119,25 @@ describe('the shop designer on saved layouts', () => {
     for (const label of ['L1', 'L2', 'L3']) await unplaced(page, label).waitFor()
     await page.getByTestId('layout-unsaved').waitFor()
 
-    await unplaced(page, 'L1').getByRole('button', { name: 'Place on map' }).click()
+    const card = unplaced(page, 'L1')
+    const start = (await card.getByText('L1', { exact: true }).boundingBox())!
+    const target = await plan(page).evaluate((svg) => {
+      const point = new DOMPoint(113, 303).matrixTransform((svg as SVGSVGElement).getScreenCTM()!)
+      return { x: point.x, y: point.y }
+    })
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2)
+    await page.keyboard.down('Shift')
+    await page.mouse.down()
+    await page.mouse.move(target.x, target.y, { steps: 5 })
+    await expect.poll(() => plan(page).getByTestId('plan-ghost').getAttribute('transform')).toBe('translate(115 305)')
+    await page.mouse.up()
+    await page.keyboard.up('Shift')
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: 115, y: 305 })
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await card.waitFor()
+    await page.getByRole('group', { name: 'Move the selection' }).waitFor({ state: 'hidden' })
+
+    await card.getByRole('button', { name: 'Place on map' }).click()
     await plan(page).getByTestId('plan-table-L1').waitFor()
     await page.getByRole('button', { name: 'Move right 25 cm' }).click()
     await save(page)
@@ -223,6 +241,8 @@ describe('the shop designer on saved layouts', () => {
     const theirs = { ...before.placements[0]!, x: 150, y: 300 }
     expect(await saveElsewhere(page, { version: before.version, layout: { floors: before.floors, placements: [theirs] } })).toBe(200)
 
+    const views = page.getByRole('group', { name: 'Dining tables views' })
+    await views.getByRole('button', { name: 'View in 3D' }).click()
     await saveButton(page).click()
     const conflict = page.getByTestId('layout-conflict')
     await conflict.getByText('This layout was changed somewhere else').waitFor()
@@ -231,6 +251,7 @@ describe('the shop designer on saved layouts', () => {
     await shot(page, 'conflict')
     await conflict.getByRole('button', { name: 'Load latest' }).click()
     await expect.poll(() => conflict.count()).toBe(0)
+    await views.getByRole('button', { name: 'Design shop' }).click()
     await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: 150, y: 300 })
     expect(await saveButton(page).isDisabled()).toBe(true)
     // Undo puts my draft back, on top of the latest version: saving it now goes through.

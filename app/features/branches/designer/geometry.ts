@@ -231,20 +231,6 @@ export function wallPieces(length: number, height: number, openings: readonly Op
   return pieces
 }
 
-/** The tables and items whose footprint leaves the floor's outline (9C): a reminder, never an error. */
-export function outsideOutline(floor: Floor, placements: readonly Placement[]): Set<string> {
-  const outside = new Set<string>()
-  for (const placement of placements) {
-    if (placement.floorId !== floor.id) continue
-    const corners = rectCorners(placement, placement.width, placement.depth, placement.rotation)
-    if (!corners.every(corner => pointInPolygon(corner, floor.outline))) outside.add(placement.tableId)
-  }
-  for (const item of floor.items) {
-    if (!rectCorners(item, item.width, item.depth, item.rotation).every(corner => pointInPolygon(corner, floor.outline))) outside.add(item.id)
-  }
-  return outside
-}
-
 export interface Viewpoint {
   id: string
   label: string

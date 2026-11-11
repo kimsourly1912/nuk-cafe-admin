@@ -11,3 +11,10 @@ export function cm(value: number): number {
 export function yRotation(degrees: number): number {
   return -(degrees * Math.PI) / 180
 }
+
+/** Fit a bounding sphere within the narrower field of view, with margin. */
+export function fitDistance(radius: number, verticalFov: number, aspect: number): number {
+  const vertical = (verticalFov * Math.PI) / 360
+  const horizontal = Math.atan(Math.tan(vertical) * aspect)
+  return radius / Math.sin(Math.min(vertical, horizontal)) * 1.05
+}
