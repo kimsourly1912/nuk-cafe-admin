@@ -1,10 +1,11 @@
 import { Box3, Raycaster, Sphere, Vector2, Vector3 } from 'three'
-import type { Material, Mesh, Object3D } from 'three'
+import type { AnimationMixer, Material, Mesh, Object3D } from 'three'
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js'
 import type { Viewpoint } from '../geometry'
 import { floorViewpoints } from '../geometry'
 import { meshesOf } from './furniture'
-import type { BuiltScene, SceneInput } from './scene'
+import { createModelLibrary } from './models'
+import type { BuiltScene, FigureNode, SceneInput } from './scene'
 import { buildGround, buildScene } from './scene'
 import type { StageOptions } from './stage'
 import { createStage, tween } from './stage'
@@ -27,8 +28,17 @@ export interface BuildingViewerOptions extends StageOptions {
   onSelectFloor?: (floorId: string) => void
 }
 
+/** What this viewer plays (step 3g): never saved, each person's own. */
+export interface Playback {
+  /** People and pets shown. */
+  figures: boolean
+  /** Their idle loops play (only while the tab and the view are visible, without reduced motion). */
+  animate: boolean
+}
+
 export interface BuildingViewer {
   setScene: (input: SceneInput) => void
+  setPlayback: (playback: Playback) => void
   setMode: (mode: 'exterior' | 'cutaway') => Promise<void>
   enterFloor: (floorId: string, viewpointId?: string) => Promise<void>
   leaveFloor: () => Promise<void>
@@ -59,6 +69,17 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   const floorLabels: CSS2DObject[] = []
   let tableLabel: CSS2DObject | null = null
   const highlighted = new Map<Mesh, Material | Material[]>()
+  const models = createModelLibrary()
+  let playback: Playback = { figures: true, animate: true }
+  /** The current scene's figures' idle motion: generated, or a model file's own loop. */
+  let animators = new Map<FigureNode, (delta: number) => void>()
+  /** The model loops, stopped when their scene goes. */
+  let mixers: AnimationMixer[] = []
+  /** Seconds of idle motion played so far. */
+  let clock = 0
+  let animating = false
+  let onScreen = true
+  const reducedMotion = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-reduced-motion: reduce)') : undefined
 
   stage.onBeforeRender(updateCutaway)
 
@@ -82,6 +103,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     }
     applyExplode(explode)
     applyVisibility()
+    attachFigures(built)
     if (selected && built.tables.has(selected)) selectTable(selected)
     else selected = null
     if (first) {
@@ -95,6 +117,84 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     }
     stage.shadowsChanged()
   }
+
+  /**
+   * Each figure moves with its generated idle; a kind with a model file gets the model once loaded,
+   * in place of the generated figure. A rebuild meanwhile drops the late models.
+   */
+  function attachFigures(scene: BuiltScene) {
+    for (const mixer of mixers) mixer.stopAllAction()
+    mixers = []
+    animators = new Map()
+    for (const figure of scene.figures) {
+      figure.anchor.visible = playback.figures
+      animators.set(figure, () => figure.idle(clock))
+      models.figure(figure.kind).then((instance) => {
+        if (!instance || built !== scene) return
+        figure.body.visible = false
+        figure.anchor.add(instance.object)
+        const { mixer } = instance
+        if (mixer) {
+          mixers.push(mixer)
+          mixer.update(0)
+          animators.set(figure, delta => mixer.update(delta))
+        }
+        else {
+          animators.delete(figure)
+        }
+        stage.invalidate()
+        startAnimation()
+      }).catch((error: unknown) => {
+        // The figure keeps its contact shadow; the building and the tables are unaffected.
+        if (import.meta.dev) console.error(`[shop designer] could not load the ${figure.kind} model`, error)
+      })
+    }
+    startAnimation()
+  }
+
+  function shouldAnimate() {
+    return playback.animate && playback.figures && animators.size > 0 && onScreen
+      && (typeof document === 'undefined' || !document.hidden) && !reducedMotion?.matches
+  }
+
+  /**
+   * Plays the figures' idle loops while they should play; the stage then draws every frame. When
+   * they stop (paused, hidden, off screen), the task ends and the stage draws only on change again.
+   */
+  function startAnimation() {
+    if (animating || !shouldAnimate()) return
+    animating = true
+    let last = -1
+    stage.animate((now) => {
+      if (!shouldAnimate()) {
+        animating = false
+        return false
+      }
+      const delta = last < 0 ? 0 : Math.min(0.1, (now - last) / 1000)
+      last = now
+      clock += delta
+      for (const animate of animators.values()) animate(delta)
+      return true
+    }, () => (animating = false))
+  }
+
+  function setPlayback(next: Playback) {
+    playback = next
+    for (const figure of built?.figures ?? []) figure.anchor.visible = next.figures
+    stage.invalidate()
+    startAnimation()
+  }
+
+  const onVisibility = () => startAnimation()
+  document.addEventListener('visibilitychange', onVisibility)
+  reducedMotion?.addEventListener('change', onVisibility)
+  const screenObserver = typeof IntersectionObserver === 'undefined'
+    ? null
+    : new IntersectionObserver((entries) => {
+        onScreen = entries.some(entry => entry.isIntersecting)
+        startAnimation()
+      })
+  screenObserver?.observe(options.canvas)
 
   function distanceToFit(radius: number) {
     const distance = Math.max(2, fitDistance(radius, camera.fov, camera.aspect))
@@ -329,11 +429,19 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     canvas.removeEventListener('pointerup', onUp)
     canvas.removeEventListener('pointercancel', taps.cancel)
     canvas.removeEventListener('lostpointercapture', taps.cancel)
+    document.removeEventListener('visibilitychange', onVisibility)
+    reducedMotion?.removeEventListener('change', onVisibility)
+    screenObserver?.disconnect()
+    for (const mixer of mixers) mixer.stopAllAction()
+    mixers = []
+    animators.clear()
     stage.dispose()
+    models.dispose()
   }
 
   return {
     setScene,
+    setPlayback,
     setMode,
     enterFloor,
     leaveFloor,

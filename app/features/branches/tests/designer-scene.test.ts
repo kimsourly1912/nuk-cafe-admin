@@ -3,12 +3,13 @@ import { fileURLToPath } from 'node:url'
 import { Box3, ExtrudeGeometry, Raycaster, Vector3 } from 'three'
 import type { Object3D } from 'three'
 import { describe, expect, it } from 'vitest'
-import { ITEM_KINDS } from '#shared/contracts/shop-layout'
-import type { ItemLook, LayoutItem } from '#shared/contracts/shop-layout'
+import { FIGURE_KINDS, FIGURE_SIZES, isFigureKind, ITEM_KINDS } from '#shared/contracts/shop-layout'
+import type { FigureKind, ItemLook, LayoutItem } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, BUILT_IN_PHOTO, findLook, ITEM_SPECS, pieceFinishes } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
 import { buildItem, buildTable, createBuildContext, disposeBuildContext, meshesOf } from '../designer/scene/furniture'
 import { createMaterialLibrary } from '../designer/scene/materials'
+import { buildFigure } from '../designer/scene/figures'
 import { buildScene } from '../designer/scene/scene'
 
 const context = () => createBuildContext(createMaterialLibrary())
@@ -17,7 +18,7 @@ const centerOf = (object: Object3D) => new Box3().setFromObject(object).getCente
 const chairsOf = (object: Object3D) => object.children.filter(child => ['cafe-chair', 'bentwood-chair', 'bar-stool'].includes(child.userData.kind))
 
 describe('2D and 3D agree on size', () => {
-  it.each(ITEM_KINDS.filter(kind => kind !== 'plant'))('a %s fills the footprint the plan draws (within a few cm)', (kind) => {
+  it.each(ITEM_KINDS.filter(kind => kind !== 'plant' && !isFigureKind(kind)))('a %s fills the footprint the plan draws (within a few cm)', (kind) => {
     const spec = ITEM_SPECS[kind]
     const object = buildItem(context(), { kind, width: spec.width, depth: spec.depth, finishes: {}, floorHeight: 300 })
     object.updateMatrixWorld(true)
@@ -133,11 +134,76 @@ describe('chair and fixture looks (step 3d)', () => {
 })
 
 describe('built-in pictures (step 3d)', () => {
-  it('every built-in look and piece but stairs ships its picture, and nothing else is in the folder', () => {
+  it('every built-in look, piece (but stairs), person and pet ships its picture, and nothing else is in the folder', () => {
     const folder = fileURLToPath(new URL('../../../../public/shop-designer/looks/', import.meta.url))
     const expected = [...BUILT_IN_LOOKS.map(builtIn => builtIn.photo!.url), ...ITEM_KINDS.flatMap(kind => ITEM_SPECS[kind].photo ?? [])]
     expect(expected).toHaveLength(BUILT_IN_LOOKS.length + ITEM_KINDS.length - 1)
     expect(readdirSync(folder).map(file => BUILT_IN_PHOTO(file.replace(/\.webp$/, ''))).sort()).toEqual([...expected].sort())
     for (const url of expected) expect(statSync(`${folder}${url.split('/').at(-1)}`).size).toBeLessThan(60_000)
+  })
+})
+
+describe('people and pets (step 3g)', () => {
+  const placedFigure = (kind: FigureKind, id = `${kind}-1`) => {
+    const layout = demoLayout()
+    layout.floors[1]!.items.push({ id, kind, x: 250, y: 180, rotation: 90, ...FIGURE_SIZES[kind], finishes: {} })
+    return buildScene(context(), { layout, tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
+  }
+  const materialsOf = (object: Object3D) => meshesOf(object).map(mesh => mesh.material)
+
+  it('stands each figure at its place and turn, over a contact shadow, casting no shadow', () => {
+    const scene = placedFigure('cat')
+    const floor = scene.floors[1]!
+    expect(scene.figures.map(figure => [figure.itemId, figure.kind, figure.floorId])).toEqual([['cat-1', 'cat', floor.id]])
+    const { anchor, body } = scene.figures[0]!
+    expect(anchor.parent).toBe(floor.group)
+    expect(body.parent).toBe(anchor)
+    expect([anchor.position.x, anchor.position.z]).toEqual([2.5, 1.8])
+    expect(anchor.rotation.y).toBeCloseTo(-Math.PI / 2, 5)
+    const meshes = meshesOf(anchor)
+    expect(meshes[0]!.userData.part).toBe('contact-shadow')
+    expect(meshes.length).toBeGreaterThan(5)
+    expect(meshes.every(mesh => !mesh.castShadow)).toBe(true)
+  })
+
+  it.each(FIGURE_KINDS)('a %s fits its footprint, stands on the floor and has its height', (kind) => {
+    const spec = ITEM_SPECS[kind]
+    const { body } = buildFigure(context(), kind, 'figure-1')
+    body.updateMatrixWorld(true)
+    const bounds = new Box3().setFromObject(body)
+    const size = bounds.getSize(new Vector3())
+    expect(size.x * 100, 'width').toBeLessThanOrEqual(spec.width + 2)
+    expect(size.z * 100, 'depth').toBeLessThanOrEqual(spec.depth + 2)
+    // Not lost in its footprint either: it fills most of one side.
+    expect(Math.max(size.x * 100 / spec.width, size.z * 100 / spec.depth)).toBeGreaterThan(0.7)
+    expect(size.y * 100, 'height').toBeGreaterThan(spec.height - 8)
+    expect(size.y * 100, 'height').toBeLessThan(spec.height + 8)
+    expect(bounds.min.y).toBeCloseTo(0, 3)
+    const center = bounds.getCenter(new Vector3())
+    expect(Math.abs(center.x)).toBeLessThan(0.01)
+    expect(Math.abs(center.z)).toBeLessThan(0.01)
+  })
+
+  it('dresses a figure by its id: the same for every viewer, varied between figures', () => {
+    const build = context()
+    const same = [buildFigure(build, 'person', 'guest-7'), buildFigure(build, 'person', 'guest-7')]
+    expect(materialsOf(same[0]!.body)).toEqual(materialsOf(same[1]!.body))
+    const looks = new Set(Array.from({ length: 12 }, (_, index) => materialsOf(buildFigure(build, 'person', `guest-${index}`).body).map(material => (material as { uuid: string }).uuid).join()))
+    expect(looks.size).toBeGreaterThan(3)
+  })
+
+  it('moves a little when its idle plays, and the same time gives the same pose', () => {
+    const { body, idle } = buildFigure(context(), 'dog', 'dog-1')
+    const pose = () => {
+      const poses: number[] = []
+      body.traverse(object => poses.push(object.rotation.y, object.rotation.z, object.scale.x, object.scale.y))
+      return poses
+    }
+    idle(0)
+    const start = pose()
+    idle(0.4)
+    expect(pose()).not.toEqual(start)
+    idle(0)
+    expect(pose()).toEqual(start)
   })
 })

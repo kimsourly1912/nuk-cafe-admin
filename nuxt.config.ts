@@ -31,7 +31,8 @@ function copyLibsqlNativeBinary(serverDir: string) {
  * Response headers for every route in production (D48). Scripts still allow `'unsafe-inline'`: the
  * SPA shell carries Nuxt's inline config script and the color-mode script, whose content changes
  * per environment. A nonce-based script policy comes with server rendering (step 5.2). Everything
- * else is locked to this origin; only public menu documents allow the automatic analytics script.
+ * else is locked to this origin (connections also to the page's own `blob:` URLs, D274); only public
+ * menu documents allow the automatic analytics script.
  */
 function securityHeaders(publicMenu = false): Record<string, string> {
   const csp = [
@@ -40,7 +41,9 @@ function securityHeaders(publicMenu = false): Record<string, string> {
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob:`,
     `font-src 'self' data:`,
-    `connect-src 'self'`,
+    // `blob:`: a 3D model's textures load through a `blob:` URL the page itself made (three.js's
+    // GLTFLoader → ImageBitmapLoader → fetch; QS4, D274). It reaches no other origin.
+    `connect-src 'self' blob:`,
     `frame-src https://challenges.cloudflare.com`,
     `object-src 'none'`,
     `base-uri 'self'`,

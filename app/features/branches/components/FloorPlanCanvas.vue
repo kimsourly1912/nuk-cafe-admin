@@ -19,7 +19,7 @@
  */
 import { useElementSize } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
+import { edgeLength, isFigureKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, ITEM_SPECS } from '../designer/catalog'
 import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
@@ -755,6 +755,61 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             opacity="0.6"
           />
         </template>
+        <!-- People and pets (step 3g): seen from above, the front (head) towards +y. -->
+        <g
+          v-else-if="isFigureKind(item.kind)"
+          fill="color-mix(in oklab, var(--ui-secondary) 22%, var(--ui-bg))"
+          stroke="var(--ui-secondary)"
+          stroke-width="3"
+        >
+          <template v-if="ITEM_SPECS[item.kind].figure === 'hammock'">
+            <rect
+              :x="-item.width / 2 + 6"
+              :y="-item.depth / 2 + 6"
+              :width="item.width - 12"
+              :height="item.depth - 12"
+              rx="6"
+              fill="none"
+            />
+            <ellipse
+              :rx="item.width / 2 - 24"
+              :ry="item.depth / 2 - 14"
+            />
+            <circle
+              :cx="-item.width / 2 + 60"
+              r="11"
+              fill="var(--ui-secondary)"
+              stroke="none"
+              opacity="0.7"
+            />
+          </template>
+          <template v-else-if="ITEM_SPECS[item.kind].figure === 'animal'">
+            <ellipse
+              :rx="item.width / 2 - 3"
+              :ry="item.depth / 2 - 10"
+              cy="-6"
+            />
+            <circle
+              :cy="item.depth / 2 - 10"
+              :r="item.width / 3"
+              fill="var(--ui-secondary)"
+              stroke="none"
+              opacity="0.7"
+            />
+          </template>
+          <template v-else>
+            <ellipse
+              :rx="item.width / 2 - 4"
+              :ry="Math.min(item.depth, 35) / 2 - 4"
+            />
+            <circle
+              r="10"
+              fill="var(--ui-secondary)"
+              stroke="none"
+              opacity="0.7"
+            />
+          </template>
+        </g>
         <circle
           v-else-if="item.kind === 'bar-stool'"
           :r="item.width / 2"
@@ -1150,7 +1205,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             class="cursor-alias"
           />
           <g
-            v-for="(point, handle) in handleCorners(item.width + 16, item.depth + 16)"
+            v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width + 16, item.depth + 16))"
             :key="handle"
           >
             <rect

@@ -14,7 +14,7 @@ describe('analytics and sensitive-page headers', () => {
     const csp = directives(response.headers.get('content-security-policy')!)
     expect(csp['script-src']).toContain('https://static.cloudflareinsights.com/beacon.min.js')
     expect(csp['script-src']).toContain('https://static.cloudflareinsights.com/beacon.min.js/')
-    expect(csp['connect-src']).toEqual(['\'self\''])
+    expect(csp['connect-src']).toEqual(['\'self\'', 'blob:'])
     expect(csp['frame-ancestors']).toEqual(['\'none\''])
     expect(response.headers.get('referrer-policy')).toBe('strict-origin')
     expect(response.headers.get('strict-transport-security')).toContain('max-age=31536000')
@@ -33,7 +33,7 @@ describe('analytics and sensitive-page headers', () => {
     const csp = directives(response.headers.get('content-security-policy')!)
     expect(csp['script-src']).toEqual(['\'self\'', '\'unsafe-inline\'', 'https://challenges.cloudflare.com'])
     expect(csp['frame-src']).toEqual(['https://challenges.cloudflare.com'])
-    expect(csp['connect-src']).toEqual(['\'self\''])
+    expect(csp['connect-src']).toEqual(['\'self\'', 'blob:'])
     expect(response.headers.get('referrer-policy')).toBe('strict-origin')
   })
 

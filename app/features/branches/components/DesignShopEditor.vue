@@ -9,7 +9,7 @@
  */
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, isItemLookKind } from '#shared/contracts/shop-layout'
+import { edgeLength, isFigureKind, isItemLookKind } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory } from '../designer/catalog'
@@ -80,12 +80,22 @@ const ITEM_ICONS: Record<ItemKind, string> = {
   'plant': 'i-lucide-flower-2',
   'room-divider': 'i-lucide-columns-3',
   'stairs': 'i-lucide-chevrons-up',
+  'person': 'i-lucide-person-standing',
+  'girl': 'i-lucide-person-standing',
+  'boy': 'i-lucide-person-standing',
+  'old-man': 'i-lucide-person-standing',
+  'barista': 'i-lucide-coffee',
+  'seated-person': 'i-lucide-armchair',
+  'lazing-person': 'i-lucide-bed',
+  'cat': 'i-lucide-cat',
+  'dog': 'i-lucide-dog',
 }
 const LOOK_ICONS = { round: 'i-lucide-circle', rect: 'i-lucide-rectangle-horizontal', booth: 'i-lucide-sofa' } as const
 const CATEGORIES: { key: ItemCategory, label: string }[] = [
   { key: 'chairs', label: 'Extra seating' },
   { key: 'fixtures', label: 'Fixtures' },
   { key: 'structure', label: 'Structure' },
+  { key: 'figures', label: 'People and pets' },
 ]
 const catalog = CATEGORIES.map(category => ({ ...category, specs: Object.values(ITEM_SPECS).filter(spec => spec.category === category.key) }))
 /** The cafe's own chair and fixture looks (step 3d), by category: shown after the built-in pieces. */
@@ -786,7 +796,10 @@ function chooseStarter(starter: Starter) {
               class="size-5 text-muted"
             />
             <span>{{ spec.label }}</span>
-            <span class="text-xs text-muted">{{ spec.footprint === 'round' ? `Ø ${spec.width} cm` : `${spec.width} × ${spec.depth}` }}</span>
+            <span
+              v-if="spec.category !== 'figures'"
+              class="text-xs text-muted"
+            >{{ spec.footprint === 'round' ? `Ø ${spec.width} cm` : `${spec.width} × ${spec.depth}` }}</span>
           </button>
           <!-- The cafe's own looks of this category (step 3d): shared by the pieces placed with them. -->
           <div
@@ -830,7 +843,7 @@ function chooseStarter(starter: Starter) {
           </div>
         </div>
         <UButton
-          v-if="category.key !== 'structure'"
+          v-if="category.key === 'chairs' || category.key === 'fixtures'"
           :label="category.key === 'chairs' ? 'New chair look' : 'New fixture look'"
           icon="i-lucide-plus"
           color="neutral"
@@ -1041,7 +1054,7 @@ function chooseStarter(starter: Starter) {
             {{ ITEM_SPECS[selectedItem.kind].label }}
           </p>
           <p class="text-xs text-muted">
-            {{ selectedItem.kind === 'stairs' ? 'Structure' : 'Furniture' }} · no QR code
+            {{ selectedItem.kind === 'stairs' ? 'Structure' : isFigureKind(selectedItem.kind) ? 'Decoration' : 'Furniture' }} · no QR code
           </p>
         </div>
         <UButton
@@ -1052,7 +1065,10 @@ function chooseStarter(starter: Starter) {
           @click="selection = null; detailsOpen = false"
         />
       </div>
-      <div class="grid grid-cols-2 gap-3">
+      <div
+        v-if="!isFigureKind(selectedItem.kind)"
+        class="grid grid-cols-2 gap-3"
+      >
         <UFormField label="Width (cm)">
           <UInputNumber
             :model-value="selectedItem.width"

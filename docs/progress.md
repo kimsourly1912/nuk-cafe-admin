@@ -3,6 +3,21 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 3g: people and pets (D274, 2026-11-11)
+
+- **Owner's choices (2026-11-11):** 3g first (3e and 3f after 3h, still before the pilot); QS4 answered: `blob:` joins `connect-src`; **people and pets generated from code now**, the owner uploads CC0 models later (Kenney refuses automated downloads, Poly Haven has no people or pets).
+- **Built:** a **People and pets** library section (Person, Girl, Boy, Old man, Barista, Seated customer, Someone lazing in a hammock, Cat, Dog) with pictures; fixed sizes in the contract; no size fields, corner handles or warnings; 3D figures generated from code with a contact shadow and idle motion; View in 3D's **People and pets** menu (**Show people and pets**, **Animate**, per viewer); a model list and loader so a CC0 `.glb` replaces a kind's generated figure; `connect-src 'self' blob:`. [Plan → Step 3g](plans/shop-designer-scenes.md#step-3g-people-and-pets-built-2026-11-11).
+- **Evidence (2026-11-11, Linux container, Chromium at `/opt/pw-browsers/chromium` via `E2E_BROWSER_PATH`):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2776 passed, 1 skipped (182 files); `test/e2e/shop-designer.test.ts` 18 passed; `test/e2e/monitoring-headers.test.ts` 11 passed. Guards removed one at a time, each failing a test: the hidden-tab stop, the Animate stop, the stale-scene drop, figures out of placement warnings, the contract's figure size.
+- **Not verified:** a textured `.glb` under the CSP on the built server (no model yet); the look and cost on a real phone.
+- **Pitfall:** the e2e file's tests run in order on one seeded cafe (the first one picks a starter): run the whole file, not one test with `-t`, or the plan never appears.
+
+### Shop designer scenes planned: surroundings, people and pets (D274, 2026-11-11)
+
+- The owner asked for the 3D view's surroundings, people and pets to look like their references (City street, Seaside, Neighborhood lane orbit, now in `docs/plans/shop-designer/`). Planned in the [scenes plan](plans/shop-designer-scenes.md); no code yet.
+- **Owner's answers (2026-11-11):** CC0 models with source, creator and license recorded (the tuk-tuk may come back for a commission); the surroundings preset saved per branch, camera and playback per viewer; Neighborhood lane built as an internal test scene and benchmarked on Android and desktop before the Riverside pilot, shipped after it, then Riverside, Seaside and City street.
+- **Order:** 3e, 3f (unchanged), 3g (people and pets, the first CC0 models), 3h (lane test scene and benchmark), 3c (pilot), 4a (ship the lane and the saved scene), 4b–4d.
+- **Found while planning:** textured `.glb` models load through `fetch()` of a `blob:` URL (three.js 0.187 `GLTFLoader`), which the deployed CSP's `connect-src 'self'` refuses. Development sends no CSP, so it would only fail on staging and production. QS4 below.
+
 ### Shop designer 3D reliability (D273, 2026-11-11)
 
 - The building viewer owns camera mode and cancels superseded transitions. Back restores overview controls and zoom, and pinch, cancelled drags and secondary clicks do not select tables.
@@ -1714,6 +1729,8 @@ Business decisions the build still needs, with the step each blocks. Answered on
 | QT3 | **One Bakong token for every cafe, managed by the platform** instead of each cafe's own (the owner, 2026-10-09: cafe owners aren't technical; one token renewed once, on one day). Idea: a Platform → Bakong page (one sealed token, its expiry, Test connection, Replace; reminders to the super admins), Payments shows "Automatic check: On (managed by the platform team)", the per-cafe token UI of D148 removed. The server already checks a payment went to the cafe's own account and amount, so a shared token can't confirm another cafe's payment. **To verify first:** (1) can one token look up payments to any Bakong account (test: give Brown Bean another Bakong account, pay a small order, see whether NUK's token confirms it); (2) Bakong's rate limits with many cafes on one token | Changing D148 | If (1) holds: one platform token. If tokens are tied to one account: keep a token per cafe, but the platform team pastes it from the cafe's page in the console and the reminders go to the platform **Test deferred by the owner (2026-10-30):** a token per cafe stays until several cafes use Bakong |
 | QM1 | **Facebook posting for every cafe** (M2): a Meta app owned by the platform, its **App Review** (`pages_manage_posts`), **Business Verification**, a privacy policy page, and our own domain (Q4). Until then Facebook posting works only for the Meta app's testers (the owner's own Page) | M2 for other cafes | Telegram channels first (no approval needed), Facebook for NUK Cafe as a tester. **Owner (2026-10-30):** Telegram only for now; Meta review when cafes ask for Facebook |
 | QS1 | **Pictures on the built-in looks** (shop designer step 3d): we ship renders of our own 3D models (the same builders as the plan and the building), 480 × 360. Photos of real furniture instead would need a source and a license for each | Nothing (renders shipped) | Keep the renders: they show exactly what the plan places, and are made again when a model changes |
+| QS4 | **Answered 2026-11-11: add `blob:`.** **Textured 3D models and the CSP** (shop designer step 3g, D274): a `.glb`'s textures load through `fetch()` of a `blob:` URL, refused by the deployed `connect-src 'self'`. Add `blob:` to `connect-src` (a `blob:` URL only points at data the page made), or ship split `.gltf` files with separate textures | Step 3g's models | Add `blob:` to `connect-src`; an e2e test on the built server loads a textured model |
+| QS5 | **Where the Riverside pilot runs** (step 3c, D274): on staging, the internal Neighborhood lane flag is turned off there for the pilot | Step 3c's setup | Production (the flag is already off there) |
 
 ## Known limitations
 

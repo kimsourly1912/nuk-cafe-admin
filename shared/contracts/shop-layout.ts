@@ -43,10 +43,31 @@ export const FINISHES = [
 ] as const
 export type Finish = typeof FINISHES[number]
 
-/** Furniture and fixtures that are not dining tables: they carry no QR. */
+/**
+ * People and pets (step 3g, D274): decoration the owner places like furniture. A figure is a model
+ * of a fixed size: no table, QR code, seats or ordering state, no look and no finishes. Its
+ * footprint is the model's own, so the plan and the 3D view always agree.
+ */
+export const FIGURE_SIZES = {
+  'person': { width: 50, depth: 35 },
+  'girl': { width: 40, depth: 30 },
+  'boy': { width: 40, depth: 30 },
+  'old-man': { width: 55, depth: 45 },
+  'barista': { width: 50, depth: 50 },
+  'seated-person': { width: 50, depth: 65 },
+  'lazing-person': { width: 240, depth: 90 },
+  'cat': { width: 25, depth: 40 },
+  'dog': { width: 30, depth: 70 },
+} as const satisfies Record<string, { width: number, depth: number }>
+export type FigureKind = keyof typeof FIGURE_SIZES
+export const FIGURE_KINDS = Object.keys(FIGURE_SIZES) as FigureKind[]
+export const isFigureKind = (kind: string): kind is FigureKind => Object.hasOwn(FIGURE_SIZES, kind)
+
+/** Furniture, fixtures and figures that are not dining tables: they carry no QR. */
 export const ITEM_KINDS = [
   'cafe-chair', 'bentwood-chair', 'bar-stool', 'dining-bench',
   'service-counter', 'display-shelf', 'planter', 'plant', 'room-divider', 'stairs',
+  ...FIGURE_KINDS,
 ] as const
 export type ItemKind = typeof ITEM_KINDS[number]
 /**
@@ -130,7 +151,9 @@ export const itemSchema = v.pipe(
      */
     lookId: v.optional(idSchema),
   }),
-  v.check(item => item.lookId === undefined || isItemLookKind(item.kind), 'Stairs have no custom look'),
+  v.check(item => item.lookId === undefined || isItemLookKind(item.kind), 'Stairs, people and pets have no custom look'),
+  v.check(item => !isFigureKind(item.kind) || (item.width === FIGURE_SIZES[item.kind].width && item.depth === FIGURE_SIZES[item.kind].depth), 'People and pets keep their own size'),
+  v.check(item => !isFigureKind(item.kind) || Object.keys(item.finishes).length === 0, 'People and pets have no finishes'),
 )
 export type LayoutItem = v.InferOutput<typeof itemSchema>
 
