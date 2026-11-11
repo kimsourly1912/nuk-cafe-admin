@@ -1,6 +1,6 @@
 # Shop designer scenes plan: surroundings, people and pets
 
-Owner brief and answers 2026-11-11; decision [D274](../decisions.md#d274-shop-designer-scenes-generated-surroundings-cc0-models-and-a-saved-preset-per-branch-2026-11-11). Extends the [shop designer plan](shop-designer.md) (D273). Status: **planned**. Steps 3e and 3f of the shop designer plan come first, unchanged.
+Owner brief and answers 2026-11-11; decision [D274](../decisions.md#d274-shop-designer-scenes-generated-surroundings-cc0-models-and-a-saved-preset-per-branch-2026-11-11). Extends the [shop designer plan](shop-designer.md) (D273). Status: **step 3g in progress** (owner, 2026-11-11: 3g first, then 3h; 3e and 3f follow before the pilot; QS4 answered: `blob:` in `connect-src`).
 
 ## Visual references (owner, 2026-11-11)
 
@@ -234,3 +234,17 @@ The person running it records the device, OS, browser and network.
 
 - **QS4:** allow `blob:` in `connect-src` so textured `.glb` models load in production (option A above), or ship split `.gltf` files (option B)? Suggested: A. Blocks step 3g's models.
 - **QS5:** does the Riverside pilot run on staging or production? If staging, the 3h flag is switched off there during the pilot. Blocks nothing until 3c.
+
+## Step 3g: build notes (in progress, 2026-11-11)
+
+- **Built, waiting for models:**
+  - figure kinds in the contract (`FIGURE_SIZES`, `isFigureKind`): a fixed size, no finishes, no look; checked by the contract, so no migration;
+  - **People and pets** in the Design shop library; drawn on the plan with a head mark at the front; no corner handles, no size fields; never warned about, and never the cause of a warning;
+  - `buildScene` puts an empty anchor with a contact shadow where each figure stands (`FigureNode`); the viewer loads the model (`scene/models.ts`: `GLTFLoader`, `SkeletonUtils.clone`, one `AnimationMixer` per copy) and puts it in the anchor; a scene rebuilt meanwhile drops late models;
+  - **People and pets** menu in View in 3D (only when the layout has figures): **Show people and pets** and **Animate**, this viewer's own; Animate starts off at the low quality level;
+  - the idle loop runs as a stage task only while Animate is on, figures are shown, the tab is visible, the canvas is on screen and motion isn't reduced;
+  - `connect-src 'self' blob:` (QS4);
+  - the model list (`designer/models.ts`) and its test (`models.test.ts`).
+- **Sources (owner, 2026-11-11):** Kenney's site refuses automated downloads and Poly Haven has no people or pets (its CC0 models are props, plants, ships and a rat). The owner downloads CC0 packs in a browser and uploads them; each pack's license file is checked and recorded per model.
+- **Figure kinds** start as person, cat and dog. More come with the packs (the owner's list: girl, boy, old man, someone lazing; a seated customer, a barista, a mini dragon if one fits). A kind is added only when its model exists, because a saved kind can't be taken back.
+- **Guards checked by removing them:** the hidden-tab stop, the Animate stop, the stale-scene drop, figures out of the warnings, and the contract's size rule each make a test fail.

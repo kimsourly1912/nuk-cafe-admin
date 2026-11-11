@@ -3,13 +3,13 @@ import * as v from 'valibot'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
 import type { Floor, Placement, SaveLayoutInput } from '#shared/contracts/shop-layout'
-import { floorSchema, LAYOUT_MAX_BODY_BYTES, LAYOUT_MAX_FLOOR_BYTES, saveLayoutSchema } from '#shared/contracts/shop-layout'
+import { FIGURE_SIZES, floorSchema, LAYOUT_MAX_BODY_BYTES, LAYOUT_MAX_FLOOR_BYTES, saveLayoutSchema } from '#shared/contracts/shop-layout'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { getLayout, saveLayout } from '#server/features/branches/branches.layout.service'
 import { archiveTable, createTable, deleteTable, restoreTable, updateTable } from '#server/features/branches/branches.service'
 import { deletePlacementStatement, layoutRows, replaceLayoutStatements, requireActiveTables } from '#server/features/branches/branches.layout.repository'
-import { branchLayoutPlacements, branches, diningTables } from '#server/features/branches/branches.schema'
+import { branchLayoutItemLooks, branchLayoutPlacements, branches, diningTables } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
@@ -105,6 +105,22 @@ describe('saving a layout', () => {
     expect(await getLayout(db, TEST_TENANT, branch)).toEqual(saved)
     const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'branch.layout.update'))
     expect(audit).toMatchObject({ targetType: 'branch', targetId: branch, actorId: actor.userId, metadata: { version: 1, floors: 2, placements: 2 } })
+  })
+
+  it('saves people and pets as the floor\'s own decoration: no table, no look in use (step 3g)', async () => {
+    const figures: Floor['items'] = [
+      { id: 'cat', kind: 'cat', x: 120, y: 400, rotation: 45, ...FIGURE_SIZES.cat, finishes: {} },
+      { id: 'guest', kind: 'person', x: 300, y: 150, rotation: 180, ...FIGURE_SIZES.person, finishes: {} },
+    ]
+    const ground = floor('ground', 'Ground', { items: [...floor('ground').items, ...figures] })
+    expect(v.safeParse(floorSchema, ground).success).toBe(true)
+    const saved = await save({ version: 0, layout: { floors: [ground], placements: [] } })
+    expect(saved.floors[0]!.items).toEqual(ground.items)
+    expect((await getLayout(db, TEST_TENANT, branch)).floors[0]!.items).toEqual(ground.items)
+    expect(await db.select().from(branchLayoutItemLooks)).toEqual([])
+    // Another size is the contract's 400 at the route, never saved.
+    const resized = floor('ground', 'Ground', { items: [{ ...figures[0]!, width: 60 }] })
+    expect(v.safeParse(floorSchema, resized).issues?.map(issue => issue.message)).toContain('People and pets keep their own size')
   })
 
   it('replaces the whole layout from the version read: a floor taken out goes with its tables', async () => {

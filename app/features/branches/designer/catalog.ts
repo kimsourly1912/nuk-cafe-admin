@@ -1,3 +1,4 @@
+import { FIGURE_SIZES } from '#shared/contracts/shop-layout'
 import type { Finish, ItemKind, ItemLook, LayoutItem, TableLook } from '#shared/contracts/shop-layout'
 
 /**
@@ -45,7 +46,7 @@ export interface FinishSlot {
   default: Finish
 }
 
-export type ItemCategory = 'chairs' | 'fixtures' | 'structure'
+export type ItemCategory = 'chairs' | 'fixtures' | 'structure' | 'figures'
 
 export interface ItemSpec {
   kind: ItemKind
@@ -83,6 +84,10 @@ export const ITEM_SPECS: Record<ItemKind, ItemSpec> = {
   'plant': { kind: 'plant', label: 'Plant', category: 'fixtures', footprint: 'round', width: 50, depth: 50, height: 120, slots: [{ key: 'pot', label: 'Pot', options: ['terracotta', ...STONES], default: 'terracotta' }], photo: BUILT_IN_PHOTO('plant') },
   'room-divider': { kind: 'room-divider', label: 'Room divider', category: 'fixtures', footprint: 'rect', width: 120, depth: 20, height: 180, slots: [frame('warm-oak')], photo: BUILT_IN_PHOTO('room-divider') },
   'stairs': { kind: 'stairs', label: 'Stairs', category: 'structure', footprint: 'rect', width: 100, depth: 340, height: 300, slots: [{ key: 'tread', label: 'Treads', options: WOODS, default: 'warm-oak' }], photo: null },
+  // People and pets (step 3g, D274): a model of a fixed size (the contract's), no finishes.
+  'person': { kind: 'person', label: 'Person', category: 'figures', footprint: 'rect', ...FIGURE_SIZES.person, height: 170, slots: [], photo: null },
+  'cat': { kind: 'cat', label: 'Cat', category: 'figures', footprint: 'rect', ...FIGURE_SIZES.cat, height: 30, slots: [], photo: null },
+  'dog': { kind: 'dog', label: 'Dog', category: 'figures', footprint: 'rect', ...FIGURE_SIZES.dog, height: 55, slots: [], photo: null },
 }
 
 export const TABLE_SLOTS: Record<'top' | 'base', FinishSlot> = {

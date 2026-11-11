@@ -1,5 +1,5 @@
 import type { Floor, LayoutItem, Point, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength } from '#shared/contracts/shop-layout'
+import { edgeLength, isFigureKind } from '#shared/contracts/shop-layout'
 import { ITEM_SPECS } from './catalog'
 import type { Bounds, Pose, Sized } from './geometry'
 import { BOOTH_BENCH_DEPTH_CM, boundsOf, outwardNormal, pointInPolygon, pointOnEdge, rectCorners, rotatePoint, WALL_THICKNESS_CM, wallPieces } from './geometry'
@@ -30,7 +30,12 @@ function footprint(piece: Sized, round: boolean): Point[] {
   })
 }
 
+/**
+ * A piece's footprint for the warnings. People and pets (step 3g) have none: a customer on a chair
+ * or a cat under a table is where they belong, so they neither warn nor make others warn.
+ */
 export function itemFootprint(item: Pick<LayoutItem, 'id' | 'kind'> & Sized): PlanFootprint {
+  if (isFigureKind(item.kind)) return { id: item.id, parts: [] }
   return { id: item.id, parts: [footprint(item, ITEM_SPECS[item.kind].footprint === 'round')] }
 }
 

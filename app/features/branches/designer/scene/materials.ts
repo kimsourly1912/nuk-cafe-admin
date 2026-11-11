@@ -1,4 +1,4 @@
-import { CanvasTexture, Color, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three'
+import { CanvasTexture, Color, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three'
 import type { Material, Texture } from 'three'
 import type { Finish } from '#shared/contracts/shop-layout'
 import { FINISH_SWATCHES } from '../catalog'
@@ -10,7 +10,7 @@ import { FINISH_SWATCHES } from '../catalog'
  * are plain colors.
  */
 
-export type SurfaceKey = 'plaster' | 'plaster-outside' | 'floor-wood' | 'floor-tiles' | 'slab' | 'roof' | 'glass' | 'frame' | 'leaf' | 'leaf-dark' | 'soil' | 'ground' | 'highlight' | 'lamp' | 'plinth' | 'ceramic'
+export type SurfaceKey = 'plaster' | 'plaster-outside' | 'floor-wood' | 'floor-tiles' | 'slab' | 'roof' | 'glass' | 'frame' | 'leaf' | 'leaf-dark' | 'soil' | 'ground' | 'highlight' | 'lamp' | 'plinth' | 'ceramic' | 'contact-shadow'
 
 export interface MaterialLibrary {
   finish: (finish: Finish) => Material
@@ -19,7 +19,7 @@ export interface MaterialLibrary {
   dispose: () => void
 }
 
-type Pattern = 'grain' | 'weave' | 'speckle' | 'planks' | 'tiles' | 'plaster'
+type Pattern = 'grain' | 'weave' | 'speckle' | 'planks' | 'tiles' | 'plaster' | 'shadow'
 
 export function createMaterialLibrary(): MaterialLibrary {
   const textures = new Map<Pattern, Texture>()
@@ -105,6 +105,8 @@ function makeSurface(key: SurfaceKey, pattern: (key: Pattern) => Texture | null)
     case 'lamp': return new MeshStandardMaterial({ color: '#fff3d6', emissive: new Color('#ffcf85'), emissiveIntensity: 1.6 })
     case 'plinth': return new MeshStandardMaterial({ color: '#1f1b18', roughness: 0.7 })
     case 'ceramic': return new MeshStandardMaterial({ color: '#f4f1ec', roughness: 0.3 })
+    // A soft dark spot under a figure (step 3g): no light, no depth writes, drawn over the floor.
+    case 'contact-shadow': return new MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.35, depthWrite: false, alphaMap: pattern('shadow') })
   }
 }
 
@@ -119,6 +121,16 @@ function drawPattern(key: Pattern): HTMLCanvasElement {
   context.fillStyle = '#ffffff'
   context.fillRect(0, 0, size, size)
   switch (key) {
+    // An alpha map: opaque (white) in the middle, fading to nothing (black) at the edge.
+    case 'shadow': {
+      const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+      gradient.addColorStop(0, '#ffffff')
+      gradient.addColorStop(0.45, '#9a9a9a')
+      gradient.addColorStop(1, '#000000')
+      context.fillStyle = gradient
+      context.fillRect(0, 0, size, size)
+      break
+    }
     case 'grain':
       for (let line = 0; line < 90; line++) {
         const y = random() * size

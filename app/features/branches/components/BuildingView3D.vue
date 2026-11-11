@@ -7,6 +7,7 @@
  * shows the same message, with Try again.
  */
 import type { DiningTable } from '#shared/contracts/branches'
+import { isFigureKind } from '#shared/contracts/shop-layout'
 import type { ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { findLook } from '../designer/catalog'
 import type { BuildingNavigation, BuildingViewer } from '../designer/scene/building-viewer'
@@ -49,6 +50,12 @@ const viewpoints = computed(() => navigation.value.mode === 'inside' ? navigatio
 const canEnter = computed(() => status.value === 'ready' && drawn.value)
 const stats = ref<StageStats | null>(null)
 const listsOpen = ref(false)
+/** People and pets (step 3g): this viewer's own choice, never saved. */
+const hasFigures = computed(() => props.layout.floors.some(floor => floor.items.some(item => isFigureKind(item.kind))))
+const showFigures = ref(true)
+const animate = ref(true)
+/** Animate starts off on a device measured slow, unless the person already chose. */
+let animateChosen = false
 let viewer: BuildingViewer | null = null
 let modeChange: Promise<void> | undefined
 let revealRequest = 0
@@ -95,13 +102,17 @@ async function start() {
       canvas: canvas.value,
       labels: labels.value,
       dark: dark.value,
-      onStats: value => (stats.value = value),
+      onStats: (value) => {
+        stats.value = value
+        if (value.quality === 'low' && !animateChosen) animate.value = false
+      },
       onFirstFrame: () => (drawn.value = true),
       onContextLost: graphicsUnavailable,
       onNavigationChange: next => (navigation.value = next),
       onSelectTable: id => (selectedTable.value = id),
       onSelectFloor: id => void focusFloor(id),
     })
+    viewer.setPlayback({ figures: showFigures.value, animate: animate.value })
     viewer.setScene({ layout: props.layout, tables: props.tables, looks: props.looks, itemLooks: props.itemLooks })
     status.value = 'ready'
     // A table picked in Design shop, or before Try again.
@@ -122,6 +133,12 @@ watch(() => [props.layout, props.tables, props.looks, props.itemLooks] as const,
   viewer?.setScene({ layout, tables, looks, itemLooks })
 })
 watch(dark, value => viewer?.setTheme(value))
+watch([showFigures, animate], ([figures, animateValue]) => viewer?.setPlayback({ figures, animate: animateValue }))
+
+function chooseAnimate(value: boolean) {
+  animateChosen = true
+  animate.value = value
+}
 watch(selectedTable, id => viewer?.selectTable(id))
 
 function setMode(next: 'exterior' | 'cutaway') {
@@ -337,16 +354,46 @@ function selectFromList(tableId: string) {
               data-testid="building-unsaved"
             />
           </div>
-          <UButton
-            v-if="mode !== 'inside'"
-            label="Fit building"
-            icon="i-lucide-maximize"
-            color="neutral"
-            variant="outline"
-            class="bg-default"
-            :ui="{ label: 'max-sm:sr-only' }"
-            @click="fit"
-          />
+          <div class="flex shrink-0 items-start gap-2">
+            <UPopover
+              v-if="hasFigures"
+              :content="{ align: 'end' }"
+            >
+              <UButton
+                label="People and pets"
+                icon="i-lucide-person-standing"
+                color="neutral"
+                variant="outline"
+                class="bg-default"
+                :ui="{ label: 'max-sm:sr-only' }"
+                data-testid="figure-playback"
+              />
+              <template #content>
+                <div class="flex flex-col gap-3 p-3">
+                  <USwitch
+                    v-model="showFigures"
+                    label="Show people and pets"
+                  />
+                  <USwitch
+                    :model-value="animate"
+                    label="Animate"
+                    :disabled="!showFigures"
+                    @update:model-value="chooseAnimate"
+                  />
+                </div>
+              </template>
+            </UPopover>
+            <UButton
+              v-if="mode !== 'inside'"
+              label="Fit building"
+              icon="i-lucide-maximize"
+              color="neutral"
+              variant="outline"
+              class="bg-default"
+              :ui="{ label: 'max-sm:sr-only' }"
+              @click="fit"
+            />
+          </div>
         </div>
 
         <div class="absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">

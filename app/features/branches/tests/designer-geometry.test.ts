@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
-import { layoutSchema } from '#shared/contracts/shop-layout'
+import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
 import { besideOf, chairPoses, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, snap, wallPieces } from '../designer/geometry'
@@ -49,6 +49,18 @@ describe('the layout contract', () => {
     const short = demoLayout()
     short.floors[0]!.edges.pop()
     expect(messages(short)).toContain('Every outline edge needs its kind')
+  })
+
+  it('keeps people and pets at their own size, without finishes or a look (step 3g)', () => {
+    const withFigure = (figure: Record<string, unknown>) => {
+      const layout = demoLayout()
+      layout.floors[0]!.items.push({ id: 'figure', kind: 'cat', x: 200, y: 200, rotation: 30, ...FIGURE_SIZES.cat, finishes: {}, ...figure } as Floor['items'][number])
+      return layout
+    }
+    for (const kind of FIGURE_KINDS) expect(messages(withFigure({ kind, ...FIGURE_SIZES[kind] })), kind).toEqual([])
+    expect(messages(withFigure({ width: FIGURE_SIZES.cat.width + 5 }))).toContain('People and pets keep their own size')
+    expect(messages(withFigure({ finishes: { frame: 'walnut' } }))).toContain('People and pets have no finishes')
+    expect(messages(withFigure({ lookId: 'look-1' }))).toContain('Stairs, people and pets have no custom look')
   })
 
   it('places every demo table at most once and leaves two unplaced', () => {
@@ -151,6 +163,16 @@ describe('the plan', () => {
     expect(placementWarnings(withWall, [piece]).get('table')).toEqual({ outside: false, overlap: true })
     const nearEdge = tableFootprint({ ...table, x: 530, y: 700 }, round, chairs)
     expect(placementWarnings(floor, [nearEdge]).get('table')?.outside).toBe(true)
+  })
+
+  it('never warns about people and pets, nor because of them (step 3g)', () => {
+    const floor = { ...demoLayout().floors[0]!, walls: [] }
+    const table = { tableId: 'table', x: 300, y: 300, width: 80, depth: 80, rotation: 0 }
+    const piece = tableFootprint(table, round, chairPoses(round, table.width, table.depth, 4))
+    const seated = itemFootprint({ id: 'person', kind: 'person', x: 300, y: 250, rotation: 0, ...FIGURE_SIZES.person })
+    const outside = itemFootprint({ id: 'cat', kind: 'cat', x: -400, y: -400, rotation: 0, ...FIGURE_SIZES.cat })
+    expect(placementWarnings(floor, [piece, seated, outside]).size).toBe(0)
+    expect(placementWarnings(floor, [piece], seated).size).toBe(0)
   })
 
   it('uses a point inside a U-shaped floor and skips a door viewpoint outside a narrow room', () => {
