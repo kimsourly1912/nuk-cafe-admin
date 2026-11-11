@@ -1,5 +1,5 @@
 import type { Point, ShopLayout } from '#shared/contracts/shop-layout'
-import { edgeLength } from '#shared/contracts/shop-layout'
+import { streetDoor, edgeLength } from '#shared/contracts/shop-layout'
 import { findOpening, outwardNormal, pointOnEdge } from './geometry'
 
 /**
@@ -120,10 +120,11 @@ export function seededRandom(seed: string): () => number {
  * The café's front: the ground floor's first door, or, without one, its longest wall (any edge if
  * it has no wall). Null when the layout has no drawn floor.
  */
-export function frontFrame(layout: Pick<ShopLayout, 'floors'>): FrontFrame | null {
+export function frontFrame(layout: Pick<ShopLayout, 'floors' | 'scene'>): FrontFrame | null {
   const ground = layout.floors.find(floor => floor.outline.length >= 3)
   if (!ground) return null
-  const door = findOpening(ground.edges, 'door')
+  const door = (ground === layout.floors[0] ? streetDoor(layout.floors, layout.scene?.entrance) : undefined)
+    ?? findOpening(ground.edges, 'door')
   let index: number
   let along: number
   if (door) {
@@ -161,7 +162,7 @@ export function toFrame(frame: FrontFrame, point: Point): { u: number, n: number
  * lane has. The café's box covers every floor (an upper floor can overhang), so nothing stands in
  * it; an L-shaped café's empty corner stays open pavement.
  */
-export function planLane(layout: Pick<ShopLayout, 'floors'>, seed: string): SurroundingsPlan | null {
+export function planLane(layout: Pick<ShopLayout, 'floors' | 'scene'>, seed: string): SurroundingsPlan | null {
   const frame = frontFrame(layout)
   if (!frame) return null
   const random = seededRandom(`lane:${seed}`)

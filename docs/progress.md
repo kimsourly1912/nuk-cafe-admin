@@ -3,6 +3,12 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Explore E3 branch data (D275, 2026-11-11)
+
+- Branch settings saves a public coordinate pair. Design shop saves the street door and Explore switch with the drawing. The public read checks the café, branch, pin and publication state in one database snapshot and projects only the drawing and the looks it uses. [Plan → Step E3](plans/explore.md#step-e3-branch-data).
+- Migration `0064_branch_explore_pin` adds the two nullable coordinates and their paired range check in place. The generated migration initially proposed rebuilding `branches`. The in-place migration preserves existing branch references.
+- Lint, typecheck and the high-severity audit passed. The unit and server suite passed 2,903 tests with one existing skip. The migration replay preserved an existing layout reference and rejected partial and out-of-range pins. Removing the tenant, pin, active-branch or opt-in guard failed the matching publication test. The phone-width browser scenario published and withdrew the layout against the built server.
+
 ### Explore E2: tuk-tuk (D275, 2026-11-11)
 
 - Players can call a generated tuk-tuk from the curb or map, choose a stop, open the passenger door, board, switch between cabin and chase views, skip the trip and exit at the curb. Two demo stops reuse the E1 street. Returning to street resets the ride. [Plan → Step E2](plans/explore.md#step-e2-tuk-tuk).

@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, not, sql } from 'drizzle-orm'
+import { and, asc, count, eq, exists, inArray, isNotNull, not, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { DiningTableStatus, TableDeleteBlocker } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
@@ -7,7 +7,7 @@ import { readInChunks, replaceAll, requireAtMost, updateAtVersion } from '#serve
 import { atVersion, byId, firstRow, hasAny, inTenant, snapshotRows, withStatus } from '#server/utils/query'
 import { organization, user } from '#server/db/tables'
 import { tableOnAnOrder } from '#server/features/orders'
-import { branches, branchHours, diningTables } from './branches.schema'
+import { branches, branchHours, branchLayouts, diningTables } from './branches.schema'
 
 // --- Row types ---
 
@@ -17,6 +17,8 @@ export interface BranchRow {
   timezone: string
   address: string | null
   phone: string | null
+  latitude: number | null
+  longitude: number | null
   status: string | null
   version: number | null
   /** Online orders paused until then (D199); past or `null`: not paused. */
@@ -78,6 +80,8 @@ const branchColumns = {
   timezone: branches.timezone,
   address: branches.address,
   phone: branches.phone,
+  latitude: branches.latitude,
+  longitude: branches.longitude,
   status: branches.status,
   version: branches.version,
   pausedUntil: branches.pausedUntil,
@@ -123,6 +127,26 @@ export async function listActiveBranches(db: Db, tenantId: string): Promise<Bran
   return db.select({ id: branches.id, name: branches.name, timezone: branches.timezone }).from(branches)
     .where(inTenant(branches, tenantId, activeBranch))
     .orderBy(asc(branches.name), asc(branches.id))
+}
+
+export const branchHasPin = and(isNotNull(branches.latitude), isNotNull(branches.longitude))
+export const exploreIsOn = sql`json_extract(${branchLayouts.scene}, '$.explore') = 1`
+
+/** Active customer branches and their opening hours from the same snapshot. */
+export async function publicBranchRows(db: Db, tenantId: string): Promise<{
+  options: (BranchRow & { hasExplore: boolean })[]
+  hours: (WeeklyWindow & { branchId: string })[]
+}> {
+  const optedIn = exists(db.select({ id: branchLayouts.branchId }).from(branchLayouts)
+    .where(inTenant(branchLayouts, tenantId, eq(branchLayouts.branchId, branches.id), exploreIsOn)))
+  const [options, hours] = await db.batch([
+    db.select({ ...branchColumns, hasExplore: sql<boolean>`(${branchHasPin} and ${optedIn})`.mapWith(Boolean) }).from(branches)
+      .where(inTenant(branches, tenantId, activeBranch)).orderBy(asc(branches.name), asc(branches.id)),
+    db.select({ branchId: branchHours.branchId, weekday: branchHours.weekday, startMinute: branchHours.startMinute, endMinute: branchHours.endMinute })
+      .from(branchHours).innerJoin(branches, and(eq(branches.tenantId, branchHours.tenantId), eq(branches.id, branchHours.branchId), activeBranch))
+      .where(inTenant(branchHours, tenantId)).orderBy(asc(branchHours.weekday), asc(branchHours.startMinute)),
+  ])
+  return { options, hours }
 }
 
 /** The branch's opening windows, by weekday, then start. Uses branch_hours' primary key. */
@@ -208,7 +232,7 @@ export function activeBranchesAtMost(db: Db, tenantId: string, max: number): Sta
  * Moves the branch to the next version if it's still at `version` and active, applying `changes`.
  * Follow it with `requireOneChange`.
  */
-export function touchBranchStatement(db: Db, tenantId: string, id: string, version: number, changes: Partial<Pick<BranchRow, 'name' | 'timezone' | 'address' | 'phone'>>): Statement {
+export function touchBranchStatement(db: Db, tenantId: string, id: string, version: number, changes: Partial<Pick<BranchRow, 'name' | 'timezone' | 'address' | 'phone' | 'latitude' | 'longitude'>>): Statement {
   return updateAtVersion(db, branches, { tenantId, id, version }, changes, activeBranch)
 }
 

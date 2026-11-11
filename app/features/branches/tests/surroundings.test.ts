@@ -62,6 +62,13 @@ describe('the café\'s front', () => {
     expect(front.y).toBeCloseTo(frame.out.y, 6)
   })
 
+  it('uses the saved street door when the ground floor has several doors', () => {
+    const ground = floor(rectangle(600, 400), { edge: 0, offset: 100 })
+    ground.edges[2]!.openings = [{ id: 'street', kind: 'door', offset: 200, width: 100 }]
+    expect(frontFrame({ floors: [ground] })?.origin).toEqual({ x: 150, y: 0 })
+    expect(frontFrame({ floors: [ground], scene: { preset: 'neighborhood-lane', entrance: 'street' } })?.origin).toEqual({ x: 350, y: 400 })
+  })
+
   it('without a door, faces out of the longest wall; without a floor, there is none', () => {
     const frame = frontFrame({ floors: [floor(rectangle(900, 400))] })!
     expect(frame.from).toBe('longest-wall')

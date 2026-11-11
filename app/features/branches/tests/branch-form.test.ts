@@ -9,6 +9,8 @@ const settings = (hours: BranchSettings['hours']): BranchSettings => ({
   timezone: 'Asia/Phnom_Penh',
   address: null,
   phone: '+85512345678',
+  latitude: null,
+  longitude: null,
   status: 'active',
   hours,
   openNow: false,

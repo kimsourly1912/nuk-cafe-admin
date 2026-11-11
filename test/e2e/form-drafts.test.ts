@@ -170,6 +170,8 @@ describe('branch settings keep their unsaved input', () => {
     timezone: 'Asia/Phnom_Penh',
     address: '#123 St. 63',
     phone: null,
+    latitude: null,
+    longitude: null,
     status: 'active',
     hours: [1, 2, 3, 4, 5].map(weekday => ({ weekday, startMinute: 480, endMinute: 1140 })),
     openNow: true,

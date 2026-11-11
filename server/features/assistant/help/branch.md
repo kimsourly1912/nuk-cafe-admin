@@ -33,6 +33,8 @@ If the browser closes or you are signed out before saving, the page offers your 
 
 Orders close 15 minutes before closing time ("last orders"). The business day runs from 4:00 AM to 4:00 AM, so a night past midnight counts as the day before.
 
+When Explore is enabled, use **Explore map pin** to save the branch latitude and longitude. You can paste a coordinate pair from Google Maps into either field. These coordinates are public. Clearing both fields and saving hides the layout from Explore.
+
 ## Dining tables
 
 Each table has a QR code. A customer who scans it orders for that table (dine-in); without it, orders are for pickup.
@@ -91,6 +93,10 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 **View in 3D:** the same layout as a small building. Drag to turn it, scroll or pinch to zoom. **Fit building** frames the whole building. **Exterior** shows it from outside; **Cutaway** takes the roof and the near walls away and pulls the floors apart. Pick a floor in **Floors**, then **Enter floor** to stand inside it. To find a table, pick it in **Tables** (on a phone: **Floors and tables**) or tap it in the building: its card shows its area, seats and floor, **View QR** (its code, to scan or download) and **Show on plan** (opens Design shop with that table selected). Tap a chair, a fixture, the stairs or a person or pet to select it: its card shows what it is, its size and height and its floor, and **Show on plan** opens Design shop with it selected. A piece selected in Design shop is selected in 3D too. A table that is not on the plan is not in 3D. **Unsaved changes shown** means the building includes changes you haven't saved yet. When the layout has people or pets, **People and pets** (top right) has **Show people and pets** and **Animate** (small movements: breathing, a tail, a swaying hammock). These are only for your own screen and are not saved; Animate starts off on a device that draws 3D slowly, and pauses while the tab is hidden.
 
 **Save:** **Save layout** and its recovery actions are available in both Design shop and View in 3D. Every change can be undone (**Undo**, Ctrl/⌘ Z) until you press **Save layout** (top right; **Unsaved changes** shows next to it). The whole layout saves at once. Leaving the page with unsaved changes asks first.
+
+### Publish the layout in Explore
+
+In **Design shop**, open **Explore settings**, choose a ground-floor **Street door**, and turn on **Show in Explore**. Use **Save layout** to publish. The branch needs a saved map pin. Turn the switch off and save the layout to withdraw it.
 
 ## Common problems
 

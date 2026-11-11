@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import type { BranchSettings, CreateBranchInput, UpdateBranchSettingsInput } from '#shared/contracts/branches'
-import { BRANCH_ADDRESS_MAX, BRANCH_NAME_MAX } from '#shared/contracts/branches'
+import { BRANCH_ADDRESS_MAX, BRANCH_NAME_MAX, latitudeSchema, longitudeSchema } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import { MINUTES_PER_DAY } from '#shared/contracts/common'
 import type { PhoneCountry } from '#shared/contracts/phone'
@@ -33,6 +33,8 @@ export interface BranchForm {
   name: string
   timezone: string
   address: string
+  latitude: string
+  longitude: string
   /** As typed, for `phoneCountry` (D127); sent as E.164. */
   phone: string
   phoneCountry: PhoneCountry
@@ -69,16 +71,32 @@ function phoneProblem(form: { phone: string, phoneCountry: PhoneCountry }): stri
 const nameField = v.pipe(v.string(), v.trim(), v.minLength(1, 'Name is required'), v.maxLength(BRANCH_NAME_MAX, `Max ${BRANCH_NAME_MAX} characters`))
 const timezoneField = v.pipe(v.string(), v.minLength(1, 'Choose a time zone'))
 
+function coordinate(value: string | undefined): number | null {
+  const text = value?.trim() ?? ''
+  if (!text) return null
+  return /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text) ? Number(text) : Number.NaN
+}
+
+function validCoordinate(value: string | undefined, schema: typeof latitudeSchema | typeof longitudeSchema): boolean {
+  const parsed = coordinate(value)
+  return parsed === null || v.safeParse(schema, parsed).success
+}
+
 export const branchFormSchema = v.pipe(v.object({
   name: nameField,
   timezone: timezoneField,
   address: v.pipe(v.string(), v.maxLength(BRANCH_ADDRESS_MAX, `Max ${BRANCH_ADDRESS_MAX} characters`)),
+  latitude: v.pipe(v.optional(v.string(), ''), v.check(value => validCoordinate(value, latitudeSchema), 'Enter a latitude between −90 and 90.')),
+  longitude: v.pipe(v.optional(v.string(), ''), v.check(value => validCoordinate(value, longitudeSchema), 'Enter a longitude between −180 and 180.')),
   phone: v.string(),
   phoneCountry: v.picklist(PHONE_COUNTRIES.map(country => country.code)),
   days: v.pipe(v.array(daySchema), v.length(7)),
 }), v.forward(
   v.partialCheck([['phone'], ['phoneCountry']], form => !phoneProblem(form), issue => phoneProblem(issue.input as { phone: string, phoneCountry: PhoneCountry }) ?? ''),
   ['phone'],
+), v.forward(
+  v.partialCheck([['latitude'], ['longitude']], form => (coordinate(form.latitude) === null) === (coordinate(form.longitude) === null), 'Enter both coordinates, or leave both blank.'),
+  ['latitude'],
 ))
 
 /** The draft for these settings: each day open with its windows, or closed with the default times. */
@@ -92,7 +110,7 @@ export function toBranchForm(settings: BranchSettings): BranchForm {
   // A saved number shows without its country code; one saved as free text before D127 shows as it is.
   const saved = settings.phone ? parsePhone(settings.phone) : undefined
   const phone = saved?.ok ? { phone: saved.local, phoneCountry: saved.country } : { phone: settings.phone ?? '', phoneCountry: DEFAULT_PHONE_COUNTRY }
-  return { name: settings.name, timezone: settings.timezone, address: settings.address ?? '', ...phone, days }
+  return { name: settings.name, timezone: settings.timezone, address: settings.address ?? '', latitude: settings.latitude?.toString() ?? '', longitude: settings.longitude?.toString() ?? '', ...phone, days }
 }
 
 /** Where each window sent in `hours` sits in the form, in the same order. */
@@ -115,8 +133,13 @@ function toE164(form: BranchForm): string | null {
 }
 
 /** The complete draft in one request, from the version it was based on (the settings blueprint). */
-export function toUpdateBranchBody(form: BranchForm, version: number): UpdateBranchSettingsInput {
+export function toUpdateBranchBody(form: BranchForm, version: number, savedPin?: Pick<BranchSettings, 'latitude' | 'longitude'>): UpdateBranchSettingsInput {
+  const latitude = coordinate(form.latitude)
+  const longitude = coordinate(form.longitude)
+  const pinChanged = savedPin && (latitude !== (savedPin.latitude ?? null) || longitude !== (savedPin.longitude ?? null))
+    && form.latitude !== undefined && form.longitude !== undefined
   return {
+    ...(pinChanged && { latitude, longitude }),
     version,
     name: form.name.trim(),
     timezone: form.timezone,

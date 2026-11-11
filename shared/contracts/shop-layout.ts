@@ -281,12 +281,29 @@ export type ScenePreset = typeof SCENE_PRESETS[number]
 export const LAYOUT_SCENE_MAX_BYTES = 2 * 1024
 
 export const layoutSceneSchema = v.pipe(
-  v.strictObject({ preset: v.picklist(SCENE_PRESETS, 'Unknown scene') }),
+  v.strictObject({
+    preset: v.picklist(SCENE_PRESETS, 'Unknown scene'),
+    entrance: v.optional(v.nullable(idSchema)),
+    explore: v.optional(v.boolean()),
+  }),
+  v.forward(v.check(scene => !scene.explore || scene.entrance != null, 'Choose a ground-floor street door to show this layout in Explore.'), ['entrance']),
   v.check(scene => jsonBytes(scene) <= LAYOUT_SCENE_MAX_BYTES, 'The scene is too large'),
 )
 export type LayoutScene = v.InferOutput<typeof layoutSceneSchema>
 /** A branch that never chose one. */
 export const NO_SCENE: LayoutScene = { preset: 'none' }
+
+/** The uniquely identified door on the first floor, with its edge for the street frame. */
+export function streetDoor(floors: readonly Pick<Floor, 'edges'>[], entrance: string | null | undefined): { index: number, opening: Opening } | undefined {
+  const ground = floors[0]
+  if (!ground || entrance == null) return
+  const matches = ground.edges.flatMap((edge, index) => edge.openings
+    .filter(opening => opening.kind === 'door' && opening.id === entrance)
+    .map(opening => ({ index, opening })))
+  return matches.length === 1 ? matches[0] : undefined
+}
+
+export const INVALID_STREET_DOOR = 'Choose a door on the ground floor.'
 
 export const layoutSchema = v.pipe(
   v.strictObject({
@@ -295,6 +312,7 @@ export const layoutSchema = v.pipe(
     /** Saved with the layout, at its version (step 4a). Left out: the saved scene stays (an app tab from before 4a). */
     scene: v.optional(layoutSceneSchema),
   }),
+  v.forward(v.check(layout => layout.scene?.entrance == null || Boolean(streetDoor(layout.floors, layout.scene.entrance)), INVALID_STREET_DOOR), ['scene', 'entrance']),
   v.check(layout => unique(layout.floors.map(floor => floor.id)), 'Floor ids repeat'),
   v.check(layout => unique(layout.placements.map(placement => placement.tableId)), 'A table is placed twice'),
   v.check(layout => layout.placements.every(placement => layout.floors.some(floor => floor.id === placement.floorId)), 'A table is on a floor that does not exist'),
@@ -346,6 +364,15 @@ export interface TableLook {
    * a built-in look ships with (step 3d, a static file of the app's).
    */
   photo?: LookImage | null
+}
+
+/** Public geometry. A placed table's drawing carries its seat count instead of its dining record. */
+export interface PublicExploreLayout {
+  floors: Floor[]
+  placements: (Omit<Placement, 'tableId'> & { seats: number })[]
+  scene: Pick<LayoutScene, 'preset'> & { entrance: string, explore: true }
+  looks: Omit<TableLook, 'name' | 'photo'>[]
+  itemLooks: Omit<ItemLook, 'name' | 'photo'>[]
 }
 
 /** Where a look's picture is served. */

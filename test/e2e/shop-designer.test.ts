@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
-import { describe, expect, inject, it } from 'vitest'
+import { afterEach, describe, expect, inject, it } from 'vitest'
 import type { DiningTable } from '#shared/contracts/branches'
 import { FIGURE_SIZES } from '#shared/contracts/shop-layout'
 import type { BranchLayout, CustomItemLook, CustomLook, Point } from '#shared/contracts/shop-layout'
@@ -10,6 +10,10 @@ import { setupE2e } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
 import { allowBrowserProblems } from './support/browser-problems'
 
+const pages: Page[] = []
+afterEach(async () => {
+  await Promise.all(pages.splice(0).map(page => page.context().close()))
+})
 await setupE2e()
 
 // The shop designer (D273, step 2b) on the built server and its seeded database, no mocks: Layout
@@ -27,6 +31,7 @@ const api = (branchId: string) => `/api/c/${lab.slug}/admin/branches/${branchId}
 
 async function signedIn(width = 1440, height = 900) {
   const page = await createPage()
+  pages.push(page)
   page.setDefaultTimeout(15_000)
   await page.setViewportSize({ width, height })
   await asNewVisitor(page)
@@ -1003,5 +1008,77 @@ describe('the shop designer on saved layouts', () => {
     await page.context().setOffline(false)
     await expect.poll(() => panel.getByRole('radio', { name: /No surroundings/ }).getAttribute('aria-checked')).toBe('true')
     expect(await saveButton(page).isDisabled()).toBe(true)
+  })
+
+  it('publishes and withdraws an Explore layout with a branch pin and street door', { timeout: 120_000 }, async () => {
+    const page = await signedIn(390, 844)
+    const branchId = lab.annexBranchId
+    const path = `/c/${lab.slug}/admin/branches/${branchId}`
+    const publicPath = (slug = lab.slug) => url(`/api/c/${slug}/public/explore/branches/${branchId}`)
+    const existing = await savedLayout(page, branchId)
+    const prepared = await page.request.put(url(`${api(branchId)}/layout`), { headers: { origin: new URL(page.url()).origin }, data: {
+      version: existing.version,
+      layout: {
+        floors: [{
+          id: 'ground-explore', name: 'Ground', height: 300, hasRoof: true,
+          outline: [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 500 }, { x: 0, y: 500 }],
+          edges: [
+            { kind: 'wall', openings: [{ id: 'side-door', kind: 'door', offset: 100, width: 100 }] },
+            { kind: 'wall', openings: [] },
+            { kind: 'wall', openings: [{ id: 'street-door', kind: 'door', offset: 200, width: 100 }] },
+            { kind: 'wall', openings: [] },
+          ],
+          walls: [],
+          items: [],
+        }],
+        placements: [],
+      },
+    } })
+    expect(prepared.status()).toBe(200)
+    expect((await fetch(publicPath())).status).toBe(404)
+
+    await page.goto(url(path), { waitUntil: 'hydration' })
+    const latitude = page.getByLabel('Latitude', { exact: true })
+    await latitude.waitFor()
+    await latitude.evaluate((field) => {
+      const clipboardData = new DataTransfer()
+      clipboardData.setData('text/plain', '11.5564, 104.9282')
+      field.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }))
+    })
+    await expect.poll(() => latitude.inputValue()).toBe('11.5564')
+    await expect.poll(() => page.getByLabel('Longitude', { exact: true }).inputValue()).toBe('104.9282')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await expect.poll(async () => {
+      const response = await fetch(url(`/api/c/${lab.slug}/public/branches`))
+      const options = await response.json() as { id: string, latitude: number }[]
+      return options.find(option => option.id === branchId)?.latitude
+    }).toBe(11.5564)
+
+    await openDesign(page, branchId)
+    const openExplore = () => page.getByRole('button', { name: 'Explore settings' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Explore settings' })
+    const toggle = dialog.getByRole('switch', { name: 'Show in Explore' })
+    await openExplore()
+    expect(await toggle.isDisabled()).toBe(true)
+    await dialog.getByRole('combobox', { name: 'Street door' }).click()
+    await page.getByRole('option', { name: 'Front edge · Door 1' }).click()
+    await toggle.click()
+    await shot(page, 'explore-settings-phone')
+    await dialog.getByRole('button', { name: 'Done' }).click()
+    await expect.poll(() => saveButton(page).isEnabled()).toBe(true)
+    expect((await fetch(publicPath())).status).toBe(404)
+    await save(page)
+
+    const published = await fetch(publicPath())
+    expect(published.status).toBe(200)
+    expect(published.headers.get('cache-control')).toContain('no-store')
+    expect(await published.json()).toMatchObject({ scene: { entrance: 'street-door', explore: true } })
+    expect((await fetch(publicPath(seed.secondCafe.slug))).status).toBe(404)
+
+    await openExplore()
+    await toggle.click()
+    await dialog.getByRole('button', { name: 'Done' }).click()
+    await save(page)
+    expect((await fetch(publicPath())).status).toBe(404)
   })
 })

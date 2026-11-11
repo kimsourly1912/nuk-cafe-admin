@@ -249,7 +249,7 @@ export function useLayoutEditor(branchId: string) {
   function setScene(preset: ScenePreset) {
     if ((draft.layout.value.scene ?? NO_SCENE).preset === preset) return
     draft.change((layout) => {
-      layout.scene = { preset }
+      layout.scene = { ...layout.scene, preset }
     })
   }
 

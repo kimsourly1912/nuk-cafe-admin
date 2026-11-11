@@ -1,3 +1,4 @@
+import { streetDoor } from '#shared/contracts/shop-layout'
 import type { ShopLayout } from '#shared/contracts/shop-layout'
 
 /**
@@ -28,6 +29,10 @@ export function useLayoutDraft(initial: ShopLayout): LayoutDraft {
   function change(apply: (draft: ShopLayout) => void) {
     const next = structuredClone(toRaw(layout.value))
     apply(next)
+    if (next.scene?.entrance != null && !streetDoor(next.floors, next.scene.entrance)) {
+      next.scene.entrance = null
+      next.scene.explore = false
+    }
     past.value = [...past.value, layout.value].slice(-HISTORY_LIMIT)
     future.value = []
     layout.value = next
