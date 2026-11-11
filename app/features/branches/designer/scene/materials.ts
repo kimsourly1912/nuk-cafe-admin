@@ -11,10 +11,16 @@ import { FINISH_SWATCHES } from '../catalog'
  */
 
 export type SurfaceKey = 'plaster' | 'plaster-outside' | 'floor-wood' | 'floor-tiles' | 'slab' | 'roof' | 'glass' | 'frame' | 'leaf' | 'leaf-dark' | 'soil' | 'ground' | 'highlight' | 'lamp' | 'plinth' | 'ceramic' | 'contact-shadow'
-  | FigureSurface
+  | FigureSurface | LaneSurface
 
 /** People and pets (step 3g): skin tones, hair, fur and the red-check krama. */
 export type FigureSurface = 'skin-light' | 'skin-medium' | 'skin-deep' | 'hair-black' | 'hair-grey' | 'fur-ginger' | 'fur-cream' | 'fur-tan' | 'fur-dark' | 'eye' | 'krama' | 'shirt-white' | 'shoe'
+
+/** The Neighborhood lane (step 3h): pastel plaster, shutters, gates, awnings, roof tiles, paving. */
+export type LaneSurface = 'paint-yellow' | 'paint-mint' | 'paint-peach' | 'paint-cream' | 'paint-blue'
+  | 'shutter-green' | 'shutter-blue' | 'shutter-brown' | 'gate' | 'awning-red' | 'awning-green' | 'awning-blue'
+  | 'roof-tile' | 'pavers' | 'yard' | 'lane' | 'curb' | 'drain' | 'base-edge' | 'window-lit' | 'trunk'
+  | 'bougainvillea' | 'moto-red' | 'rubber' | 'chrome' | 'jar' | 'wire' | 'concrete'
 
 export interface MaterialLibrary {
   finish: (finish: Finish) => Material
@@ -23,7 +29,7 @@ export interface MaterialLibrary {
   dispose: () => void
 }
 
-type Pattern = 'grain' | 'weave' | 'speckle' | 'planks' | 'tiles' | 'plaster' | 'shadow' | 'check'
+type Pattern = 'grain' | 'weave' | 'speckle' | 'planks' | 'tiles' | 'plaster' | 'shadow' | 'check' | 'pavers' | 'stripes' | 'roof-tiles'
 
 export function createMaterialLibrary(): MaterialLibrary {
   const textures = new Map<Pattern, Texture>()
@@ -126,6 +132,36 @@ function makeSurface(key: SurfaceKey, pattern: (key: Pattern) => Texture | null)
     case 'krama': return new MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, map: pattern('check'), side: DoubleSide })
     case 'shirt-white': return new MeshStandardMaterial({ color: '#f1ece3', roughness: 0.9, map: pattern('weave') })
     case 'shoe': return new MeshStandardMaterial({ color: '#2a221d', roughness: 0.6 })
+    // The lane (step 3h). Textured surfaces get their tiling from their geometry's UVs.
+    case 'paint-yellow': return new MeshStandardMaterial({ color: '#e6cf8e', roughness: 0.92, map: pattern('plaster') })
+    case 'paint-mint': return new MeshStandardMaterial({ color: '#aecdb6', roughness: 0.92, map: pattern('plaster') })
+    case 'paint-peach': return new MeshStandardMaterial({ color: '#e4b596', roughness: 0.92, map: pattern('plaster') })
+    case 'paint-cream': return new MeshStandardMaterial({ color: '#ede0c6', roughness: 0.92, map: pattern('plaster') })
+    case 'paint-blue': return new MeshStandardMaterial({ color: '#adc5d4', roughness: 0.92, map: pattern('plaster') })
+    case 'shutter-green': return new MeshStandardMaterial({ color: '#4f7a5a', roughness: 0.7, map: pattern('stripes') })
+    case 'shutter-blue': return new MeshStandardMaterial({ color: '#4d6f8a', roughness: 0.7, map: pattern('stripes') })
+    case 'shutter-brown': return new MeshStandardMaterial({ color: '#7a4a2f', roughness: 0.7, map: pattern('stripes') })
+    case 'gate': return new MeshStandardMaterial({ color: '#8d8a84', roughness: 0.5, metalness: 0.5, map: pattern('stripes') })
+    case 'awning-red': return new MeshStandardMaterial({ color: '#a8442f', roughness: 0.6, metalness: 0.2, map: pattern('stripes'), side: DoubleSide })
+    case 'awning-green': return new MeshStandardMaterial({ color: '#4f7a5a', roughness: 0.6, metalness: 0.2, map: pattern('stripes'), side: DoubleSide })
+    case 'awning-blue': return new MeshStandardMaterial({ color: '#3f6a8a', roughness: 0.6, metalness: 0.2, map: pattern('stripes'), side: DoubleSide })
+    case 'roof-tile': return new MeshStandardMaterial({ color: '#a7563a', roughness: 0.85, map: pattern('roof-tiles'), side: DoubleSide })
+    case 'pavers': return new MeshStandardMaterial({ color: '#bcae9c', roughness: 0.95, map: pattern('pavers') })
+    case 'yard': return new MeshStandardMaterial({ color: '#a99c8c', roughness: 0.95, map: pattern('pavers') })
+    case 'lane': return new MeshStandardMaterial({ color: '#7d766d', roughness: 0.95, map: pattern('speckle') })
+    case 'curb': return new MeshStandardMaterial({ color: '#d2c8b8', roughness: 0.9 })
+    case 'drain': return new MeshStandardMaterial({ color: '#3a3531', roughness: 0.7, map: pattern('stripes') })
+    case 'base-edge': return new MeshStandardMaterial({ color: '#5a4b40', roughness: 0.85 })
+    // A lit room behind a window: the evening of the owner's references.
+    case 'window-lit': return new MeshStandardMaterial({ color: '#3b2f27', roughness: 0.4, emissive: new Color('#f2a756'), emissiveIntensity: 0.35 })
+    case 'trunk': return new MeshStandardMaterial({ color: '#6a4a32', roughness: 0.9 })
+    case 'bougainvillea': return new MeshStandardMaterial({ color: '#d4508c', roughness: 0.8, flatShading: true })
+    case 'moto-red': return new MeshStandardMaterial({ color: '#a3252b', roughness: 0.35, metalness: 0.3 })
+    case 'rubber': return new MeshStandardMaterial({ color: '#1c1a19', roughness: 0.8 })
+    case 'chrome': return new MeshStandardMaterial({ color: '#c9c6c0', roughness: 0.2, metalness: 0.9 })
+    case 'jar': return new MeshStandardMaterial({ color: '#7d4527', roughness: 0.35 })
+    case 'wire': return new MeshStandardMaterial({ color: '#1e1b19', roughness: 0.6 })
+    case 'concrete': return new MeshStandardMaterial({ color: '#b7b0a6', roughness: 0.95, map: pattern('speckle') })
   }
 }
 
@@ -140,6 +176,45 @@ function drawPattern(key: Pattern): HTMLCanvasElement {
   context.fillStyle = '#ffffff'
   context.fillRect(0, 0, size, size)
   switch (key) {
+    case 'pavers': {
+      // Staggered rows of small pavers with mortar lines: 4 rows of 2 on a tile.
+      const row = size / 4
+      context.fillStyle = 'rgba(60, 50, 40, 0.35)'
+      for (let line = 0; line < 4; line++) {
+        context.fillRect(0, line * row, size, 3)
+        const shift = line % 2 ? size / 4 : 0
+        for (let column = 0; column < 3; column++) context.fillRect((shift + column * size / 2) % size, line * row, 3, row)
+        context.fillStyle = `rgba(60, 50, 40, ${0.05 + random() * 0.08})`
+        context.fillRect(shift + 4, line * row + 4, size / 2 - 8, row - 8)
+        context.fillStyle = 'rgba(60, 50, 40, 0.35)'
+      }
+      break
+    }
+    case 'stripes': {
+      // Corrugated sheet, louvres, a drain grille: soft bands, 16 to a tile.
+      const band = size / 16
+      for (let line = 0; line < 16; line++) {
+        context.fillStyle = 'rgba(0, 0, 0, 0.22)'
+        context.fillRect(line * band, 0, band * 0.4, size)
+      }
+      break
+    }
+    case 'roof-tiles': {
+      // Rows of curved clay tiles, each row darker where the next overlaps it.
+      const row = size / 6
+      const tile = size / 8
+      for (let line = 0; line < 6; line++) {
+        const gradient = context.createLinearGradient(0, line * row, 0, (line + 1) * row)
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0.3)')
+        gradient.addColorStop(0.35, 'rgba(0, 0, 0, 0)')
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.12)')
+        context.fillStyle = gradient
+        context.fillRect(0, line * row, size, row)
+        context.fillStyle = 'rgba(0, 0, 0, 0.18)'
+        for (let column = 0; column < 8; column++) context.fillRect(column * tile + (line % 2 ? tile / 2 : 0), line * row, 2, row)
+      }
+      break
+    }
     case 'check': {
       const cell = size / 8
       context.fillStyle = '#b3262b'

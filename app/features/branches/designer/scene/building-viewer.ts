@@ -2,12 +2,16 @@ import { Box3, Raycaster, Sphere, Vector2, Vector3 } from 'three'
 import type { AnimationMixer, Material, Mesh, Object3D } from 'three'
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js'
 import type { Viewpoint } from '../geometry'
+import { BENCHMARK } from '../benchmark'
 import { floorViewpoints } from '../geometry'
-import { meshesOf } from './furniture'
+import type { SurroundingsPreset } from '../surroundings'
+import { disposeBuildContext, meshesOf } from './furniture'
 import { createModelLibrary } from './models'
+import type { BuiltSurroundings } from './surroundings'
+import { buildSurroundings } from './surroundings'
 import type { BuiltScene, FigureNode, SceneInput } from './scene'
 import { buildGround, buildScene } from './scene'
-import type { StageOptions } from './stage'
+import type { StageDetails, StageOptions } from './stage'
 import { createStage, tween } from './stage'
 import { createTapTracker } from './tap-tracker'
 import { cm, fitDistance } from './units'
@@ -39,6 +43,13 @@ export interface Playback {
 export interface BuildingViewer {
   setScene: (input: SceneInput) => void
   setPlayback: (playback: Playback) => void
+  /** The street around the café (step 3h); `seed` keeps it the same for everyone (the branch id). */
+  setSurroundings: (preset: SurroundingsPreset, seed: string) => void
+  /**
+   * The benchmark (step 3h): a warm-up, then full orbits around the café at a steady pace, timing
+   * every frame. `onProgress` gets the phase. Resolves null when interrupted.
+   */
+  benchmark: (onProgress?: (phase: string) => void) => Promise<{ runs: number[][], details: StageDetails } | null>
   setMode: (mode: 'exterior' | 'cutaway') => Promise<void>
   enterFloor: (floorId: string, viewpointId?: string) => Promise<void>
   leaveFloor: () => Promise<void>
@@ -72,7 +83,10 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   const models = createModelLibrary()
   let playback: Playback = { figures: true, animate: true }
   /** The current scene's figures' idle motion: generated, or a model file's own loop. */
-  let animators = new Map<FigureNode, (delta: number) => void>()
+  let animators = new Map<FigureNode | 'surroundings', (delta: number) => void>()
+  let surroundings: BuiltSurroundings | null = null
+  let surroundingsChoice: { preset: SurroundingsPreset, seed: string } = { preset: 'none', seed: '' }
+  let ground: Mesh | null = null
   /** The model loops, stopped when their scene goes. */
   let mixers: AnimationMixer[] = []
   /** Seconds of idle motion played so far. */
@@ -92,7 +106,8 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     floorLabels.length = 0
     tableLabel = null
     built = buildScene(stage.context, next)
-    stage.scene.add(built.root, buildGround(stage.context, built.bounds))
+    ground = buildGround(stage.context, built.bounds)
+    stage.scene.add(built.root, ground)
     stage.registerLights(built.floors.flatMap(floor => floor.lights))
     stage.fitShadows(built.bounds)
     for (const floor of built.floors) {
@@ -104,6 +119,8 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     applyExplode(explode)
     applyVisibility()
     attachFigures(built)
+    // The street fits this layout: built again with it (clearContent took the old one off).
+    placeSurroundings(layoutChanged || first)
     if (selected && built.tables.has(selected)) selectTable(selected)
     else selected = null
     if (first) {
@@ -181,6 +198,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   function setPlayback(next: Playback) {
     playback = next
     for (const figure of built?.figures ?? []) figure.anchor.visible = next.figures
+    for (const figure of surroundings?.figures ?? []) figure.visible = next.figures
     stage.invalidate()
     startAnimation()
   }
@@ -226,10 +244,93 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     controls.rotateSpeed = 0.8
   }
 
+  /** What Fit frames: the building, and the street around it when shown. */
   function currentBounds(): Box3 {
     if (!built) return new Box3()
     built.root.updateMatrixWorld(true)
-    return new Box3().setFromObject(built.root)
+    const bounds = new Box3().setFromObject(built.root)
+    return surroundings ? bounds.union(surroundings.bounds) : bounds
+  }
+
+  /**
+   * Puts the chosen surroundings around the building: the ground disc goes, the base takes its
+   * place. The sun's shadow stays fitted to the building (its detail would spread thin over the
+   * street). `rebuild` builds them again (a new layout, a new choice); otherwise the current ones go
+   * back into the scene a rebuild of the building emptied.
+   */
+  function placeSurroundings(rebuild: boolean) {
+    if (!built) return
+    if (rebuild || !surroundings) {
+      disposeSurroundings()
+      surroundings = buildSurroundings(stage.materials, input!.layout, surroundingsChoice.preset, surroundingsChoice.seed)
+    }
+    if (surroundings) {
+      if (!surroundings.root.parent) stage.scene.add(surroundings.root)
+      for (const figure of surroundings.figures) figure.visible = playback.figures
+      animators.set('surroundings', () => surroundings?.idle(clock))
+    }
+    else {
+      animators.delete('surroundings')
+    }
+    if (ground) ground.visible = !surroundings
+    // Zooming out reaches the whole scene; the camera itself moves only on Fit.
+    distanceToFit(currentBounds().getBoundingSphere(new Sphere()).radius)
+    stage.invalidate()
+    startAnimation()
+  }
+
+  function disposeSurroundings() {
+    if (!surroundings) return
+    surroundings.root.removeFromParent()
+    disposeBuildContext(surroundings.context)
+    surroundings = null
+    animators.delete('surroundings')
+  }
+
+  function benchmark(onProgress?: (phase: string) => void): Promise<{ runs: number[][], details: StageDetails } | null> {
+    // The orbit owns the camera: a user's drag or a fly-to would change what is measured.
+    const current = beginNavigation(navigation.mode === 'inside' ? { mode: 'exterior' } : navigation)
+    const runs: number[][] = []
+    const total = BENCHMARK.warmUpMs + BENCHMARK.runs * BENCHMARK.runMs
+    return new Promise((resolve) => {
+      let start = -1
+      let last = -1
+      let phase = ''
+      stage.animate((now) => {
+        if (!current()) {
+          resolve(null)
+          return false
+        }
+        if (start < 0) start = now
+        const elapsed = now - start
+        // A full turn every run, about the point the camera looks at.
+        if (last >= 0) {
+          const offset = camera.position.clone().sub(controls.target)
+          offset.applyAxisAngle(new Vector3(0, 1, 0), ((now - last) / BENCHMARK.runMs) * Math.PI * 2)
+          camera.position.copy(controls.target).add(offset)
+          camera.lookAt(controls.target)
+        }
+        const run = Math.floor((elapsed - BENCHMARK.warmUpMs) / BENCHMARK.runMs)
+        const next = elapsed < BENCHMARK.warmUpMs ? 'Warming up' : `Orbit ${Math.min(run, BENCHMARK.runs - 1) + 1} of ${BENCHMARK.runs}`
+        if (next !== phase) onProgress?.((phase = next))
+        if (elapsed >= BENCHMARK.warmUpMs && run < BENCHMARK.runs && last >= 0) (runs[run] ??= []).push(now - last)
+        last = now
+        if (elapsed >= total) {
+          resolve({ runs, details: stage.details() })
+          return false
+        }
+        return true
+      }, () => resolve(null))
+    })
+  }
+
+  function setSurroundings(preset: SurroundingsPreset, seed: string) {
+    if (preset === surroundingsChoice.preset && seed === surroundingsChoice.seed) return
+    const wasShown = surroundings !== null
+    surroundingsChoice = { preset, seed }
+    placeSurroundings(true)
+    // The street costs more to draw than the café alone: measure this device again.
+    if (surroundings && !wasShown) stage.measure()
   }
 
   function applyExplode(amount: number) {
@@ -253,6 +354,15 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   /** In the cutaway, walls facing the camera step aside so the floors show. */
   function updateCutaway() {
     if (!built) return
+    if (surroundings) {
+      // In the cutaway, a shophouse between the camera and the café steps aside like a near wall.
+      const center = built.bounds.getCenter(new Vector3())
+      const toCamera = new Vector3(camera.position.x - center.x, 0, camera.position.z - center.z).normalize()
+      for (const block of surroundings.blocks) {
+        const toBlock = new Vector3(block.center.x - center.x, 0, block.center.z - center.z).normalize()
+        block.object.visible = navigation.mode !== 'cutaway' || toBlock.dot(toCamera) < 0.35
+      }
+    }
     for (const floor of built.floors) {
       for (const wall of floor.walls) {
         if (navigation.mode !== 'cutaway') {
@@ -435,6 +545,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     for (const mixer of mixers) mixer.stopAllAction()
     mixers = []
     animators.clear()
+    disposeSurroundings()
     stage.dispose()
     models.dispose()
   }
@@ -442,6 +553,8 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   return {
     setScene,
     setPlayback,
+    setSurroundings,
+    benchmark,
     setMode,
     enterFloor,
     leaveFloor,

@@ -3,6 +3,13 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 3h: the Neighborhood lane test scene and its benchmark (D274, 2026-11-11)
+
+- Step 3g merged (PR #289); the branch restarted from `main`. **Built (internal, `NUXT_PUBLIC_SHOP_DESIGNER_SCENES`: dev, staging, e2e; off in production):** the Neighborhood lane generated around any café outline (seeded by the branch id), a **Surroundings** select and **Fit scene** in View in 3D, the cutaway hiding shophouses on the camera's side, the passer-by and the cat, and the benchmark (`?bench=orbit`: 5 s warm-up, three 20 s orbits, median and p95, renderer counts, **Copy report**). [Plan → Step 3h](plans/shop-designer-scenes.md#step-3h-the-neighborhood-lane-test-scene-built-2026-11-11).
+- **Evidence (2026-11-11, Linux container, Chromium at `/opt/pw-browsers/chromium`):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2800 passed, 1 skipped (184 files); `test/e2e/shop-designer.test.ts` 19 passed. Guards removed one at a time, each failing a test: the cutaway's hiding, freeing the old lane, the benchmark's stop, Fit including the lane, the shadow kept on the café, neighbours out of the café's box. Draw calls (software renderer, 960 × 640): demo shophouse 1,132, with the lane 1,225.
+- **Waiting on the owner:** the benchmark on their Android phone and a desktop, café alone and with the lane (how: the plan's step 3h section). Then 4a ships the lane after the pilot if it passes.
+- **Finding:** the café's own furniture is most of the draw calls (each part drawn separately). Merging it by material is the first fix if the phone misses its target.
+
 ### Shop designer step 3g: people and pets (D274, 2026-11-11)
 
 - **Owner's choices (2026-11-11):** 3g first (3e and 3f after 3h, still before the pilot); QS4 answered: `blob:` joins `connect-src`; **people and pets generated from code now**, the owner uploads CC0 models later (Kenney refuses automated downloads, Poly Haven has no people or pets).

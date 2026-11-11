@@ -34,6 +34,16 @@ export interface StageOptions {
   onContextLost?: () => void
 }
 
+export interface StageDetails {
+  calls: number
+  triangles: number
+  geometries: number
+  textures: number
+  pixelRatio: number
+  width: number
+  height: number
+}
+
 export interface Stage {
   scene: Scene
   camera: PerspectiveCamera
@@ -56,6 +66,8 @@ export interface Stage {
   /** Measures this device for a second and picks the quality level. */
   measure: () => void
   setTheme: (dark: boolean) => void
+  /** What the renderer did for the last frame, and at what size (the benchmark, step 3h). */
+  details: () => StageDetails
   /** Clears the scene's own content (keeps the lights) and the cached geometries. */
   clearContent: () => void
   dispose: () => void
@@ -273,6 +285,15 @@ export function createStage(options: StageOptions): Stage {
       invalidate()
     },
     setTheme,
+    details: () => ({
+      calls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+      geometries: renderer.info.memory.geometries,
+      textures: renderer.info.memory.textures,
+      pixelRatio: renderer.getPixelRatio(),
+      width: canvas.width,
+      height: canvas.height,
+    }),
     clearContent,
     dispose,
   }

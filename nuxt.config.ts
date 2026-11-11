@@ -149,7 +149,7 @@ const WORKER_OBSERVABILITY = { enabled: true, redact_query_string: true }
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
   $development: {
-    runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' } } },
+    runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' }, shopDesignerScenes: true } },
   },
   $env: {
     // Named `prod`, not `production`: without `--envName`, c12 uses NODE_ENV, so a block named
@@ -225,6 +225,8 @@ export default defineNuxtConfig({
               // The Sample data page (D94): test data can be loaded and reset here.
               NUXT_PUBLIC_SAMPLE_DATA_ENABLED: 'true',
               NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT: 'Staging',
+              // The shop designer's surroundings, internal until they pass the benchmark (D274, 3h).
+              NUXT_PUBLIC_SHOP_DESIGNER_SCENES: 'true',
               // The AI assistant (D107, D108; owner, 2026-09-30): OpenAI. The key is the Worker
               // secret NUXT_AI_API_KEY, set by the owner; without it the assistant stays off.
               NUXT_AI_PROVIDER: 'openai',
@@ -317,6 +319,10 @@ export default defineNuxtConfig({
       // NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT names the environment on the page). Off everywhere else:
       // production never gets it, and its routes answer 404.
       sampleData: { enabled: false, environment: '' },
+      // The shop designer's surroundings and their benchmark (D274, step 3h): internal, on for the dev
+      // server, staging and the e2e server (NUXT_PUBLIC_SHOP_DESIGNER_SCENES) until the Neighborhood
+      // lane passes its benchmark; off in production.
+      shopDesignerScenes: false,
     },
   },
   routeRules: {

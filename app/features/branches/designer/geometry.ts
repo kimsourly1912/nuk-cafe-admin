@@ -296,7 +296,8 @@ export function floorViewpoints(floor: Floor, floorBelow?: Floor): Viewpoint[] {
   return usable
 }
 
-function findOpening(edges: readonly Edge[], kind: Opening['kind'], longest = false): { index: number, opening: Opening } | undefined {
+/** The first door or window on a floor (with `longest`, the widest one): its edge and itself. */
+export function findOpening(edges: readonly Edge[], kind: Opening['kind'], longest = false): { index: number, opening: Opening } | undefined {
   let found: { index: number, opening: Opening } | undefined
   edges.forEach((edge, index) => {
     for (const opening of edge.openings) {

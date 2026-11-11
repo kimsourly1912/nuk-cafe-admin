@@ -9,7 +9,10 @@
 import type { DiningTable } from '#shared/contracts/branches'
 import { isFigureKind } from '#shared/contracts/shop-layout'
 import type { ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { useClipboard } from '@vueuse/core'
 import { findLook } from '../designer/catalog'
+import { formatReport, summarizeFrames } from '../designer/benchmark'
+import type { SurroundingsPreset } from '../designer/surroundings'
 import type { BuildingNavigation, BuildingViewer } from '../designer/scene/building-viewer'
 import type { StageStats } from '../designer/scene/stage'
 import BuildingNavigator from './BuildingNavigator.vue'
@@ -25,6 +28,8 @@ const props = defineProps<{
   diningTables: readonly DiningTable[]
   /** The layout shown has changes that aren't saved yet. */
   unsaved?: boolean
+  /** Keeps the surroundings the same for everyone who opens this branch (step 3h). */
+  branchId: string
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +61,23 @@ const showFigures = ref(true)
 const animate = ref(true)
 /** Animate starts off on a device measured slow, unless the person already chose. */
 let animateChosen = false
+/**
+ * The surroundings and their benchmark (step 3h, D274): internal behind the scenes flag until the
+ * Neighborhood lane passes on a real phone and desktop; this viewer's choice, not saved yet (4a).
+ */
+const scenesEnabled = useRuntimeConfig().public.shopDesignerScenes
+const surroundings = ref<SurroundingsPreset>('none')
+const surroundingsItems: { label: string, value: SurroundingsPreset }[] = [
+  { label: 'No surroundings', value: 'none' },
+  { label: 'Neighborhood lane', value: 'neighborhood-lane' },
+]
+const route = useRoute()
+const benchMode = computed(() => scenesEnabled && route.query.bench === 'orbit')
+const benchPhase = ref<string | null>(null)
+const benchReport = ref('')
+const copyReport = useClipboard({ source: benchReport, copiedDuring: 2000 })
+let openedAt = 0
+let firstFrameMs: number | null = null
 let viewer: BuildingViewer | null = null
 let modeChange: Promise<void> | undefined
 let revealRequest = 0
@@ -91,6 +113,8 @@ function graphicsUnavailable() {
 /** Starts the 3D view on a fresh canvas: when the view opens, and again from Try again. */
 async function start() {
   stopViewer()
+  openedAt = performance.now()
+  firstFrameMs = null
   const request = startup
   status.value = 'loading'
   // The canvas is drawn again after the unavailable message: wait for the new one.
@@ -106,13 +130,17 @@ async function start() {
         stats.value = value
         if (value.quality === 'low' && !animateChosen) animate.value = false
       },
-      onFirstFrame: () => (drawn.value = true),
+      onFirstFrame: () => {
+        drawn.value = true
+        firstFrameMs ??= performance.now() - openedAt
+      },
       onContextLost: graphicsUnavailable,
       onNavigationChange: next => (navigation.value = next),
       onSelectTable: id => (selectedTable.value = id),
       onSelectFloor: id => void focusFloor(id),
     })
     viewer.setPlayback({ figures: showFigures.value, animate: animate.value })
+    if (scenesEnabled) viewer.setSurroundings(surroundings.value, props.branchId)
     viewer.setScene({ layout: props.layout, tables: props.tables, looks: props.looks, itemLooks: props.itemLooks })
     status.value = 'ready'
     // A table picked in Design shop, or before Try again.
@@ -134,6 +162,34 @@ watch(() => [props.layout, props.tables, props.looks, props.itemLooks] as const,
 })
 watch(dark, value => viewer?.setTheme(value))
 watch([showFigures, animate], ([figures, animateValue]) => viewer?.setPlayback({ figures, animate: animateValue }))
+
+watch(surroundings, value => viewer?.setSurroundings(value, props.branchId))
+
+/** Runs the benchmark and shows its report, to copy into a message (step 3h). */
+async function runBenchmark() {
+  const current = viewer
+  if (!current || benchPhase.value) return
+  benchReport.value = ''
+  benchPhase.value = 'Starting'
+  const result = await current.benchmark(phase => (benchPhase.value = phase))
+  benchPhase.value = null
+  if (!result || current !== viewer) {
+    benchReport.value = 'The benchmark stopped before it finished (the view changed). Run it again.'
+    return
+  }
+  const { runs, details } = result
+  benchReport.value = formatReport({
+    runs: runs.map(summarizeFrames),
+    all: summarizeFrames(runs.flat()),
+    quality: stats.value?.quality ?? 'not measured',
+    pixelRatio: details.pixelRatio,
+    canvas: { width: details.width, height: details.height },
+    renderer: details,
+    surroundings: surroundingsItems.find(item => item.value === surroundings.value)!.label,
+    firstFrameMs,
+    userAgent: navigator.userAgent,
+  })
+}
 
 function chooseAnimate(value: boolean) {
   animateChosen = true
@@ -355,6 +411,14 @@ function selectFromList(tableId: string) {
             />
           </div>
           <div class="flex shrink-0 items-start gap-2">
+            <USelect
+              v-if="scenesEnabled"
+              v-model="surroundings"
+              :items="surroundingsItems"
+              aria-label="Surroundings (internal)"
+              class="w-48 bg-default max-sm:w-36"
+              data-testid="surroundings"
+            />
             <UPopover
               v-if="hasFigures"
               :content="{ align: 'end' }"
@@ -385,7 +449,7 @@ function selectFromList(tableId: string) {
             </UPopover>
             <UButton
               v-if="mode !== 'inside'"
-              label="Fit building"
+              :label="surroundings === 'none' ? 'Fit building' : 'Fit scene'"
               icon="i-lucide-maximize"
               color="neutral"
               variant="outline"
@@ -394,6 +458,43 @@ function selectFromList(tableId: string) {
               @click="fit"
             />
           </div>
+        </div>
+
+        <!-- The benchmark (step 3h, ?bench=orbit while the scenes flag is on): internal. -->
+        <div
+          v-if="benchMode"
+          class="absolute bottom-16 left-3 z-10 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-2 rounded-md border border-default bg-default p-3 text-sm shadow-md"
+          data-testid="benchmark"
+        >
+          <p class="font-semibold text-highlighted">
+            Benchmark (internal)
+          </p>
+          <p class="text-xs text-muted">
+            A 5 s warm-up, then three 20 s orbits. Keep this tab in front and don't touch the view.
+          </p>
+          <UButton
+            :label="benchPhase ?? 'Run benchmark'"
+            :loading="!!benchPhase"
+            :disabled="!canEnter || !!benchPhase"
+            icon="i-lucide-gauge"
+            class="self-start"
+            @click="runBenchmark"
+          />
+          <template v-if="benchReport">
+            <pre
+              class="max-h-48 overflow-auto rounded-md bg-elevated p-2 text-xs whitespace-pre-wrap"
+              data-testid="benchmark-report"
+            >{{ benchReport }}</pre>
+            <UButton
+              :label="copyReport.copied.value ? 'Copied' : 'Copy report'"
+              icon="i-lucide-copy"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              class="self-start"
+              @click="copyReport.copy()"
+            />
+          </template>
         </div>
 
         <div class="absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">

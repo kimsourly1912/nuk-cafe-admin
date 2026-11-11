@@ -1,5 +1,5 @@
 import { Window } from 'happy-dom'
-import { Group, MeshBasicMaterial, PerspectiveCamera, Scene } from 'three'
+import { Box3, BufferGeometry, Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Scene, Vector3 } from 'three'
 import type { AnimationMixer } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -61,6 +61,7 @@ function makeViewer() {
     invalidate: vi.fn(),
     measure: vi.fn(),
     setTheme: vi.fn(),
+    details: () => ({ calls: 0, triangles: 0, geometries: 0, textures: 0, pixelRatio: 1, width: 100, height: 100 }),
     clearContent: () => {
       scene.clear()
       disposeBuildContext(context)
@@ -97,7 +98,7 @@ function makeViewer() {
       if (!step(time)) frames.delete(step)
     }
   }
-  return { viewer, camera, controls, onNavigationChange, settle, frames, frame }
+  return { viewer, camera, controls, onNavigationChange, settle, frames, frame, stage }
 }
 
 describe('building navigation', () => {
@@ -235,6 +236,129 @@ describe('people and pets (step 3g)', () => {
     // The first scene's copy was never placed; the second one's loop stopped with its scene.
     expect(mixers[0]!.update).not.toHaveBeenCalled()
     expect(mixers[1]!.stopAllAction).toHaveBeenCalled()
+    viewer.dispose()
+  })
+})
+
+describe('the surroundings (step 3h)', () => {
+  const lane = (root: Scene) => root.children.find(child => child.name === 'surroundings')
+  const disc = (root: Scene) => root.children.find(child => child instanceof Mesh && child.geometry.type === 'CircleGeometry')!
+
+  it('stands the lane around the café: the ground disc goes, the sun\'s shadow stays on the café', () => {
+    const { viewer, stage } = makeViewer()
+    const shadow = vi.mocked(stage.fitShadows).mock.calls.at(-1)![0].clone()
+    viewer.setSurroundings('neighborhood-lane', 'branch-1')
+    expect(lane(stage.scene)).toBeDefined()
+    expect(disc(stage.scene).visible).toBe(false)
+    expect(vi.mocked(stage.fitShadows).mock.calls.at(-1)![0].equals(shadow)).toBe(true)
+    // A rebuild of the building (a table moved) keeps the lane.
+    viewer.setScene({ layout: demoLayout(), tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
+    expect(lane(stage.scene)).toBeDefined()
+    viewer.setSurroundings('none', 'branch-1')
+    expect(lane(stage.scene)).toBeUndefined()
+    expect(disc(stage.scene).visible).toBe(true)
+    viewer.dispose()
+  })
+
+  it('fits the whole scene, and lets the camera zoom out that far', async () => {
+    const { viewer, camera, controls, settle } = makeViewer()
+    const distance = () => camera.position.distanceTo(controls.target)
+    const fitting = viewer.fit()
+    await settle()
+    await fitting
+    const building = distance()
+    // Paused: the passer-by's walk would keep a frame task running past settle().
+    viewer.setPlayback({ figures: true, animate: false })
+    viewer.setSurroundings('neighborhood-lane', 'branch-1')
+    expect(distance()).toBeCloseTo(building, 5)
+    const scene = viewer.fit()
+    await settle()
+    await scene
+    expect(distance()).toBeGreaterThan(building * 1.2)
+    expect(controls.maxDistance).toBeGreaterThan(distance())
+    viewer.dispose()
+  })
+
+  it('in the cutaway, hides the shophouses on the camera\'s side and shows them again outside it', async () => {
+    const { viewer, camera, controls, settle, stage } = makeViewer()
+    viewer.setPlayback({ figures: true, animate: false })
+    viewer.setSurroundings('neighborhood-lane', 'branch-1')
+    const cutaway = viewer.setMode('cutaway')
+    await settle()
+    await cutaway
+    const beforeRender = vi.mocked(stage.onBeforeRender).mock.calls[0]![0]
+    const blocks = lane(stage.scene)!.children[0]!.children.filter(child => child.name.startsWith('block:'))
+    const center = new Box3().setFromObject(stage.scene.children.find(child => child.children.some(floor => floor.userData.floorId))!).getCenter(new Vector3())
+    const block = blocks[0]!
+    const blockCenter = new Box3().setFromObject(block).getCenter(new Vector3())
+    // The camera looks at the café from that shophouse's side, then from the other side.
+    camera.position.copy(center).add(blockCenter.clone().sub(center).setY(0).normalize().multiplyScalar(30)).setY(15)
+    beforeRender()
+    expect(block.visible).toBe(false)
+    camera.position.copy(center).sub(blockCenter.clone().sub(center).setY(0).normalize().multiplyScalar(30)).setY(15)
+    beforeRender()
+    expect(block.visible).toBe(true)
+    const exterior = viewer.setMode('exterior')
+    await settle()
+    await exterior
+    camera.position.copy(center).add(blockCenter.clone().sub(center).setY(0).normalize().multiplyScalar(30)).setY(15)
+    beforeRender()
+    expect(block.visible).toBe(true)
+    expect(controls).toBeDefined()
+    viewer.dispose()
+  })
+
+  it('frees the old lane\'s geometries when it changes or goes', () => {
+    const { viewer, stage } = makeViewer()
+    const disposed = vi.spyOn(BufferGeometry.prototype, 'dispose')
+    viewer.setSurroundings('neighborhood-lane', 'branch-1')
+    const geometries = new Set<BufferGeometry>()
+    lane(stage.scene)!.traverse(object => object instanceof Mesh && geometries.add(object.geometry))
+    viewer.setSurroundings('neighborhood-lane', 'branch-2')
+    const freed = new Set(disposed.mock.contexts as BufferGeometry[])
+    expect([...geometries].every(geometry => freed.has(geometry))).toBe(true)
+    disposed.mockRestore()
+    viewer.dispose()
+  })
+
+  it('animates the passer-by only while people and pets are shown and Animate is on', () => {
+    const { viewer, stage, frames, frame } = makeViewer()
+    viewer.setSurroundings('neighborhood-lane', 'branch-1')
+    const walker = () => lane(stage.scene)!.children[0]!.children.find(child => child.type === 'Group' && !child.name)!
+    expect(frames.size).toBe(1)
+    const start = walker().position.clone()
+    for (let index = 0; index < 30; index++) frame()
+    expect(walker().position.distanceTo(start)).toBeGreaterThan(0)
+    viewer.setPlayback({ figures: false, animate: true })
+    frame()
+    expect(frames.size).toBe(0)
+    expect(walker().visible).toBe(false)
+    viewer.dispose()
+  })
+})
+
+describe('the benchmark (step 3h)', () => {
+  it('warms up, then times three full orbits frame by frame', async () => {
+    const { viewer, frames, frame } = makeViewer()
+    const phases: string[] = []
+    const running = viewer.benchmark(phase => phases.push(phase))
+    // 16 ms frames for 5 s of warm-up and 3 × 20 s of orbits, and a little more.
+    for (let index = 0; index < 4200 && frames.size; index++) frame()
+    const result = await running
+    expect(phases).toEqual(['Warming up', 'Orbit 1 of 3', 'Orbit 2 of 3', 'Orbit 3 of 3'])
+    expect(result!.runs).toHaveLength(3)
+    for (const run of result!.runs) expect(run.length).toBeGreaterThan(1200)
+    expect(result!.runs.flat().every(interval => interval === 16)).toBe(true)
+    viewer.dispose()
+  })
+
+  it('stops, with no result, when the view changes during it', async () => {
+    const { viewer, frame } = makeViewer()
+    const running = viewer.benchmark()
+    frame()
+    void viewer.setMode('cutaway')
+    frame()
+    expect(await running).toBeNull()
     viewer.dispose()
   })
 })
