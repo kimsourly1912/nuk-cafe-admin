@@ -8,7 +8,7 @@ import type { Actions } from '../runtime/actions'
  * touch lets go. Buttons (Jump, the context action) sit above this layer.
  */
 
-const { actions } = defineProps<{ actions: Actions }>()
+const { actions, passenger } = defineProps<{ actions: Actions, passenger: boolean }>()
 
 /** Radians a pixel of drag turns the camera. */
 const TOUCH_LOOK = 0.0055
@@ -44,10 +44,10 @@ function down(event: PointerEvent) {
   const box = root.value.getBoundingClientRect()
   const x = event.clientX - box.left
   const y = event.clientY - box.top
-  if (x < box.width / 2 && !stick.value) {
+  if (!passenger && x < box.width / 2 && !stick.value) {
     stick.value = { id: event.pointerId, x, y, dx: 0, dy: 0 }
   }
-  else if (x >= box.width / 2 && !lookPointer) {
+  else if ((passenger || x >= box.width / 2) && !lookPointer) {
     lookPointer = { id: event.pointerId, x: event.clientX, y: event.clientY }
   }
   else {
@@ -86,6 +86,14 @@ function up(event: PointerEvent) {
   if (lookPointer?.id === event.pointerId) lookPointer = null
 }
 
+watch(() => passenger, () => {
+  stick.value = null
+  lookPointer = null
+  rimSince = null
+  clearTimeout(rimTimer)
+  actions.stick(null)
+})
+
 onBeforeUnmount(() => {
   clearTimeout(rimTimer)
   actions.stick(null)
@@ -114,7 +122,7 @@ onBeforeUnmount(() => {
       />
     </div>
     <div
-      v-else
+      v-else-if="!passenger"
       class="pointer-events-none absolute bottom-48 left-8 size-28 rounded-full bg-default/25 ring-2 ring-default/60"
       aria-hidden="true"
     >

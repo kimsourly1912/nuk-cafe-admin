@@ -7,7 +7,7 @@ import { angleBetween, distance, yawOf } from './vec'
  * until another is clearly better or it leaves reach, so the button doesn't flicker between two.
  */
 
-export type TargetKind = 'door' | 'seat' | 'counter'
+export type TargetKind = 'door' | 'seat' | 'counter' | 'ride'
 
 export interface Target {
   id: string

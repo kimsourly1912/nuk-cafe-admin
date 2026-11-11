@@ -1,6 +1,6 @@
 # Explore plan: walk, ride and map your way to a café
 
-Owner brief 2026-11-11 ([brief](explore/brief.md), mockups below); decision [D275](../decisions.md#d275-explore-a-third-person-café-world-with-a-map-built-on-the-shop-designer-2026-11-11). Builds on the [shop designer](shop-designer.md) (D273) and its [scenes](shop-designer-scenes.md) (D274). Status: **E1 (walk and map) built** (2026-11-11, [below](#step-e1-walk-and-map-built-2026-11-11)), behind `NUXT_PUBLIC_EXPLORE`, waiting for the owner's Android benchmark and feel review. The owner delegated the open choices to Claude (2026-11-11: "help me decide all the way"); they are recorded in [Decisions](#decisions-2026-11-11) with their reasons, and the owner may override any of them before its step starts.
+Owner brief 2026-11-11 ([brief](explore/brief.md), mockups below); decision [D275](../decisions.md#d275-explore-a-third-person-café-world-with-a-map-built-on-the-shop-designer-2026-11-11). Builds on the [shop designer](shop-designer.md) (D273) and its [scenes](shop-designer-scenes.md) (D274). Status: **E2 (tuk-tuk) built for review** ([below](#step-e2-tuk-tuk)), behind `NUXT_PUBLIC_EXPLORE`. E1 remains available on staging and awaits the owner's Android benchmark and feel review. The owner delegated the open choices to Claude (2026-11-11: "help me decide all the way"); they are recorded in [Decisions](#decisions-2026-11-11) with their reasons, and the owner may override any of them before its step starts.
 
 ## Mockups (owner, 2026-11-11)
 
@@ -254,3 +254,12 @@ Internal: `/c/<slug>/explore`, client-only (`ssr: false`), 404 unless `NUXT_PUBL
   - The minimap and the HUD use Nuxt UI's tokens (`soft` neutral buttons and badges, safe-area padding); no blur, no hex.
 - **Not in E1:** the open door's leaf is not an obstacle; table chairs are seats but sitting at a booth is not; no railings around the stairwell; the upper floors aren't on the route grid (waypoints are on the ground floor); the moto, the tuk-tuk and gateways (E2, E4, E5).
 - **Evidence:** see [progress](../progress.md#explore-e1-walk-and-map-d275-2026-11-11).
+
+
+## Step E2: tuk-tuk
+
+The pickup marker and the map can call the tuk-tuk. At the curb, **Talk to driver** opens the destination picker and pauses the world. The two demo drop-offs are **Café entrance** and **Shophouse row**. Both are within E1's district and lead back to its demo café entrance after exit. The picker shows in-game ride time. E3 and E4 add real branches and gateways.
+
+The vehicle is generated from the scene's materials with a working passenger hinge, a seated driver and three rolling wheels. The approach follows the far lane, and both passenger routes turn through a sampled semicircle and stop on the café side. The follower uses path length and eases out of and into stops. **Open passenger door** and **Get in** require a grounded player on the curb side. Boarding and exiting lock movement until the animation ends. Inside view starts at the passenger seat, look is clamped, and **Outside view** follows the same vehicle. The map shows the pickup and the trip route. **Skip ride** and natural arrival use the same stopped pose. Exit checks for a clear spot along the curb and uses the street spawn if those spots are blocked. **Return to street** resets the ride and restores walking. A hidden tab resumes the simulation without advancing the ride by the time spent away.
+
+Review on a WebGL-capable desktop and Android phone. Call and cancel, then call again and confirm each stop. Open the passenger door and board. Look left and right inside, switch cameras, and try Exit before the vehicle stops. Compare a ride taken normally with Skip ride to the same stop. Exit and follow the waypoint to the café.

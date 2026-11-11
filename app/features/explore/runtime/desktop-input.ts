@@ -34,6 +34,8 @@ export function attachDesktopInput(options: DesktopInputOptions): () => void {
       if (!document.pointerLockElement && performance.now() - unlockedAt > 400) options.onLeave()
       return
     }
+    // Let keyboard activation reach a focused HUD button.
+    if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return
     if (event.code === 'KeyM') {
       if (!event.repeat) options.onMap()
       event.preventDefault()
@@ -57,7 +59,7 @@ export function attachDesktopInput(options: DesktopInputOptions): () => void {
   }
 
   function pointermove(event: PointerEvent) {
-    if (event.pointerType !== 'mouse') return
+    if (event.pointerType !== 'mouse' || !options.active()) return
     if (document.pointerLockElement === canvas) {
       actions.look(event.movementX * MOUSE_LOOK, event.movementY * MOUSE_LOOK)
       return
