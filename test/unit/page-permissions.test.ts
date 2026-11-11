@@ -53,11 +53,11 @@ describe('admin pages', () => {
     }
   })
 
-  it('refuse a support visit only Platform support, Sample data and Furniture looks', () => {
+  it('refuse a support visit only Platform support and Sample data', () => {
     const support = new Set(supportPermissionList())
     const refused = Object.entries(pagePermissions).filter(([, permission]) => permission && !support.has(permission)).map(([page]) => page)
-    // Furniture looks (D273 step 3d) needs `furniture: ['manage']`, which support doesn't read: QS3.
-    expect(refused.sort()).toEqual(['branches/looks.vue', 'sample-data/index.vue', 'support/index.vue'])
+    // Furniture looks (D273 step 3d) is open to a visit: support reads looks (QS3).
+    expect(refused.sort()).toEqual(['sample-data/index.vue', 'support/index.vue'])
   })
 })
 

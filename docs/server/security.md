@@ -64,7 +64,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | menu | set sold out (own branch) | ✔ | ✔ | ✔ |
 | media | upload | ✔ | | |
 | branch | create (at most 10 active per cafe, D197) / read / update | ✔ | read | read |
-| furniture | manage: the cafe's own table, chair and fixture looks for the shop designer (tenant permission, D273; chairs and fixtures since step 3d) | ✔ | | |
+| furniture | manage: the cafe's own table, chair and fixture looks for the shop designer (tenant permission, D273; chairs and fixtures since step 3d; a support visit lists them, QS3) | ✔ | | |
 | branch | pause and resume online orders (on the counter, D199) | ✔ | ✔ | |
 | staff | list, create / change role / disable | ✔ | | |
 | table | manage, rotate QR (managers on the counter, D198) | ✔ | ✔ | |
@@ -215,7 +215,7 @@ Built in step 1.6 (D51).
 | Reset requested for an unknown email | Same 200 answer, no email |
 | Staff on a temporary password resets by email | Flag cleared, like changing it |
 | An account signs up (any cafe count, none included) | No profile anywhere; each cafe's on first use there (D221) |
-- **Support access** (P5, D193): a cafe's owner allows the platform team to look for 24 hours (`support: ['grant']`, owners only); a super admin opens a visit with a fresh authenticator code (5 wrong codes per 15 minutes at most), bound to that session, an hour at most. During it `requirePermission`, after refusing, lets the super admin **read only**: GET requests for `menu:read`, `branch:read|update`, `staff:read`, `report:read`, `settings:manage`, `audit:read` (never exports, the assistant, uploads or sample data); any other method is 403 `SUPPORT_READ_ONLY`. Every request is audited (`support.request`). Not Better Auth's impersonation, which stays off.
+- **Support access** (P5, D193): a cafe's owner allows the platform team to look for 24 hours (`support: ['grant']`, owners only); a super admin opens a visit with a fresh authenticator code (5 wrong codes per 15 minutes at most), bound to that session, an hour at most. During it `requirePermission`, after refusing, lets the super admin **read only**: GET requests for `menu:read`, `branch:read|update`, `staff:read`, `report:read`, `settings:manage`, `furniture:manage` (lists looks only), `audit:read` (never exports, the assistant, uploads or sample data); any other method is 403 `SUPPORT_READ_ONLY`. Every request is audited (`support.request`). Not Better Auth's impersonation, which stays off.
 - A super admin can **add, remove or transfer a cafe's ownership** from the console (P2, D189), alone and with a required reason in the audit row (D186): one batch with the cafe's version, the accounts' versions and eligibility, and `requireAnOwner` (an owner who can sign in always stays; 409 `LAST_OWNER`). A removed owner keeps only their branch roles and is signed out everywhere. Never one's own ownership (409 `OWN_ACCOUNT`); another super admin may be made an owner (QT4, D190). The console's internal notes about a cafe live in `tenant_notes`, never on `organization` (Better Auth would answer its fields to the cafe's members).
 - A super admin can **ban** an abusive account from the platform console (P1, D187): a reason and an optional end, every session deleted and the audit row in the same batch; Better Auth's sign-in hook refuses a banned account and lifts an expired ban. Never a super admin's account or one's own.
 

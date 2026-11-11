@@ -1,8 +1,10 @@
 /**
  * Support access's rules (step P5, D193), no I/O. A support visit is read-only: only these
  * permissions, and only on GET (a GET route asking for `settings: ['manage']` reads settings; the
- * same name on a POST would change them). Report exports (bulk downloads), the AI assistant, uploads
- * and sample data are left out: support looks, it doesn't take data away or act.
+ * same name on a POST would change them). `furniture: ['manage']` lets Design shop and the
+ * Furniture looks page load the cafe's looks (QS3, D273): its only GET routes list them. Report
+ * exports (bulk downloads), the AI assistant, uploads and sample data are left out: support looks,
+ * it doesn't take data away or act.
  */
 export const SUPPORT_READ_PERMISSIONS = {
   menu: ['read'],
@@ -10,6 +12,7 @@ export const SUPPORT_READ_PERMISSIONS = {
   staff: ['read'],
   report: ['read'],
   settings: ['manage'],
+  furniture: ['manage'],
   audit: ['read'],
 } as const satisfies Record<string, readonly string[]>
 
