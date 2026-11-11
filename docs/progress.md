@@ -3,6 +3,14 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer 3D reliability (D273, 2026-11-11)
+
+- The building viewer owns camera mode and cancels superseded transitions. Back restores overview controls and zoom, and pinch, cancelled drags and secondary clicks do not select tables.
+- When graphics are unavailable, the mobile floor and table drawer stays accessible. A lost context disposes the viewer and resets the floor filter while keeping the table selection and its QR available.
+- The model leaves railing gates clear, keeps indoor viewpoints inside the floor outline, and skips unfinished floors. Scene rebuilds dispose old floor and roof slabs and remove their HTML labels.
+- Local lint, typecheck, the high-severity dependency audit, and unit/server checks passed (2,756 tests, one skipped). The local browser build succeeded, but Chromium could not create its process socket. The browser suite runs in CI.
+- Verify in `designer-viewer.test.ts`, `designer-geometry.test.ts`, `designer-scene.test.ts` and `shop-designer.test.ts`. On a phone, enter and immediately exit a floor, pinch with a selected table, and leave and reopen the tab. Check a saved railing gate, a concave floor, and the fallback drawer with its QR action.
+
 ### Shop designer polish before the pilot (D273, 2026-11-11)
 
 - The owner requested the audit's five fixes in one PR before expanding the shop designer. Both layout views show save recovery. A library drop keeps its previewed grid position and custom dimensions. Undo clears invalid selections; 3D table navigation honors the latest selection and Fit building accounts for portrait viewports. Placement warnings include chair and fixture footprints and concave floor outlines. Warnings remain advisory.

@@ -3082,6 +3082,7 @@ Verification: migrated SQLite forced interleavings, populated local workerd/D1 r
   - **View in 3D shows the editor's layout, unsaved changes included, and says so** ("Unsaved changes shown"). Owners open it from the editor's page, so a saved-only copy would be a second state with no reader. A later view without a draft (the counter) shows the saved layout.
   - **No ambient occlusion**: it needs a post-processing pipeline on every frame for a look the owner approved without it. Quality levels stay pixel ratio, shadows and lamps, chosen from the measured frame time.
   - **The floor and table lists and the table card work without 3D.**
+  - **3D reliability follow-up (2026-11-11):** the viewer owns navigation mode and cancels superseded transitions; the page mirrors that state and keeps table navigation and QR available after a graphics failure. Each generated slab belongs to scene cleanup. [Checks](progress.md#shop-designer-3d-reliability-d273-2026-11-11).
 
   [Plan → Step 2c](plans/shop-designer.md#step-2c-the-viewer-built-2026-11-10).
 - **Step 3a (2026-11-10):** a cafe's own table looks (`custom_furniture_looks`, cafe-wide, at most 50, edited at a version), behind the new tenant permission `furniture: ['manage']`. Decided:

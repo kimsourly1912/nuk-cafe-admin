@@ -1,13 +1,13 @@
 import { readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { Box3, Vector3 } from 'three'
+import { Box3, ExtrudeGeometry, Raycaster, Vector3 } from 'three'
 import type { Object3D } from 'three'
 import { describe, expect, it } from 'vitest'
 import { ITEM_KINDS } from '#shared/contracts/shop-layout'
 import type { ItemLook, LayoutItem } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, BUILT_IN_PHOTO, findLook, ITEM_SPECS, pieceFinishes } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { buildItem, buildTable, createBuildContext, meshesOf } from '../designer/scene/furniture'
+import { buildItem, buildTable, createBuildContext, disposeBuildContext, meshesOf } from '../designer/scene/furniture'
 import { createMaterialLibrary } from '../designer/scene/materials'
 import { buildScene } from '../designer/scene/scene'
 
@@ -82,6 +82,30 @@ describe('the building from the layout', () => {
     const scene = buildScene(context(), { layout: demoLayout(), tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
     expect(scene.floors.map(floor => floor.walls.length)).toEqual([6, 6, 8])
     expect(scene.floors.map(floor => floor.roofs.length)).toEqual([1, 1, 0])
+  })
+
+  it('leaves the saved gate clear through the whole railing', () => {
+    const layout = demoLayout()
+    const floor = layout.floors[0]!
+    floor.edges[0] = { kind: 'railing', openings: [{ id: 'gate', kind: 'door', offset: 150, width: 120 }] }
+    const scene = buildScene(context(), { layout, tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
+    const railing = scene.floors[0]!.walls[0]!.object
+    const through = (x: number) => new Raycaster(new Vector3(x, 1.02, -2), new Vector3(0, 0, 1)).intersectObject(railing, true)
+    expect(through(2.1)).toHaveLength(0)
+    expect(through(0.75).length).toBeGreaterThan(0)
+    expect(through(3.5).length).toBeGreaterThan(0)
+  })
+
+  it('releases floor and roof slabs when the scene geometry is cleared', () => {
+    const build = context()
+    const scene = buildScene(build, { layout: demoLayout(), tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
+    const slabs = meshesOf(scene.root).map(mesh => mesh.geometry).filter(geometry => geometry instanceof ExtrudeGeometry)
+    let disposed = 0
+    for (const slab of slabs) slab.addEventListener('dispose', () => disposed++)
+    expect(slabs).toHaveLength(5)
+    disposeBuildContext(build)
+    expect(disposed).toBe(slabs.length)
+    expect(build.geometries.size).toBe(0)
   })
 })
 

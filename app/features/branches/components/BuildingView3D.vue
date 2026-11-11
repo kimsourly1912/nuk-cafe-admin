@@ -9,8 +9,7 @@
 import type { DiningTable } from '#shared/contracts/branches'
 import type { ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { findLook } from '../designer/catalog'
-import type { Viewpoint } from '../designer/geometry'
-import type { BuildingViewer } from '../designer/scene/building-viewer'
+import type { BuildingNavigation, BuildingViewer } from '../designer/scene/building-viewer'
 import type { StageStats } from '../designer/scene/stage'
 import BuildingNavigator from './BuildingNavigator.vue'
 import TableQrModal from './TableQrModal.vue'
@@ -41,16 +40,19 @@ const labels = useTemplateRef<HTMLDivElement>('labels')
 const status = ref<'loading' | 'ready' | 'unavailable'>('loading')
 /** The building's first frame is on screen: until then the loading state stays. */
 const drawn = ref(false)
-const mode = ref<'exterior' | 'cutaway' | 'inside'>('exterior')
+const navigation = shallowRef<BuildingNavigation>({ mode: 'exterior' })
+const mode = computed(() => navigation.value.mode)
 const focusedFloor = ref<string | null>(null)
-const insideFloor = ref<string | null>(null)
-const viewpoint = ref<string | null>(null)
-const viewpoints = ref<Viewpoint[]>([])
+const insideFloor = computed(() => navigation.value.mode === 'inside' ? navigation.value.floorId : null)
+const viewpoint = computed(() => navigation.value.mode === 'inside' ? navigation.value.viewpointId : null)
+const viewpoints = computed(() => navigation.value.mode === 'inside' ? navigation.value.viewpoints : [])
+const canEnter = computed(() => status.value === 'ready' && drawn.value)
 const stats = ref<StageStats | null>(null)
 const listsOpen = ref(false)
 let viewer: BuildingViewer | null = null
 let modeChange: Promise<void> | undefined
 let revealRequest = 0
+let startup = 0
 
 const selected = computed(() => {
   const placement = props.layout.placements.find(candidate => candidate.tableId === selectedTable.value)
@@ -62,29 +64,41 @@ const selected = computed(() => {
 })
 const insideName = computed(() => props.layout.floors.find(floor => floor.id === insideFloor.value)?.name)
 
-/** Starts the 3D view on a fresh canvas: when the view opens, and again from Try again. */
-async function start() {
-  viewer?.dispose()
+function stopViewer() {
+  startup++
+  const previous = viewer
   viewer = null
+  previous?.dispose()
   modeChange = undefined
-  status.value = 'loading'
+  navigation.value = { mode: 'exterior' }
+  focusedFloor.value = null
   drawn.value = false
   stats.value = null
-  mode.value = 'exterior'
-  focusedFloor.value = null
-  insideFloor.value = null
+}
+
+function graphicsUnavailable() {
+  stopViewer()
+  status.value = 'unavailable'
+}
+
+/** Starts the 3D view on a fresh canvas: when the view opens, and again from Try again. */
+async function start() {
+  stopViewer()
+  const request = startup
+  status.value = 'loading'
   // The canvas is drawn again after the unavailable message: wait for the new one.
   await nextTick()
   try {
     const { createBuildingViewer } = await import('../designer/scene/building-viewer')
-    if (!canvas.value || !labels.value) return
+    if (request !== startup || !canvas.value || !labels.value) return
     viewer = createBuildingViewer({
       canvas: canvas.value,
       labels: labels.value,
       dark: dark.value,
       onStats: value => (stats.value = value),
       onFirstFrame: () => (drawn.value = true),
-      onContextLost: () => (status.value = 'unavailable'),
+      onContextLost: graphicsUnavailable,
+      onNavigationChange: next => (navigation.value = next),
       onSelectTable: id => (selectedTable.value = id),
       onSelectFloor: id => void focusFloor(id),
     })
@@ -94,52 +108,45 @@ async function start() {
     if (selectedTable.value) void reveal(selectedTable.value)
   }
   catch (error) {
+    if (request !== startup) return
     if (import.meta.dev) console.error('[shop designer] 3D view unavailable', error)
-    status.value = 'unavailable'
+    graphicsUnavailable()
   }
 }
 
 onMounted(start)
 
-onBeforeUnmount(() => {
-  viewer?.dispose()
-  viewer = null
-})
+onBeforeUnmount(stopViewer)
 
 watch(() => [props.layout, props.tables, props.looks, props.itemLooks] as const, ([layout, tables, looks, itemLooks]) => {
   viewer?.setScene({ layout, tables, looks, itemLooks })
-  if (insideFloor.value && !layout.floors.some(floor => floor.id === insideFloor.value)) void setMode('cutaway')
 })
 watch(dark, value => viewer?.setTheme(value))
 watch(selectedTable, id => viewer?.selectTable(id))
 
 function setMode(next: 'exterior' | 'cutaway') {
-  insideFloor.value = null
-  mode.value = next
   modeChange = viewer?.setMode(next)
   return modeChange
 }
 
 async function focusFloor(floorId: string) {
   focusedFloor.value = floorId
-  if (mode.value === 'exterior') await setMode('cutaway')
-  await viewer?.focusFloor(floorId)
+  const current = viewer
+  const transition = mode.value === 'exterior' ? setMode('cutaway') : modeChange
+  await transition
+  if (current === viewer && transition === modeChange && focusedFloor.value === floorId) await current?.focusFloor(floorId)
 }
 
-async function enterFloor(floorId: string, pointId?: string) {
+function enterFloor(floorId: string, pointId?: string) {
+  if (!canEnter.value) return
   listsOpen.value = false
-  mode.value = 'inside'
-  insideFloor.value = floorId
   focusedFloor.value = floorId
-  viewpoints.value = viewer?.viewpoints(floorId) ?? []
-  viewpoint.value = pointId ?? viewpoints.value[0]?.id ?? null
-  await viewer?.enterFloor(floorId, viewpoint.value ?? undefined)
+  modeChange = viewer?.enterFloor(floorId, pointId)
+  return modeChange
 }
 
-async function leaveFloor() {
-  insideFloor.value = null
-  mode.value = 'cutaway'
-  await viewer?.leaveFloor()
+function leaveFloor() {
+  modeChange = viewer?.leaveFloor()
 }
 
 const overlay = useOverlay()
@@ -151,8 +158,9 @@ function viewQr() {
 
 async function fit() {
   const current = viewer
-  await modeChange
-  if (viewer === current) await current?.fit()
+  const transition = modeChange
+  await transition
+  if (viewer === current && transition === modeChange) await current?.fit()
 }
 const zoom = (direction: 1 | -1) => viewer?.zoom(direction)
 
@@ -167,14 +175,11 @@ async function reveal(tableId: string) {
   if (!placement) return
   const index = props.layout.floors.findIndex(floor => floor.id === placement.floorId)
   const covered = index < props.layout.floors.length - 1 || !!props.layout.floors[index]?.hasRoof
-  if (insideFloor.value) {
-    if (placement.floorId !== insideFloor.value) await enterFloor(placement.floorId)
-  }
-  else {
-    if (mode.value === 'exterior' && covered) setMode('cutaway')
-    await modeChange
-  }
-  if (request === revealRequest && current === viewer && selectedTable.value === tableId) {
+  if (insideFloor.value && placement.floorId !== insideFloor.value) enterFloor(placement.floorId)
+  else if (mode.value === 'exterior' && covered) setMode('cutaway')
+  const transition = modeChange
+  await transition
+  if (request === revealRequest && current === viewer && transition === modeChange && selectedTable.value === tableId) {
     current?.selectTable(tableId, { focus: true })
   }
 }
@@ -198,6 +203,7 @@ function selectFromList(tableId: string) {
         :focused-floor="focusedFloor"
         :inside-floor="insideFloor"
         :selected-table="selectedTable"
+        :can-enter="canEnter"
         @focus-floor="focusFloor"
         @enter-floor="enterFloor"
         @select-table="selectFromList"
@@ -224,6 +230,14 @@ function selectFromList(tableId: string) {
           This browser or device can’t show 3D graphics. Your layout and tables are fine; you can keep working with the lists or the floor plan.
         </p>
         <div class="flex flex-wrap justify-center gap-2">
+          <UButton
+            label="Floors and tables"
+            icon="i-lucide-list"
+            color="neutral"
+            variant="outline"
+            class="lg:hidden"
+            @click="listsOpen = true"
+          />
           <UButton
             label="Try again"
             icon="i-lucide-rotate-cw"
@@ -453,6 +467,7 @@ function selectFromList(tableId: string) {
           :focused-floor="focusedFloor"
           :inside-floor="insideFloor"
           :selected-table="selectedTable"
+          :can-enter="canEnter"
           @focus-floor="focusFloor"
           @enter-floor="enterFloor"
           @select-table="selectFromList"

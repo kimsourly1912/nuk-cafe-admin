@@ -58,11 +58,15 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
   const root = new Group()
   const floors: FloorNode[] = []
   const tableNodes = new Map<string, TableNode>()
+  const topmost = layout.floors.findLastIndex(floor => floor.outline.length >= 3)
   let elevation = 0
   layout.floors.forEach((floor, index) => {
-    const built = buildFloor(context, { floor, floorBelow: layout.floors[index - 1], topmost: index === layout.floors.length - 1 })
-    built.group.position.y = cm(elevation)
-    built.group.userData.baseY = cm(elevation)
+    const baseY = cm(elevation)
+    elevation += floor.height
+    if (floor.outline.length < 3) return
+    const built = buildFloor(context, { floor, floorBelow: layout.floors[index - 1], topmost: index === topmost })
+    built.group.position.y = baseY
+    built.group.userData.baseY = baseY
     for (const item of floor.items) {
       const object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height })
       object.position.set(cm(item.x), 0, cm(item.y))
@@ -76,13 +80,12 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
       id: floor.id,
       name: floor.name,
       index,
-      elevation: cm(elevation),
+      elevation: baseY,
       height: cm(floor.height),
       labelAnchor: new Vector3(cm(plan.maxX + 90), cm(floor.height / 2), cm((plan.minY + plan.maxY) / 2)),
       center: new Vector3(cm((plan.minX + plan.maxX) / 2), 0, cm((plan.minY + plan.maxY) / 2)),
     })
     root.add(built.group)
-    elevation += floor.height
   })
 
   for (const placement of layout.placements) {

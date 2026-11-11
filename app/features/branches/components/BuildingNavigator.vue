@@ -11,6 +11,7 @@ const props = defineProps<{
   focusedFloor: string | null
   insideFloor: string | null
   selectedTable: string | null
+  canEnter: boolean
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +20,7 @@ const emit = defineEmits<{
   selectTable: [tableId: string]
 }>()
 
-const floors = computed(() => [...props.layout.floors].reverse().map(floor => ({
+const floors = computed(() => props.layout.floors.filter(floor => floor.outline.length >= 3).reverse().map(floor => ({
   ...floor,
   tables: props.layout.placements
     .filter(placement => placement.floorId === floor.id)
@@ -70,7 +71,7 @@ const unplaced = computed(() => {
           </template>
         </UButton>
         <UButton
-          v-if="floor.id === focusedFloor"
+          v-if="canEnter && floor.id === focusedFloor"
           label="Enter floor"
           trailing-icon="i-lucide-chevron-right"
           variant="link"

@@ -153,6 +153,28 @@ describe('the plan', () => {
     expect(placementWarnings(floor, [nearEdge]).get('table')?.outside).toBe(true)
   })
 
+  it('uses a point inside a U-shaped floor and skips a door viewpoint outside a narrow room', () => {
+    const floor = demoLayout().floors[0]!
+    floor.outline = [
+      { x: 0, y: 0 }, { x: 900, y: 0 }, { x: 900, y: 900 }, { x: 600, y: 900 },
+      { x: 600, y: 300 }, { x: 300, y: 300 }, { x: 300, y: 900 }, { x: 0, y: 900 },
+    ]
+    floor.edges = floor.outline.map(() => ({ kind: 'open', openings: [] }))
+    floor.items = []
+    const [middle] = floorViewpoints(floor)
+    expect(middle?.id).toBe('centre')
+    expect(pointInPolygon(middle!.eye, floor.outline)).toBe(true)
+
+    floor.outline = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 100 }, { x: 0, y: 100 }]
+    floor.edges = [
+      { kind: 'wall', openings: [{ id: 'door', kind: 'door', offset: 80, width: 100 }] },
+      ...floor.outline.slice(1).map(() => ({ kind: 'wall' as const, openings: [] })),
+    ]
+    const points = floorViewpoints(floor)
+    expect(points.map(point => point.id)).toEqual(['centre'])
+    expect(pointInPolygon(points[0]!.eye, floor.outline)).toBe(true)
+  })
+
   it('works out viewpoints from the layout: no Entrance where there is no door', () => {
     const [ground, first, rooftop] = demoLayout().floors
     expect(floorViewpoints(ground!).map(point => point.id)).toEqual(['entrance', 'stairs', 'window'])

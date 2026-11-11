@@ -92,7 +92,7 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 
 - **"This layout was changed somewhere else"**: someone saved the layout on another device after you opened it; the message says who and when. Your plan is kept. **Load latest** shows theirs instead (Undo brings yours back on top of it, then save); **Overwrite with mine** saves yours over theirs after asking. QR codes are not affected either way.
 - **"… is no longer an active table here"**: a table on your plan was archived or deleted since you opened it. Press **Remove from map**, then save.
-- **"3D view is not available here"**: this browser or device can't draw 3D right now (an old device, or a phone that put the page to sleep). Press **Try again**. The floor and table lists, **View QR** and **Design shop** work without it; the layout itself is fine.
+- **"3D view is not available here"**: this browser or device can't draw 3D right now. Press **Try again**. On a phone, press **Floors and tables** to choose a table and open **View QR**. You can also return to **Design shop**.
 - **"The look of … was deleted"**: a look this plan used was deleted on another device before you saved. Press **Use Round café table**, save, then choose another look.
 - **"This look is used by …"**: a look can't be deleted while tables use it. The message names them; give them another look, save the layout, then delete.
 - **"The look of a piece (…) was deleted"**: a chair or fixture look this plan used was deleted on another device before you saved. Press **Use own finishes**, save, then choose another look.

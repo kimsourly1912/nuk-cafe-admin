@@ -259,6 +259,8 @@ A branch's **Dining tables** tab has three views: **Table list**, **Design shop*
 - **Not verified:** real devices. The e2e browser draws with a software renderer (about 1 s a frame, quality low), so it proves the flow, not the speed or the look on a GPU. A lost graphics context is exercised only through Try again after a failed start, not by a real phone dropping it.
 - **Review on staging:** on a phone, a tablet and a desktop, open a branch → Dining tables → View in 3D. Find each table from **Floors and tables** and by tapping it; open its QR code and scan it; press Show on plan. Note the quality line on each device. On the phone, leave the tab in the background for a few minutes and come back: the building is still there, or the message offers Try again.
 
+**3D reliability follow-up (2026-11-11).** The viewer owns camera mode and cancels superseded transitions. A tap selects, while pinch and drag control the camera. Losing graphics disposes the viewer and returns the floor and table list to its unfiltered view, including the mobile drawer. Rendered floor and roof slabs belong to the scene's geometry disposal, railing gates leave the saved opening, and indoor viewpoints use a point inside the outline. Unfinished floors are left out of the preview. [Checks](../progress.md#shop-designer-3d-reliability-d273-2026-11-11).
+
 ## Step 3a: custom looks (built 2026-11-10)
 
 A cafe can save its own table looks and use them in every branch. A look is shared: editing it changes every table placed with it; a look in use can't be deleted.
