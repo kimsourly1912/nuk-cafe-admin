@@ -8,11 +8,10 @@
  */
 import type { DiningTable } from '#shared/contracts/branches'
 import { isFigureKind, isItemLookKind } from '#shared/contracts/shop-layout'
-import type { ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { useClipboard } from '@vueuse/core'
-import { findItemLook, findLook, ITEM_SPECS, pieceHeight } from '../designer/catalog'
+import type { ItemLook, LayoutTable, ScenePreset, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { createReusableTemplate, useClipboard } from '@vueuse/core'
+import { findItemLook, findLook, ITEM_SPECS, pieceHeight, SCENE_CARDS, sceneCard } from '../designer/catalog'
 import { formatReport, summarizeFrames } from '../designer/benchmark'
-import type { SurroundingsPreset } from '../designer/surroundings'
 import type { BuildingNavigation, BuildingViewer } from '../designer/scene/building-viewer'
 import type { StageStats } from '../designer/scene/stage'
 import BuildingNavigator from './BuildingNavigator.vue'
@@ -28,7 +27,7 @@ const props = defineProps<{
   diningTables: readonly DiningTable[]
   /** The layout shown has changes that aren't saved yet. */
   unsaved?: boolean
-  /** Keeps the surroundings the same for everyone who opens this branch (step 3h). */
+  /** Seeds the surroundings, so everyone who opens this branch sees the same street (step 3h). */
   branchId: string
 }>()
 
@@ -42,6 +41,8 @@ const emit = defineEmits<{
 const selectedTable = defineModel<string | null>('selectedTable', { default: null })
 /** A piece picked in 3D or selected in Design shop (step 3e). One of the two at a time. */
 const selectedItem = defineModel<string | null>('selectedItem', { default: null })
+/** The branch's scene in the draft (step 4a): choosing one here is a layout change, saved with it. */
+const scene = defineModel<ScenePreset>('scene', { default: 'none' })
 
 const colorMode = useColorMode()
 const dark = computed(() => colorMode.value === 'dark')
@@ -66,15 +67,17 @@ const animate = ref(true)
 /** Animate starts off on a device measured slow, unless the person already chose. */
 let animateChosen = false
 /**
- * The surroundings and their benchmark (step 3h, D274): internal behind the scenes flag until the
- * Neighborhood lane passes on a real phone and desktop; this viewer's choice, not saved yet (4a).
+ * The surroundings (step 3h, D274) behind the scenes flag until the Neighborhood lane passes on a
+ * real phone and desktop. The scene is the branch's (saved with the layout, step 4a); Show
+ * surroundings, Show people and pets and Animate are this viewer's own, never saved.
  */
 const scenesEnabled = useRuntimeConfig().public.shopDesignerScenes
-const surroundings = ref<SurroundingsPreset>('none')
-const surroundingsItems: { label: string, value: SurroundingsPreset }[] = [
-  { label: 'No surroundings', value: 'none' },
-  { label: 'Neighborhood lane', value: 'neighborhood-lane' },
-]
+const showSurroundings = ref(true)
+const shownScene = computed<ScenePreset>(() => (scenesEnabled && showSurroundings.value ? scene.value : 'none'))
+const sceneOpen = ref(false)
+const { isExpanded } = useLayoutContext()
+const [DefineScenePanel, ReuseScenePanel] = createReusableTemplate()
+const sceneItems = SCENE_CARDS.map(card => ({ value: card.preset, label: card.label, description: card.description, photo: card.photo }))
 const route = useRoute()
 const benchMode = computed(() => scenesEnabled && route.query.bench === 'orbit')
 const benchPhase = ref<string | null>(null)
@@ -168,7 +171,7 @@ async function start() {
       onSelectFloor: id => void focusFloor(id),
     })
     viewer.setPlayback({ figures: showFigures.value, animate: animate.value })
-    if (scenesEnabled) viewer.setSurroundings(surroundings.value, props.branchId)
+    if (scenesEnabled) viewer.setSurroundings(shownScene.value, props.branchId)
     viewer.setScene({ layout: props.layout, tables: props.tables, looks: props.looks, itemLooks: props.itemLooks })
     status.value = 'ready'
     // A table or piece picked in Design shop, or before Try again.
@@ -192,7 +195,7 @@ watch(() => [props.layout, props.tables, props.looks, props.itemLooks] as const,
 watch(dark, value => viewer?.setTheme(value))
 watch([showFigures, animate], ([figures, animateValue]) => viewer?.setPlayback({ figures, animate: animateValue }))
 
-watch(surroundings, value => viewer?.setSurroundings(value, props.branchId))
+watch(shownScene, value => viewer?.setSurroundings(value, props.branchId))
 
 /** Runs the benchmark and shows its report, to copy into a message (step 3h). */
 async function runBenchmark() {
@@ -214,7 +217,7 @@ async function runBenchmark() {
     pixelRatio: details.pixelRatio,
     canvas: { width: details.width, height: details.height },
     renderer: details,
-    surroundings: surroundingsItems.find(item => item.value === surroundings.value)!.label,
+    surroundings: sceneCard(shownScene.value).label,
     firstFrameMs,
     userAgent: navigator.userAgent,
   })
@@ -299,6 +302,52 @@ function selectFromList(tableId: string) {
 </script>
 
 <template>
+  <!-- The Scene panel (step 4a): the branch's scene, then this viewer's own playback. -->
+  <DefineScenePanel>
+    <div class="flex flex-col gap-5">
+      <URadioGroup
+        v-model="scene"
+        :items="sceneItems"
+        variant="card"
+        legend="Surroundings"
+        :ui="{ fieldset: 'gap-2', legend: 'mb-1 text-sm font-semibold text-highlighted', item: 'items-start', wrapper: 'min-w-0' }"
+        data-testid="scene-cards"
+      >
+        <template #label="{ item }">
+          <img
+            :src="item.photo"
+            alt=""
+            class="mb-2 block aspect-4/3 w-full rounded-md bg-muted object-cover"
+          >
+          <span class="font-medium text-highlighted">{{ item.label }}</span>
+        </template>
+      </URadioGroup>
+      <p class="text-xs text-muted">
+        Saved with the layout: everyone who opens this branch sees it.
+      </p>
+      <div class="flex flex-col gap-3 border-t border-default pt-4">
+        <p class="text-sm font-semibold text-highlighted">
+          On this device
+        </p>
+        <USwitch
+          v-model="showSurroundings"
+          label="Show surroundings"
+          :disabled="scene === 'none'"
+        />
+        <USwitch
+          v-model="showFigures"
+          label="Show people and pets"
+        />
+        <USwitch
+          :model-value="animate"
+          label="Animate"
+          :disabled="!showFigures"
+          @update:model-value="chooseAnimate"
+        />
+      </div>
+    </div>
+  </DefineScenePanel>
+
   <div class="flex h-full min-h-0">
     <aside
       aria-label="Navigate the building"
@@ -447,16 +496,20 @@ function selectFromList(tableId: string) {
             />
           </div>
           <div class="flex shrink-0 items-start gap-2">
-            <USelect
+            <UButton
               v-if="scenesEnabled"
-              v-model="surroundings"
-              :items="surroundingsItems"
-              aria-label="Surroundings (internal)"
-              class="w-48 bg-default max-sm:w-36"
-              data-testid="surroundings"
+              label="Scene"
+              icon="i-lucide-trees"
+              color="neutral"
+              :variant="sceneOpen ? 'soft' : 'outline'"
+              class="bg-default"
+              :aria-expanded="sceneOpen"
+              :ui="{ label: 'max-sm:sr-only' }"
+              data-testid="scene-button"
+              @click="sceneOpen = !sceneOpen"
             />
             <UPopover
-              v-if="hasFigures"
+              v-else-if="hasFigures"
               :content="{ align: 'end' }"
             >
               <UButton
@@ -485,7 +538,7 @@ function selectFromList(tableId: string) {
             </UPopover>
             <UButton
               v-if="mode !== 'inside'"
-              :label="surroundings === 'none' ? 'Fit building' : 'Fit scene'"
+              :label="shownScene === 'none' ? 'Fit building' : 'Fit scene'"
               icon="i-lucide-maximize"
               color="neutral"
               variant="outline"
@@ -683,6 +736,37 @@ function selectFromList(tableId: string) {
         </div>
       </div>
     </main>
+
+    <aside
+      v-if="scenesEnabled && sceneOpen && isExpanded"
+      aria-label="Scene"
+      class="w-72 shrink-0 overflow-y-auto border-l border-default p-4"
+    >
+      <div class="mb-4 flex items-center justify-between gap-2">
+        <h2 class="text-base font-semibold text-highlighted">
+          Scene
+        </h2>
+        <UButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          aria-label="Close scene panel"
+          @click="sceneOpen = false"
+        />
+      </div>
+      <ReuseScenePanel />
+    </aside>
+    <AppSlideover
+      v-if="scenesEnabled"
+      :open="sceneOpen && !isExpanded"
+      title="Scene"
+      @update:open="sceneOpen = $event"
+    >
+      <template #body>
+        <ReuseScenePanel />
+      </template>
+    </AppSlideover>
 
     <AppDrawer
       v-model:open="listsOpen"

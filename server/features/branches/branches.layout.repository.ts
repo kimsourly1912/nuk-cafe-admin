@@ -1,5 +1,5 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm'
-import type { BuiltInLookId, FloorGeometry, ItemLookKind, LayoutTable } from '#shared/contracts/shop-layout'
+import type { BuiltInLookId, FloorGeometry, ItemLookKind, LayoutScene, LayoutTable } from '#shared/contracts/shop-layout'
 import type { Db, Statement } from '#server/utils/batch'
 import { chunk, insertAll, requireCount } from '#server/utils/batch'
 import { inTenant } from '#server/utils/query'
@@ -41,7 +41,7 @@ export interface ItemLookUseRow {
 
 export interface LayoutRows {
   /** `undefined`: the branch has never saved a layout. */
-  layout: { version: number, updatedAt: Date, updatedByName: string | null } | undefined
+  layout: { version: number, updatedAt: Date, updatedByName: string | null, scene: LayoutScene | null } | undefined
   floors: FloorRow[]
   placements: PlacementRow[]
   /** The branch's active tables; the service sorts them by label. */
@@ -88,7 +88,7 @@ const placementColumns = {
  */
 export async function layoutRows(db: Db, tenantId: string, branchId: string): Promise<LayoutRows> {
   const [layouts, floors, placements, tables, looks, itemLooks] = await db.batch([
-    db.select({ version: branchLayouts.version, updatedAt: branchLayouts.updatedAt, updatedByName: user.name }).from(branchLayouts)
+    db.select({ version: branchLayouts.version, updatedAt: branchLayouts.updatedAt, updatedByName: user.name, scene: branchLayouts.scene }).from(branchLayouts)
       .leftJoin(user, eq(user.id, branchLayouts.updatedBy))
       .where(ofBranch(branchLayouts, tenantId, branchId)).limit(1),
     db.select(floorColumns).from(branchLayoutFloors)
@@ -121,15 +121,18 @@ export function requireActiveTables(db: Db, tenantId: string, branchId: string, 
 
 // --- Write statements ---
 
-/** The branch's first layout, at version 1. Fails on the key when one was saved meanwhile. */
-export function insertLayoutStatement(db: Db, tenantId: string, branchId: string, by: string | null, now: Date): Statement {
-  return db.insert(branchLayouts).values({ tenantId, branchId, version: 1, updatedAt: now, updatedBy: by })
+/** The branch's first layout, at version 1, with its scene if one came. Fails on the key when one was saved meanwhile. */
+export function insertLayoutStatement(db: Db, tenantId: string, branchId: string, by: string | null, now: Date, scene?: LayoutScene): Statement {
+  return db.insert(branchLayouts).values({ tenantId, branchId, version: 1, updatedAt: now, updatedBy: by, scene: scene ?? null })
 }
 
-/** Moves the layout to the next version if it's still at `version`. Follow it with `requireOneChange`. */
-export function touchLayoutStatement(db: Db, tenantId: string, branchId: string, version: number, by: string | null, now: Date): Statement {
+/**
+ * Moves the layout to the next version if it's still at `version`, and sets its scene if one came
+ * (none: the saved one stays). Follow it with `requireOneChange`.
+ */
+export function touchLayoutStatement(db: Db, tenantId: string, branchId: string, version: number, by: string | null, now: Date, scene?: LayoutScene): Statement {
   return db.update(branchLayouts)
-    .set({ version: sql`${branchLayouts.version} + 1`, updatedAt: now, updatedBy: by })
+    .set({ version: sql`${branchLayouts.version} + 1`, updatedAt: now, updatedBy: by, ...(scene && { scene }) })
     .where(inTenant(branchLayouts, tenantId, eq(branchLayouts.branchId, branchId), eq(branchLayouts.version, version)))
 }
 

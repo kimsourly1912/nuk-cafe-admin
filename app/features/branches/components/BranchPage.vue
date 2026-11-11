@@ -8,6 +8,8 @@
  * and view are kept in the URL (`?tab=tables&view=design`, `useUrlTab`) without a route change, so
  * switching never asks about unsaved changes.
  */
+import { NO_SCENE } from '#shared/contracts/shop-layout'
+import type { ScenePreset } from '#shared/contracts/shop-layout'
 import { useAddBranch } from '../composables/useAddBranch'
 import { useBranchOptions } from '../composables/useBranchOptions'
 import { useBranchSettings, useBranchTables } from '../composables/useBranches'
@@ -86,6 +88,11 @@ const selectedItem = computed<string | null>({
     }
     else if (editor.selection.value?.kind === 'item') editor.selection.value = null
   },
+})
+/** The branch's scene (step 4a): part of the draft, so Save layout saves it with the layout. */
+const scene = computed<ScenePreset>({
+  get: () => (layout.value.scene ?? NO_SCENE).preset,
+  set: preset => editor.setScene(preset),
 })
 function showItemOnPlan(itemId: string) {
   selectedItem.value = itemId
@@ -304,6 +311,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
             v-else
             v-model:selected-table="selectedTable"
             v-model:selected-item="selectedItem"
+            v-model:scene="scene"
             :layout="layout"
             :tables="editor.tables.value"
             :looks="editor.looks.value"

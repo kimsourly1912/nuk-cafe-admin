@@ -3,7 +3,7 @@ import { check, foreignKey, index, integer, primaryKey, sqliteTable, text, uniqu
 import { schema as authSchema } from '#auth/schema'
 import { DINING_TABLE_STATUSES } from '#shared/contracts/branches'
 import { BUILT_IN_LOOK_IDS, ITEM_LOOK_KINDS, LOOK_CHAIRS, TABLE_BASES, TABLE_SHAPES } from '#shared/contracts/shop-layout'
-import type { Finish, FloorGeometry, LookFinishes } from '#shared/contracts/shop-layout'
+import type { Finish, FloorGeometry, LayoutScene, LookFinishes } from '#shared/contracts/shop-layout'
 import { BRANCH_ROLES } from '#shared/contracts/staff'
 import { newId } from '#server/utils/ids'
 
@@ -131,6 +131,8 @@ export const branchLayouts = sqliteTable('branch_layouts', {
   version: integer().notNull().default(1),
   updatedAt: instant().notNull().default(nowMs),
   updatedBy: text().references(() => authSchema!.user.id, { onDelete: 'set null' }),
+  /** The surroundings in 3D (step 4a), checked by the shared `layoutSceneSchema`; null: none chosen yet. */
+  scene: text({ mode: 'json' }).$type<LayoutScene>(),
 }, t => [
   primaryKey({ columns: [t.tenantId, t.branchId] }),
   foreignKey({ name: 'branch_layouts_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),

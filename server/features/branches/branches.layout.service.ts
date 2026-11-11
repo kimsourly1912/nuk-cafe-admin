@@ -1,5 +1,5 @@
-import { isBuiltInLook, isItemLookKind } from '#shared/contracts/shop-layout'
-import type { BranchLayout, Floor, Placement, SaveLayoutInput } from '#shared/contracts/shop-layout'
+import { isBuiltInLook, isItemLookKind, NO_SCENE } from '#shared/contracts/shop-layout'
+import type { BranchLayout, Floor, LayoutScene, Placement, SaveLayoutInput, ScenePreset } from '#shared/contracts/shop-layout'
 import type { Db, Statement } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
 import { toIso } from '#server/utils/time'
@@ -25,6 +25,7 @@ function toLayout(rows: LayoutRows): BranchLayout {
     updatedByName: rows.layout?.updatedByName ?? null,
     floors: rows.floors.map(toFloor),
     placements: rows.placements.map(toPlacement),
+    scene: rows.layout?.scene ?? NO_SCENE,
     tables: rows.tables.sort((a, b) => byLabel.compare(a.label, b.label)),
   }
 }
@@ -56,7 +57,8 @@ export async function getLayout(db: Db, tenantId: string, branchId: string): Pro
 
 /**
  * Saves the whole layout from the version read, in one batch: the version (first save: the
- * layout's row), the floors and placements replaced, every placed table checked still active in
+ * layout's row) and the scene if one came (none: the saved one stays, an app tab from before step 4a),
+ * the floors and placements replaced, every placed table checked still active in
  * this branch, and an audit row. A stale version is `layoutChanged`; placed tables that aren't
  * active tables of the branch (archived or deleted meanwhile, or another branch's) are
  * `layoutTablesUnavailable`, before the write and again by the batch's guards. A look that is
@@ -70,7 +72,7 @@ export async function saveLayout(db: Db, actor: Actor, branchId: string, input: 
   await loadActiveBranch(db, tenantId, branchId)
   const current = await repo.layoutRows(db, tenantId, branchId)
   if ((current.layout?.version ?? 0) !== input.version) throw layoutChanged()
-  const { floors, placements } = input.layout
+  const { floors, placements, scene } = input.layout
   const unavailable = unavailableAt(placements, current.tables.map(table => table.id))
   if (unavailable.length) throw layoutTablesUnavailable(unavailable)
   const unknownLooks = unknownLooksAt(input.layout, current)
@@ -80,11 +82,11 @@ export async function saveLayout(db: Db, actor: Actor, branchId: string, input: 
   const now = new Date()
   const statements: Statement[] = [
     ...(input.version === 0
-      ? [repo.insertLayoutStatement(db, tenantId, branchId, actor.userId, now)]
-      : [repo.touchLayoutStatement(db, tenantId, branchId, input.version, actor.userId, now), requireOneChange(db)]),
+      ? [repo.insertLayoutStatement(db, tenantId, branchId, actor.userId, now, scene)]
+      : [repo.touchLayoutStatement(db, tenantId, branchId, input.version, actor.userId, now, scene), requireOneChange(db)]),
     ...repo.replaceLayoutStatements(db, tenantId, branchId, floors.map(floorRow), placements.map(placementRow), floors.flatMap(itemLookUses)),
     ...repo.requireActiveTables(db, tenantId, branchId, tableIds),
-    audit(db, actor, 'layout.update', 'branch', branchId, { version: input.version + 1, floors: floors.length, placements: placements.length }),
+    audit(db, actor, 'layout.update', 'branch', branchId, { version: input.version + 1, floors: floors.length, placements: placements.length, ...sceneChange(current, scene) }),
   ]
   try {
     await db.batch(statements as [Statement, ...Statement[]])
@@ -101,6 +103,12 @@ export async function saveLayout(db: Db, actor: Actor, branchId: string, input: 
     throw deleted.length ? layoutLooksUnavailable(deleted) : layoutChanged()
   }
   return getLayout(db, tenantId, branchId)
+}
+
+/** The audit's note of a new scene: its preset, when the save changes it (step 4a). */
+function sceneChange(current: LayoutRows, scene: LayoutScene | undefined): { scene?: ScenePreset } {
+  const saved = current.layout?.scene ?? NO_SCENE
+  return scene && scene.preset !== saved.preset ? { scene: scene.preset } : {}
 }
 
 /** The positions of the placements whose table isn't one of `activeIds`. */

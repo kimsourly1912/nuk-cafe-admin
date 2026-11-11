@@ -855,7 +855,8 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'View in 3D' }).first().click()
     await drawn(page)
     await shot(page, '3d-people-and-pets')
-    await page.getByTestId('figure-playback').click()
+    // In the Scene panel while the scenes flag is on (step 4a), as on this server; a popover without it.
+    await page.getByTestId('scene-button').click()
     const show = page.getByRole('switch', { name: 'Show people and pets' })
     const animate = page.getByRole('switch', { name: 'Animate' })
     await show.waitFor()
@@ -941,27 +942,66 @@ describe('the shop designer on saved layouts', () => {
     expect(await saveElsewhere(page, { version: (await savedLayout(page)).version, layout: { floors, placements } })).toBe(200)
   })
 
-  it('the Neighborhood lane (step 3h, internal): around the café, tables still found, Fit scene, and the benchmark panel', { timeout: 90_000 }, async () => {
+  it('the scene (step 4a, flag on): the lane chosen in the Scene panel, tables still found, saved with the layout and seen by another device; playback stays on each device', { timeout: 120_000 }, async () => {
     const page = await signedIn()
     await page.goto(url(`${branchPath(lab.branchId, '3d')}&bench=orbit`), { waitUntil: 'hydration' })
     await drawn(page)
-    const lists = page.getByRole('complementary', { name: 'Navigate the building' })
-    await page.getByTestId('surroundings').click()
-    await page.getByRole('option', { name: 'Neighborhood lane' }).click()
+    expect((await savedLayout(page)).scene).toEqual({ preset: 'none' })
+    await page.getByTestId('scene-button').click()
+    const panel = page.getByRole('complementary', { name: 'Scene' })
+    await panel.getByRole('radio', { name: /Neighborhood lane/ }).click()
+    // A change to the layout, shown at once and saved with it.
+    await page.getByTestId('building-unsaved').waitFor()
+    expect(await saveButton(page).isDisabled()).toBe(false)
     await page.getByRole('button', { name: 'Fit scene' }).click()
-    await shot(page, '3d-neighborhood-lane')
+    await shot(page, '3d-scene-panel')
     // The street never gets between a person and their tables.
+    const lists = page.getByRole('complementary', { name: 'Navigate the building' })
     await lists.getByTestId('list-table-L1').click()
     await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('L1')
     await page.getByRole('button', { name: 'Cutaway' }).click()
     await shot(page, '3d-neighborhood-lane-cutaway')
-    // The benchmark: a panel to run it and copy its report (its numbers come from a real device).
+    // The benchmark (step 3h): a panel to run it and copy its report (its numbers come from a real device).
     const bench = page.getByTestId('benchmark')
     await bench.getByRole('button', { name: 'Run benchmark' }).waitFor()
     expect(await bench.textContent()).toContain('three 20 s orbits')
-    // Back to no surroundings: the building alone, Fit building again.
-    await page.getByTestId('surroundings').click()
-    await page.getByRole('option', { name: 'No surroundings' }).click()
+    await save(page)
+    expect((await savedLayout(page)).scene).toEqual({ preset: 'neighborhood-lane' })
+
+    // This device hides the surroundings: its own choice, not a change to the layout.
+    await panel.getByRole('switch', { name: 'Show surroundings' }).click()
     await page.getByRole('button', { name: 'Fit building' }).waitFor()
+    expect(await saveButton(page).isDisabled()).toBe(true)
+
+    // Another device opens the branch: the saved lane, with its own playback (surroundings shown).
+    const phone = await signedIn(390, 844)
+    await phone.goto(url(branchPath(lab.branchId, '3d')), { waitUntil: 'hydration' })
+    await drawn(phone)
+    await phone.getByRole('button', { name: 'Fit scene' }).waitFor()
+    await phone.getByTestId('scene-button').click()
+    const sheet = phone.getByRole('dialog', { name: 'Scene' })
+    expect(await sheet.getByRole('radio', { name: /Neighborhood lane/ }).getAttribute('aria-checked')).toBe('true')
+    expect(await sheet.getByRole('switch', { name: 'Show surroundings' }).getAttribute('aria-checked')).toBe('true')
+    // The sheet fits the phone once it has slid in, and nothing scrolls sideways.
+    await expect.poll(async () => {
+      const box = await sheet.boundingBox()
+      return !!box && box.x >= 0 && box.x + box.width <= 390
+    }).toBe(true)
+    expect(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await shot(phone, '3d-scene-panel-phone')
+    // Back to no surroundings, saved, for the next tests.
+    await sheet.getByRole('radio', { name: /No surroundings/ }).click()
+    await phone.keyboard.press('Escape')
+    await phone.getByRole('button', { name: 'Fit building' }).waitFor()
+    await save(phone)
+    expect((await savedLayout(phone)).scene).toEqual({ preset: 'none' })
+
+    // The first device, with nothing unsaved, takes that save on its next refetch (here the
+    // connection coming back): the same drawing with another scene is news, never kept as its own,
+    // which its next save would put back over the other device's choice.
+    await page.context().setOffline(true)
+    await page.context().setOffline(false)
+    await expect.poll(() => panel.getByRole('radio', { name: /No surroundings/ }).getAttribute('aria-checked')).toBe('true')
+    expect(await saveButton(page).isDisabled()).toBe(true)
   })
 })

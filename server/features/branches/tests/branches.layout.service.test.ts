@@ -3,12 +3,12 @@ import * as v from 'valibot'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
 import type { Floor, Placement, SaveLayoutInput } from '#shared/contracts/shop-layout'
-import { FIGURE_SIZES, floorSchema, LAYOUT_MAX_BODY_BYTES, LAYOUT_MAX_FLOOR_BYTES, saveLayoutSchema } from '#shared/contracts/shop-layout'
+import { FIGURE_SIZES, floorSchema, LAYOUT_MAX_BODY_BYTES, LAYOUT_MAX_FLOOR_BYTES, NO_SCENE, saveLayoutSchema } from '#shared/contracts/shop-layout'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { getLayout, saveLayout } from '#server/features/branches/branches.layout.service'
 import { archiveTable, createTable, deleteTable, restoreTable, updateTable } from '#server/features/branches/branches.service'
-import { deletePlacementStatement, layoutRows, replaceLayoutStatements, requireActiveTables } from '#server/features/branches/branches.layout.repository'
+import { deletePlacementStatement, layoutRows, replaceLayoutStatements, requireActiveTables, touchLayoutStatement } from '#server/features/branches/branches.layout.repository'
 import { branchLayoutItemLooks, branchLayoutPlacements, branches, diningTables } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
@@ -164,6 +164,52 @@ describe('saving a layout', () => {
   })
 })
 
+describe('the scene (step 4a)', () => {
+  const lane = { preset: 'neighborhood-lane' } as const
+  const audits = async () => (await db.select().from(auditEvents).where(eq(auditEvents.action, 'branch.layout.update'))).map(row => row.metadata)
+
+  it('is none until chosen; saved with the layout at its version and read back, the audit naming the new preset', async () => {
+    expect((await getLayout(db, TEST_TENANT, branch)).scene).toEqual(NO_SCENE)
+    await save({ version: 0, layout: { floors: [floor('ground')], placements: [] } })
+    expect((await getLayout(db, TEST_TENANT, branch)).scene).toEqual(NO_SCENE)
+    const saved = await save({ version: 1, layout: { floors: [floor('ground')], placements: [], scene: lane } })
+    expect(saved).toMatchObject({ version: 2, scene: lane })
+    expect((await getLayout(db, TEST_TENANT, branch)).scene).toEqual(lane)
+    // The same preset again is no news.
+    await save({ version: 2, layout: { floors: [floor('ground')], placements: [], scene: lane } })
+    expect(await audits()).toEqual([
+      { version: 1, floors: 1, placements: 0 },
+      { version: 2, floors: 1, placements: 0, scene: 'neighborhood-lane' },
+      { version: 3, floors: 1, placements: 0 },
+    ])
+  })
+
+  it('a first save may bring one', async () => {
+    expect(await save({ version: 0, layout: { floors: [floor('ground')], placements: [], scene: lane } })).toMatchObject({ version: 1, scene: lane })
+  })
+
+  it('a save without one keeps the saved scene (an app tab from before step 4a)', async () => {
+    await save({ version: 0, layout: { floors: [floor('ground')], placements: [], scene: lane } })
+    const saved = await save({ version: 1, layout: { floors: [floor('ground', 'Downstairs')], placements: [] } })
+    expect(saved).toMatchObject({ version: 2, floors: [{ name: 'Downstairs' }], scene: lane })
+  })
+
+  it('a stale save changes no scene', async () => {
+    await save({ version: 0, layout: { floors: [floor('ground')], placements: [] } })
+    await save({ version: 1, layout: { floors: [floor('ground')], placements: [], scene: lane } })
+    await expectApiError(() => save({ version: 1, layout: { floors: [floor('ground')], placements: [], scene: NO_SCENE } }), 409, 'VERSION_CONFLICT')
+    expect((await getLayout(db, TEST_TENANT, branch)).scene).toEqual(lane)
+  })
+
+  it('the contract refuses an unknown preset and any other field (400 at the route)', () => {
+    const body = (scene: unknown) => ({ version: 1, layout: { floors: [floor('ground')], placements: [], scene } })
+    expect(v.safeParse(saveLayoutSchema, body(lane)).success).toBe(true)
+    expect(v.safeParse(saveLayoutSchema, body({ preset: 'seaside' })).issues?.map(issue => issue.message)).toContain('Unknown scene')
+    expect(v.safeParse(saveLayoutSchema, body({ preset: 'none', sign: 'x'.repeat(3000) })).success).toBe(false)
+    expect(v.safeParse(saveLayoutSchema, body(null)).success).toBe(false)
+  })
+})
+
 describe('placed tables', () => {
   const field = (index: number) => [`layout.placements.${index}.tableId`]
 
@@ -280,6 +326,10 @@ describe('tenants', () => {
       ...replaceLayoutStatements(db, TEST_TENANT, theirBranch, [], []),
     ])
     expect(await layoutRows(db, OTHER, theirBranch)).toEqual(found)
+    // Their scene (step 4a): our cafe's id moves no version and sets no scene.
+    await db.batch([touchLayoutStatement(db, TEST_TENANT, theirBranch, 1, actor.userId, new Date(), { preset: 'neighborhood-lane' })])
+    expect(await layoutRows(db, OTHER, theirBranch)).toEqual(found)
+    expect(found.layout?.scene).toBeNull()
     // Their table isn't an active table of ours: the guard counts none.
     await expect(db.batch(requireActiveTables(db, TEST_TENANT, theirBranch, [theirTable]) as Batch)).rejects.toThrow()
     await db.batch(requireActiveTables(db, OTHER, theirBranch, [theirTable]) as Batch)

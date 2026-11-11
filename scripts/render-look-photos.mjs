@@ -4,6 +4,7 @@
 //
 //   node scripts/render-look-photos.mjs
 //   node scripts/render-look-photos.mjs person cat   (only these pictures)
+//   node scripts/render-look-photos.mjs scene-none scene-neighborhood-lane   (the scene cards, step 4a)
 //
 // Serves scripts/look-photos/ with Vite's dev server (through vitest, a direct dependency) to
 // playwright-core's Chromium, as the e2e tests launch it (E2E_BROWSER_PATH, or the installed Chrome).
@@ -15,6 +16,7 @@ import { createViteServer } from 'vitest/node'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const out = join(root, 'public/shop-designer/looks')
+const scenesOut = join(root, 'public/shop-designer/scenes')
 const WIDTH = 480
 const HEIGHT = 360
 
@@ -39,6 +41,7 @@ try {
   const unknown = only.filter(id => !ids.includes(id))
   if (unknown.length) throw new Error(`No picture named ${unknown.join(', ')}`)
   await mkdir(out, { recursive: true })
+  await mkdir(scenesOut, { recursive: true })
   for (const id of ids) {
     await page.evaluate(id => window.showLookPhoto(id), id)
     const png = await page.locator('canvas').screenshot()
@@ -54,7 +57,9 @@ try {
       return target.toDataURL('image/webp', 0.82).split(',')[1]
     }, { data: png.toString('base64'), width: WIDTH, height: HEIGHT })
     const bytes = Buffer.from(webp, 'base64')
-    await writeFile(join(out, `${id}.webp`), bytes)
+    // A scene card's picture (step 4a) goes with the scenes, the rest with the looks.
+    const file = id.startsWith('scene-') ? join(scenesOut, `${id.slice('scene-'.length)}.webp`) : join(out, `${id}.webp`)
+    await writeFile(file, bytes)
     console.log(`${id}.webp ${Math.round(bytes.length / 1024)} KB`)
   }
   await browser.close()

@@ -12,9 +12,6 @@ import { findOpening, outwardNormal, pointOnEdge } from './geometry'
  * plan turn (degrees, clockwise) that points a piece's front (+y) out of the café.
  */
 
-export const SURROUNDINGS_PRESETS = ['none', 'neighborhood-lane'] as const
-export type SurroundingsPreset = typeof SURROUNDINGS_PRESETS[number]
-
 export interface FrontFrame {
   origin: Point
   /** Out of the café, towards the street (the frame's +n). */
