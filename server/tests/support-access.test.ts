@@ -46,6 +46,14 @@ describe('requirePermission and support access', () => {
     await expectApiError(() => requirePermission(eventOf('POST'), { menu: ['write'] }), 403, 'SUPPORT_READ_ONLY')
     await expectApiError(() => requirePermission(eventOf('GET'), { report: ['export'] }), 403, 'FORBIDDEN')
 
+    // The cafe's furniture looks (QS3, D273): Design shop and the Looks page read them; nothing changes them.
+    const looks = '/api/c/nuk/admin/item-looks'
+    expect(await requirePermission(eventOf('GET', '/api/c/nuk/admin/furniture-looks'), { furniture: ['manage'] })).toMatchObject({ role: 'support' })
+    expect(await requirePermission(eventOf('GET', looks), { furniture: ['manage'] })).toMatchObject({ role: 'support' })
+    for (const method of ['POST', 'PATCH', 'DELETE']) {
+      await expectApiError(() => requirePermission(eventOf(method, `${looks}/look-1`), { furniture: ['manage'] }), 403, 'SUPPORT_READ_ONLY')
+    }
+
     // Another session of the same super admin: no visit there.
     current = { ...current!, session: { id: 'session-2', createdAt: new Date() } }
     await expectApiError(() => requirePermission(eventOf('GET'), { menu: ['read'] }), 403, 'FORBIDDEN')
