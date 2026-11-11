@@ -3,6 +3,16 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop designer step 2d: quick actions and corner handles (D273, 2026-11-11)
+
+- Step 3b merged (PR #282). The owner chose this before the pilot (3c) from step 2b's deferred list. **Built** from mockup frame 2B: a toolbar beside the selected table (**Rotate 90°**, **Duplicate look**, **Remove from map**) or furniture (**Rotate 90°**, **Duplicate**, **Delete**), icons only on phones; square corner handles that resize tables and furniture on the plan (opposite corner fixed, 5 cm steps, the contract's limits, round stays round, one undo step). **Duplicate look** asks which table (unplaced or New table) and copies only the look, size and turn, never the table or its QR. No server change; the furniture size limits got names in the contract (same values). [Plan → Step 2d](plans/shop-designer.md#step-2d-quick-actions-and-corner-handles-built-2026-11-11).
+- **Evidence:**
+  - `pnpm lint`, `pnpm typecheck` clean.
+  - `pnpm test:unit`: 2702 passed, 1 skipped (179 files), with `designer-geometry.test.ts` (20, 4 new: the fixed corner, a turned table, limits and round pieces, where a copy goes).
+  - `pnpm vitest run --project e2e test/e2e/shop-designer.test.ts`: 13 passed on the built server (no mocks): a corner handle dragged 40 cm, Undo/Redo, Rotate 90°, Duplicate look with New table saved beside L1, Remove from map, a plant duplicated, the 390 px phone bar with no sideways scrolling. Desktop and phone screenshots checked by eye.
+- **Not verified:** real touch devices (handle size under a finger, the bar beside the move pad on a small tablet); the full e2e suite (no shared code changed apart from two named constants).
+- How to verify: on staging, select a table in Design shop: drag a square corner, then use **Rotate 90°**, **Duplicate look** and **Remove from map** in the bar under it; repeat on a phone.
+
 ### Shop designer step 3b: look photos (D273, 2026-11-11)
 
 - Steps 2c and 3a merged (PR #281). **Built:** an optional photo on a custom look: **Photo** in the look's form (the shared `<ImageInput>`, cropped 4:3, uploaded through the existing media route), shown on the look under Table looks, beside **Look** in a table's panel and on the 3D table card. The plan and 3D keep the simple shape. Migration `0060_look_photos` (`custom_furniture_looks.photo_asset_id`, nullable, no foreign key like every other upload a record uses). The look's batch attaches the photo and releases the one it replaces, removes or is deleted with; a new look never copies another look's photo. [Plan → Step 3b](plans/shop-designer.md#step-3b-look-photos-built-2026-11-11).

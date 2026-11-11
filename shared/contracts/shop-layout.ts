@@ -98,6 +98,9 @@ const finishesSchema = v.pipe(
   v.check(finishes => Object.keys(finishes).length <= 6, 'Too many finishes'),
 )
 
+export const ITEM_SIZE_MIN_CM = 10
+export const ITEM_SIZE_MAX_CM = 2_000
+
 /** Furniture or a fixture: its centre, turn and footprint. Height is the kind's own. */
 export const itemSchema = v.strictObject({
   id: idSchema,
@@ -105,8 +108,8 @@ export const itemSchema = v.strictObject({
   x: cmSchema,
   y: cmSchema,
   rotation: rotationSchema,
-  width: sizeSchema(10, 2_000),
-  depth: sizeSchema(10, 2_000),
+  width: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
+  depth: sizeSchema(ITEM_SIZE_MIN_CM, ITEM_SIZE_MAX_CM),
   /** By the kind's finish slots (`frame`, `seat`, `top`…); a missing slot uses the kind's default. */
   finishes: finishesSchema,
 })
