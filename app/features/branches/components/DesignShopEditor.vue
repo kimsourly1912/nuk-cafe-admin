@@ -81,6 +81,12 @@ const ITEM_ICONS: Record<ItemKind, string> = {
   'room-divider': 'i-lucide-columns-3',
   'stairs': 'i-lucide-chevrons-up',
   'person': 'i-lucide-person-standing',
+  'girl': 'i-lucide-person-standing',
+  'boy': 'i-lucide-person-standing',
+  'old-man': 'i-lucide-person-standing',
+  'barista': 'i-lucide-coffee',
+  'seated-person': 'i-lucide-armchair',
+  'lazing-person': 'i-lucide-bed',
   'cat': 'i-lucide-cat',
   'dog': 'i-lucide-dog',
 }

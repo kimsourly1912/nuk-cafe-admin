@@ -755,22 +755,60 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             opacity="0.6"
           />
         </template>
-        <!-- People and pets (step 3g): a figure seen from above, front (head) towards +y. -->
-        <g v-else-if="isFigureKind(item.kind)">
-          <ellipse
-            :rx="item.kind === 'person' ? item.width / 2 - 2 : item.width / 2 - 3"
-            :ry="item.kind === 'person' ? item.depth / 2 - 4 : item.depth / 2 - 10"
-            :cy="item.kind === 'person' ? 0 : -6"
-            fill="color-mix(in oklab, var(--ui-secondary) 22%, var(--ui-bg))"
-            stroke="var(--ui-secondary)"
-            stroke-width="3"
-          />
-          <circle
-            :cy="item.kind === 'person' ? 0 : item.depth / 2 - 10"
-            :r="item.kind === 'person' ? 10 : item.width / 3"
-            fill="var(--ui-secondary)"
-            opacity="0.7"
-          />
+        <!-- People and pets (step 3g): seen from above, the front (head) towards +y. -->
+        <g
+          v-else-if="isFigureKind(item.kind)"
+          fill="color-mix(in oklab, var(--ui-secondary) 22%, var(--ui-bg))"
+          stroke="var(--ui-secondary)"
+          stroke-width="3"
+        >
+          <template v-if="ITEM_SPECS[item.kind].figure === 'hammock'">
+            <rect
+              :x="-item.width / 2 + 6"
+              :y="-item.depth / 2 + 6"
+              :width="item.width - 12"
+              :height="item.depth - 12"
+              rx="6"
+              fill="none"
+            />
+            <ellipse
+              :rx="item.width / 2 - 24"
+              :ry="item.depth / 2 - 14"
+            />
+            <circle
+              :cx="-item.width / 2 + 60"
+              r="11"
+              fill="var(--ui-secondary)"
+              stroke="none"
+              opacity="0.7"
+            />
+          </template>
+          <template v-else-if="ITEM_SPECS[item.kind].figure === 'animal'">
+            <ellipse
+              :rx="item.width / 2 - 3"
+              :ry="item.depth / 2 - 10"
+              cy="-6"
+            />
+            <circle
+              :cy="item.depth / 2 - 10"
+              :r="item.width / 3"
+              fill="var(--ui-secondary)"
+              stroke="none"
+              opacity="0.7"
+            />
+          </template>
+          <template v-else>
+            <ellipse
+              :rx="item.width / 2 - 4"
+              :ry="Math.min(item.depth, 35) / 2 - 4"
+            />
+            <circle
+              r="10"
+              fill="var(--ui-secondary)"
+              stroke="none"
+              opacity="0.7"
+            />
+          </template>
         </g>
         <circle
           v-else-if="item.kind === 'bar-stool'"

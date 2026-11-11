@@ -49,9 +49,15 @@ export type Finish = typeof FINISHES[number]
  * footprint is the model's own, so the plan and the 3D view always agree.
  */
 export const FIGURE_SIZES = {
-  person: { width: 50, depth: 35 },
-  cat: { width: 25, depth: 50 },
-  dog: { width: 30, depth: 70 },
+  'person': { width: 50, depth: 35 },
+  'girl': { width: 40, depth: 30 },
+  'boy': { width: 40, depth: 30 },
+  'old-man': { width: 55, depth: 45 },
+  'barista': { width: 50, depth: 50 },
+  'seated-person': { width: 50, depth: 65 },
+  'lazing-person': { width: 240, depth: 90 },
+  'cat': { width: 25, depth: 40 },
+  'dog': { width: 30, depth: 70 },
 } as const satisfies Record<string, { width: number, depth: number }>
 export type FigureKind = keyof typeof FIGURE_SIZES
 export const FIGURE_KINDS = Object.keys(FIGURE_SIZES) as FigureKind[]

@@ -3,12 +3,13 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
-### Shop designer step 3g in progress: people and pets (D274, 2026-11-11)
+### Shop designer step 3g: people and pets (D274, 2026-11-11)
 
-- **Owner's answers (2026-11-11):** build 3g first (3e and 3f after 3h, still before the pilot); QS4 answered: `blob:` joins `connect-src`; the owner downloads CC0 packs and uploads them, since Kenney refuses automated downloads and Poly Haven has no people or pets.
-- **Built so far** (no model files yet): figure kinds (person, cat, dog) with fixed sizes in the contract, the People and pets library section, the plan drawing, the 3D anchors with contact shadows, the model loader with idle loops, the viewer's Show people and pets and Animate, the CSP change, the model list and its test. [Plan → Step 3g](plans/shop-designer-scenes.md#step-3g-build-notes-in-progress-2026-11-11).
-- **Evidence:** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2765 passed, 1 skipped (182 files). Guards removed one at a time, each failing a test: hidden-tab stop, Animate stop, stale-scene drop, figures out of placement warnings, the contract's figure size.
-- **Waiting on:** the owner's CC0 packs; then the models, their list entries, the e2e test on the built server (a textured model loads under the CSP) and the review on staging.
+- **Owner's choices (2026-11-11):** 3g first (3e and 3f after 3h, still before the pilot); QS4 answered: `blob:` joins `connect-src`; **people and pets generated from code now**, the owner uploads CC0 models later (Kenney refuses automated downloads, Poly Haven has no people or pets).
+- **Built:** a **People and pets** library section (Person, Girl, Boy, Old man, Barista, Seated customer, Someone lazing in a hammock, Cat, Dog) with pictures; fixed sizes in the contract; no size fields, corner handles or warnings; 3D figures generated from code with a contact shadow and idle motion; View in 3D's **People and pets** menu (**Show people and pets**, **Animate**, per viewer); a model list and loader so a CC0 `.glb` replaces a kind's generated figure; `connect-src 'self' blob:`. [Plan → Step 3g](plans/shop-designer-scenes.md#step-3g-people-and-pets-built-2026-11-11).
+- **Evidence (2026-11-11, Linux container, Chromium at `/opt/pw-browsers/chromium` via `E2E_BROWSER_PATH`):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2776 passed, 1 skipped (182 files); `test/e2e/shop-designer.test.ts` 18 passed; `test/e2e/monitoring-headers.test.ts` 11 passed. Guards removed one at a time, each failing a test: the hidden-tab stop, the Animate stop, the stale-scene drop, figures out of placement warnings, the contract's figure size.
+- **Not verified:** a textured `.glb` under the CSP on the built server (no model yet); the look and cost on a real phone.
+- **Pitfall:** the e2e file's tests run in order on one seeded cafe (the first one picks a starter): run the whole file, not one test with `-t`, or the plan never appears.
 
 ### Shop designer scenes planned: surroundings, people and pets (D274, 2026-11-11)
 

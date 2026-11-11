@@ -3,6 +3,7 @@
 // always matches what the plan places. Run it again when a built-in model or look changes:
 //
 //   node scripts/render-look-photos.mjs
+//   node scripts/render-look-photos.mjs person cat   (only these pictures)
 //
 // Serves scripts/look-photos/ with Vite's dev server (through vitest, a direct dependency) to
 // playwright-core's Chromium, as the e2e tests launch it (E2E_BROWSER_PATH, or the installed Chrome).
@@ -33,7 +34,10 @@ try {
   page.on('pageerror', error => console.error(error))
   await page.goto(server.resolvedUrls.local[0])
   await page.waitForFunction(() => 'showLookPhoto' in window, undefined, { timeout: 60_000 })
-  const ids = await page.evaluate(() => window.lookPhotoIds)
+  const only = process.argv.slice(2)
+  const ids = (await page.evaluate(() => window.lookPhotoIds)).filter(id => !only.length || only.includes(id))
+  const unknown = only.filter(id => !ids.includes(id))
+  if (unknown.length) throw new Error(`No picture named ${unknown.join(', ')}`)
   await mkdir(out, { recursive: true })
   for (const id of ids) {
     await page.evaluate(id => window.showLookPhoto(id), id)

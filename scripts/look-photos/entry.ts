@@ -5,8 +5,9 @@
  */
 import { Box3, CircleGeometry, Mesh, MeshStandardMaterial, Sphere, Vector3 } from 'three'
 import type { Group } from 'three'
-import { ITEM_LOOK_KINDS } from '#shared/contracts/shop-layout'
+import { FIGURE_KINDS, ITEM_LOOK_KINDS } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, ITEM_SPECS } from '../../app/features/branches/designer/catalog'
+import { buildFigure } from '../../app/features/branches/designer/scene/figures'
 import type { BuildContext } from '../../app/features/branches/designer/scene/furniture'
 import { buildItem, buildTable } from '../../app/features/branches/designer/scene/furniture'
 import { createStage } from '../../app/features/branches/designer/scene/stage'
@@ -17,10 +18,11 @@ const drawn = new Promise<void>(resolve => (firstFrame = resolve))
 const stage = createStage({ canvas, dark: false, onFirstFrame: () => firstFrame() })
 const disc = new MeshStandardMaterial({ color: '#000000', transparent: true, opacity: 0.08, roughness: 1 })
 
-/** What each picture shows: a table look with four chairs (six on the communal table), or a piece. */
+/** What each picture shows: a table look with four chairs (six on the communal table), a piece, or a figure (step 3g). */
 const builds: Record<string, (context: BuildContext) => Group> = Object.fromEntries([
   ...BUILT_IN_LOOKS.map(look => [look.id, (context: BuildContext) => buildTable(context, look, look.defaultWidth, look.defaultDepth, look.id === 'communal' ? 6 : 4)]),
   ...ITEM_LOOK_KINDS.map(kind => [kind, (context: BuildContext) => buildItem(context, { kind, width: ITEM_SPECS[kind].width, depth: ITEM_SPECS[kind].depth, finishes: {} })]),
+  ...FIGURE_KINDS.map(kind => [kind, (context: BuildContext) => buildFigure(context, kind, `picture-${kind}`).body]),
 ])
 
 const frames = (count: number) => new Promise<void>((resolve) => {

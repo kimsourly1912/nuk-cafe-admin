@@ -1,10 +1,12 @@
 import { Box3, CircleGeometry, Group, Mesh, PlaneGeometry, Vector3 } from 'three'
+import type { Object3D } from 'three'
 import { isFigureKind } from '#shared/contracts/shop-layout'
 import type { FigureKind, ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { findLook, pieceFinishes } from '../catalog'
 import { boundsOf } from '../geometry'
 import type { FloorBuild } from './building'
 import { buildFloor, SLAB_THICKNESS_CM } from './building'
+import { buildFigure } from './figures'
 import type { BuildContext } from './furniture'
 import { buildItem, buildTable } from './furniture'
 import { cm, yRotation } from './units'
@@ -47,14 +49,17 @@ export interface TableNode {
 }
 
 /**
- * A person or pet (step 3g, D274): an empty group where the figure stands, facing the plan's turn.
- * Its model is a file, loaded after the building is drawn; the viewer puts it in this group.
+ * A person or pet (step 3g, D274), standing where the plan puts it: the generated figure (`body`)
+ * and its idle motion. When the kind has a model file, the viewer loads it into the anchor and hides
+ * the generated one.
  */
 export interface FigureNode {
   itemId: string
   kind: FigureKind
   floorId: string
   anchor: Group
+  body: Object3D
+  idle: (seconds: number) => void
 }
 
 export interface BuiltScene {
@@ -82,10 +87,16 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
     built.group.position.y = baseY
     built.group.userData.baseY = baseY
     for (const item of floor.items) {
-      const object = isFigureKind(item.kind)
-        ? figureAnchor(context, item.kind, item.width, item.depth)
-        : buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height })
-      if (isFigureKind(item.kind)) figures.push({ itemId: item.id, kind: item.kind, floorId: floor.id, anchor: object })
+      let object: Group
+      if (isFigureKind(item.kind)) {
+        const figure = buildFigure(context, item.kind, item.id)
+        object = figureAnchor(context, item.kind, item.width, item.depth)
+        object.add(figure.body)
+        figures.push({ itemId: item.id, kind: item.kind, floorId: floor.id, anchor: object, body: figure.body, idle: figure.idle })
+      }
+      else {
+        object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height })
+      }
       object.position.set(cm(item.x), 0, cm(item.y))
       object.rotation.y = yRotation(item.rotation)
       object.userData.itemId = item.id
@@ -130,8 +141,8 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
 }
 
 /**
- * Where a figure stands: a soft contact shadow the size of its footprint, until its model arrives.
- * Figures cast no shadow of their own: an animated one would redraw the sun's shadow every frame.
+ * Where a figure stands, with a soft contact shadow the size of its footprint. Figures cast no
+ * shadow of their own: an animated one would redraw the sun's shadow every frame.
  */
 function figureAnchor(context: BuildContext, kind: FigureKind, width: number, depth: number): Group {
   const anchor = new Group()

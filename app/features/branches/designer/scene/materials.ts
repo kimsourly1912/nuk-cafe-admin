@@ -1,4 +1,4 @@
-import { CanvasTexture, Color, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three'
+import { CanvasTexture, Color, DoubleSide, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three'
 import type { Material, Texture } from 'three'
 import type { Finish } from '#shared/contracts/shop-layout'
 import { FINISH_SWATCHES } from '../catalog'
@@ -11,6 +11,10 @@ import { FINISH_SWATCHES } from '../catalog'
  */
 
 export type SurfaceKey = 'plaster' | 'plaster-outside' | 'floor-wood' | 'floor-tiles' | 'slab' | 'roof' | 'glass' | 'frame' | 'leaf' | 'leaf-dark' | 'soil' | 'ground' | 'highlight' | 'lamp' | 'plinth' | 'ceramic' | 'contact-shadow'
+  | FigureSurface
+
+/** People and pets (step 3g): skin tones, hair, fur and the red-check krama. */
+export type FigureSurface = 'skin-light' | 'skin-medium' | 'skin-deep' | 'hair-black' | 'hair-grey' | 'fur-ginger' | 'fur-cream' | 'fur-tan' | 'fur-dark' | 'eye' | 'krama' | 'shirt-white' | 'shoe'
 
 export interface MaterialLibrary {
   finish: (finish: Finish) => Material
@@ -19,7 +23,7 @@ export interface MaterialLibrary {
   dispose: () => void
 }
 
-type Pattern = 'grain' | 'weave' | 'speckle' | 'planks' | 'tiles' | 'plaster' | 'shadow'
+type Pattern = 'grain' | 'weave' | 'speckle' | 'planks' | 'tiles' | 'plaster' | 'shadow' | 'check'
 
 export function createMaterialLibrary(): MaterialLibrary {
   const textures = new Map<Pattern, Texture>()
@@ -107,6 +111,21 @@ function makeSurface(key: SurfaceKey, pattern: (key: Pattern) => Texture | null)
     case 'ceramic': return new MeshStandardMaterial({ color: '#f4f1ec', roughness: 0.3 })
     // A soft dark spot under a figure (step 3g): no light, no depth writes, drawn over the floor.
     case 'contact-shadow': return new MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.35, depthWrite: false, alphaMap: pattern('shadow') })
+    case 'skin-light': return new MeshStandardMaterial({ color: '#e0b48f', roughness: 0.7 })
+    case 'skin-medium': return new MeshStandardMaterial({ color: '#c08a62', roughness: 0.7 })
+    case 'skin-deep': return new MeshStandardMaterial({ color: '#8e5c3c', roughness: 0.7 })
+    case 'hair-black': return new MeshStandardMaterial({ color: '#1d1714', roughness: 0.55 })
+    case 'hair-grey': return new MeshStandardMaterial({ color: '#b9b3aa', roughness: 0.6 })
+    case 'fur-ginger': return new MeshStandardMaterial({ color: '#c97a3a', roughness: 0.85 })
+    case 'fur-cream': return new MeshStandardMaterial({ color: '#efe2c8', roughness: 0.85 })
+    case 'fur-tan': return new MeshStandardMaterial({ color: '#a8743f', roughness: 0.85 })
+    case 'fur-dark': return new MeshStandardMaterial({ color: '#2e2622', roughness: 0.85 })
+    case 'eye': return new MeshStandardMaterial({ color: '#141110', roughness: 0.2 })
+    // The krama's red and white check (the owner's visual target), drawn once on a canvas.
+    // Both sides: a hammock's cloth and an open scarf are seen from inside too.
+    case 'krama': return new MeshStandardMaterial({ color: '#ffffff', roughness: 0.9, map: pattern('check'), side: DoubleSide })
+    case 'shirt-white': return new MeshStandardMaterial({ color: '#f1ece3', roughness: 0.9, map: pattern('weave') })
+    case 'shoe': return new MeshStandardMaterial({ color: '#2a221d', roughness: 0.6 })
   }
 }
 
@@ -121,6 +140,17 @@ function drawPattern(key: Pattern): HTMLCanvasElement {
   context.fillStyle = '#ffffff'
   context.fillRect(0, 0, size, size)
   switch (key) {
+    case 'check': {
+      const cell = size / 8
+      context.fillStyle = '#b3262b'
+      context.fillRect(0, 0, size, size)
+      context.fillStyle = 'rgba(255, 255, 255, 0.55)'
+      for (let line = 0; line < 8; line += 2) {
+        context.fillRect(line * cell, 0, cell, size)
+        context.fillRect(0, line * cell, size, cell)
+      }
+      break
+    }
     // An alpha map: opaque (white) in the middle, fading to nothing (black) at the edge.
     case 'shadow': {
       const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)

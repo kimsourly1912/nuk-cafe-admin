@@ -4,6 +4,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { DiningTable } from '#shared/contracts/branches'
+import { FIGURE_SIZES } from '#shared/contracts/shop-layout'
 import type { BranchLayout, CustomItemLook, CustomLook, Point } from '#shared/contracts/shop-layout'
 import { setupE2e } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
@@ -824,5 +825,47 @@ describe('the shop designer on saved layouts', () => {
     expect(saved.edges[2]!.kind).toBe('railing')
     expect(saved.edges[2]!.openings.filter(opening => opening.kind === 'door')).toHaveLength(gatesBefore + 1)
     expect(saved.walls).toHaveLength(ground.walls.length)
+  })
+
+  it('people and pets (step 3g): placed from the library at their own size, saved, and shown in 3D with the viewer\'s own playback', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).waitFor()
+    const library = page.getByTestId('catalog-cat').locator('xpath=ancestor::section[1]')
+    expect((await library.getByRole('heading').textContent())?.trim()).toBe('People and pets')
+    await page.getByTestId('catalog-cat').scrollIntoViewIfNeeded()
+    await expect.poll(() => page.getByTestId('catalog-cat').locator('img').evaluate(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+
+    const cats = await plan(page).getByTestId('plan-item-cat').count()
+    await page.getByTestId('catalog-cat').click()
+    await expect.poll(() => plan(page).getByTestId('plan-item-cat').count()).toBe(cats + 1)
+    // A figure keeps its size: no width or depth to type, no corner handles; it can still turn.
+    const panel = page.getByRole('complementary', { name: 'Selected' })
+    await panel.getByText('Decoration · no QR code').waitFor()
+    expect(await panel.getByLabel('Width (cm)').count()).toBe(0)
+    expect(await panel.getByLabel('Rotation (°)').count()).toBe(1)
+    await page.getByTestId('catalog-seated-person').click()
+    await save(page)
+    const items = (await savedLayout(page)).floors.flatMap(floor => floor.items)
+    expect(items.filter(item => item.kind === 'cat').at(-1)).toMatchObject({ ...FIGURE_SIZES.cat, finishes: {} })
+    expect(items.filter(item => item.kind === 'seated-person').at(-1)).toMatchObject(FIGURE_SIZES['seated-person'])
+
+    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await drawn(page)
+    await shot(page, '3d-people-and-pets')
+    await page.getByTestId('figure-playback').click()
+    const show = page.getByRole('switch', { name: 'Show people and pets' })
+    const animate = page.getByRole('switch', { name: 'Animate' })
+    await show.waitFor()
+    expect(await show.getAttribute('aria-checked')).toBe('true')
+    // The e2e browser draws with a software renderer, measured slow: Animate starts off there.
+    await expect.poll(() => animate.getAttribute('aria-checked')).toBe('false')
+    await animate.click()
+    expect(await animate.getAttribute('aria-checked')).toBe('true')
+    await show.click()
+    expect(await show.getAttribute('aria-checked')).toBe('false')
+    expect(await animate.isDisabled()).toBe(true)
+    // Playback is this viewer's own: nothing to save.
+    expect(await saveButton(page).isDisabled()).toBe(true)
   })
 })

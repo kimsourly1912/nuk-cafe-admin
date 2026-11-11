@@ -1,5 +1,5 @@
 import { FIGURE_SIZES } from '#shared/contracts/shop-layout'
-import type { Finish, ItemKind, ItemLook, LayoutItem, TableLook } from '#shared/contracts/shop-layout'
+import type { FigureKind, Finish, ItemKind, ItemLook, LayoutItem, TableLook } from '#shared/contracts/shop-layout'
 
 /**
  * What the shop designer can place and how it looks (D273). The 2D editor and the 3D builders both
@@ -61,7 +61,11 @@ export interface ItemSpec {
   slots: FinishSlot[]
   /** The picture it ships with (step 3d, `BUILT_IN_PHOTO`); stairs have none. */
   photo: string | null
+  /** People and pets (step 3g): how the plan draws one from above. */
+  figure?: FigureShape
 }
+
+export type FigureShape = 'person' | 'animal' | 'hammock'
 
 /**
  * Where a built-in look's or piece's picture is served (step 3d): a static file of the app's
@@ -72,6 +76,9 @@ export const BUILT_IN_PHOTO = (id: string) => `/shop-designer/looks/${id}.webp`
 
 const frame = (fallback: Finish, options: Finish[] = WOODS): FinishSlot => ({ key: 'frame', label: 'Frame', options, default: fallback })
 const seat = (fallback: Finish): FinishSlot => ({ key: 'seat', label: 'Upholstery', options: FABRICS, default: fallback })
+
+const figure = (kind: FigureKind, label: string, shape: FigureShape, height: number): ItemSpec =>
+  ({ kind, label, category: 'figures', footprint: 'rect', ...FIGURE_SIZES[kind], height, slots: [], photo: BUILT_IN_PHOTO(kind), figure: shape })
 
 export const ITEM_SPECS: Record<ItemKind, ItemSpec> = {
   'cafe-chair': { kind: 'cafe-chair', label: 'Café chair', category: 'chairs', footprint: 'rect', width: 48, depth: 53, height: 82, slots: [frame('warm-oak'), seat('olive')], photo: BUILT_IN_PHOTO('cafe-chair') },
@@ -84,10 +91,17 @@ export const ITEM_SPECS: Record<ItemKind, ItemSpec> = {
   'plant': { kind: 'plant', label: 'Plant', category: 'fixtures', footprint: 'round', width: 50, depth: 50, height: 120, slots: [{ key: 'pot', label: 'Pot', options: ['terracotta', ...STONES], default: 'terracotta' }], photo: BUILT_IN_PHOTO('plant') },
   'room-divider': { kind: 'room-divider', label: 'Room divider', category: 'fixtures', footprint: 'rect', width: 120, depth: 20, height: 180, slots: [frame('warm-oak')], photo: BUILT_IN_PHOTO('room-divider') },
   'stairs': { kind: 'stairs', label: 'Stairs', category: 'structure', footprint: 'rect', width: 100, depth: 340, height: 300, slots: [{ key: 'tread', label: 'Treads', options: WOODS, default: 'warm-oak' }], photo: null },
-  // People and pets (step 3g, D274): a model of a fixed size (the contract's), no finishes.
-  'person': { kind: 'person', label: 'Person', category: 'figures', footprint: 'rect', ...FIGURE_SIZES.person, height: 170, slots: [], photo: null },
-  'cat': { kind: 'cat', label: 'Cat', category: 'figures', footprint: 'rect', ...FIGURE_SIZES.cat, height: 30, slots: [], photo: null },
-  'dog': { kind: 'dog', label: 'Dog', category: 'figures', footprint: 'rect', ...FIGURE_SIZES.dog, height: 55, slots: [], photo: null },
+  // People and pets (step 3g, D274): a fixed size (the contract's), no finishes. A seated customer
+  // sits at chair height, so it goes on a chair; someone lazing lies in a hammock on its stand.
+  'person': figure('person', 'Person', 'person', 168),
+  'girl': figure('girl', 'Girl', 'person', 118),
+  'boy': figure('boy', 'Boy', 'person', 122),
+  'old-man': figure('old-man', 'Old man', 'person', 160),
+  'barista': figure('barista', 'Barista', 'person', 166),
+  'seated-person': figure('seated-person', 'Seated customer', 'person', 128),
+  'lazing-person': figure('lazing-person', 'Someone lazing', 'hammock', 118),
+  'cat': figure('cat', 'Cat', 'animal', 32),
+  'dog': figure('dog', 'Dog', 'animal', 56),
 }
 
 export const TABLE_SLOTS: Record<'top' | 'base', FinishSlot> = {

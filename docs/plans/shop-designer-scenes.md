@@ -1,6 +1,6 @@
 # Shop designer scenes plan: surroundings, people and pets
 
-Owner brief and answers 2026-11-11; decision [D274](../decisions.md#d274-shop-designer-scenes-generated-surroundings-cc0-models-and-a-saved-preset-per-branch-2026-11-11). Extends the [shop designer plan](shop-designer.md) (D273). Status: **step 3g in progress** (owner, 2026-11-11: 3g first, then 3h; 3e and 3f follow before the pilot; QS4 answered: `blob:` in `connect-src`).
+Owner brief and answers 2026-11-11; decision [D274](../decisions.md#d274-shop-designer-scenes-generated-surroundings-cc0-models-and-a-saved-preset-per-branch-2026-11-11). Extends the [shop designer plan](shop-designer.md) (D273). Status: **step 3g built, waiting for review** (owner, 2026-11-11: 3g first, then 3h; 3e and 3f follow before the pilot; QS4 answered: `blob:` in `connect-src`; people and pets generated from code until the owner's CC0 models are ready).
 
 ## Visual references (owner, 2026-11-11)
 
@@ -105,7 +105,8 @@ stage.scene
 | Base, street, pavement, curbs, drains, steps | Generated from code | Sized by the slots |
 | Neighbour shophouses | Generated from code: `building.ts` floors plus façade modules (shutters, balcony grilles, folding gates, corrugated awnings, signboards, wall lamps, AC units, roof tiles) | Fits any width and height, matches the café's style, needs no license |
 | Pots, plants, bougainvillea, street lamps, poles and wires | Generated, reusing `furniture.ts` builders where they exist | Repeated many times: instanced or merged |
-| Moto, tuk-tuk, boats, people, pets, trees and palms | **CC0 glTF (`.glb`)**, chosen per the owner's decision 1 | Organic shapes that code draws poorly |
+| People and pets | Generated from code (`scene/figures.ts`, owner 2026-11-11); a CC0 `.glb` per kind replaces one when the owner uploads it | No reachable CC0 source had them; code matches the furniture's style and costs no download |
+| Moto, tuk-tuk, boats, trees and palms | **CC0 glTF (`.glb`)**, chosen per the owner's decision 1 | Organic shapes that code draws poorly |
 
 - **Materials:** reuse `materials.ts`, the canvas-drawn plaster, wood and tiles. Add roof tile, corrugated metal, pavers, asphalt, the red-and-white curb and the krama check. A material is shared by every mesh that uses it. Repeated identical pieces use `InstancedMesh`, and static pieces merge per material (`BufferGeometryUtils.mergeGeometries`).
 - **Lights:** street and shop lamps are emissive, not point lights. Only the café's own lamps are lights, as today, and none on the low quality level. The evening mood comes from the environment light, the sun's color and emissive windows.
@@ -165,7 +166,7 @@ The first commit of step 3g loads one textured model **on the built server**, wh
 
 | Step | When | Deliverable | Review |
 |---|---|---|---|
-| 3g. People and pets | Before the pilot, after 3e and 3f | The first CC0 models and the model pipeline: manifest, preparing script, CSP fix (QS4). Figures in a **People and pets** library section (the owner's list: a person, a girl, a boy, an old man, someone lazing, a cat, a dog; plus a seated customer, a barista and a mini dragon if a CC0 model fits). Placed, turned and saved like furniture, fixed size, no look, no warnings for overlapping a chair. Shown in 3D with an idle loop; **Show people and pets** and **Animate** in View in 3D | Place a cat and a seated customer, save, reopen, see them in 3D on a phone and a desktop |
+| 3g. People and pets (**built**) | Before the pilot (owner: before 3e and 3f) | The model pipeline: model list, loader, CSP fix (QS4). Figures in a **People and pets** library section (the owner's list: a person, a girl, a boy, an old man, someone lazing, a cat, a dog; plus a seated customer and a barista), generated from code until CC0 models arrive. Placed, turned and saved like furniture, fixed size, no look, no warnings for overlapping a chair. Shown in 3D with an idle loop; **Show people and pets** and **Animate** in View in 3D | Place a cat and a seated customer, save, reopen, see them in 3D on a phone and a desktop |
 | 3h. Neighborhood lane test scene | Before the pilot | Internal only (`NUXT_PUBLIC_SHOP_DESIGNER_SCENES`, on in dev and staging, off in production): `buildSurroundings` with the lane (neighbours, lane, drain, rear yard, parked moto, pedestrian, cat at its bowl), Fit, cutaway hiding, shadows kept on the café, animation rules, a **Scene** select in View in 3D, and the benchmark mode (below) | The benchmark on the owner's Android phone and a desktop, recorded in progress; full orbit behind the café on both |
 | 3c. Pilot (Riverside branch) | — | As planned in D273: the core workflow, with no scenes | As planned |
 | 4a. Ship Neighborhood lane | After the pilot, once 3h passes the targets | The saved scene (migration, contract, GET and PUT); the **Scene** panel (right sidebar on desktop, a slide-over on phones) with scene cards (pictures rendered from our own scenes by the pictures script), Show surroundings, Show people and pets, Animate; the storefront sign with the cafe's name; the flag removed | Choose Neighborhood lane on one device, save; another device opening the branch sees it. Playback changes on one don't reach the other |
@@ -235,16 +236,30 @@ The person running it records the device, OS, browser and network.
 - **QS4:** allow `blob:` in `connect-src` so textured `.glb` models load in production (option A above), or ship split `.gltf` files (option B)? Suggested: A. Blocks step 3g's models.
 - **QS5:** does the Riverside pilot run on staging or production? If staging, the 3h flag is switched off there during the pilot. Blocks nothing until 3c.
 
-## Step 3g: build notes (in progress, 2026-11-11)
+## Step 3g: people and pets (built 2026-11-11)
 
-- **Built, waiting for models:**
-  - figure kinds in the contract (`FIGURE_SIZES`, `isFigureKind`): a fixed size, no finishes, no look; checked by the contract, so no migration;
-  - **People and pets** in the Design shop library; drawn on the plan with a head mark at the front; no corner handles, no size fields; never warned about, and never the cause of a warning;
-  - `buildScene` puts an empty anchor with a contact shadow where each figure stands (`FigureNode`); the viewer loads the model (`scene/models.ts`: `GLTFLoader`, `SkeletonUtils.clone`, one `AnimationMixer` per copy) and puts it in the anchor; a scene rebuilt meanwhile drops late models;
-  - **People and pets** menu in View in 3D (only when the layout has figures): **Show people and pets** and **Animate**, this viewer's own; Animate starts off at the low quality level;
-  - the idle loop runs as a stage task only while Animate is on, figures are shown, the tab is visible, the canvas is on screen and motion isn't reduced;
-  - `connect-src 'self' blob:` (QS4);
-  - the model list (`designer/models.ts`) and its test (`models.test.ts`).
-- **Sources (owner, 2026-11-11):** Kenney's site refuses automated downloads and Poly Haven has no people or pets (its CC0 models are props, plants, ships and a rat). The owner downloads CC0 packs in a browser and uploads them; each pack's license file is checked and recorded per model.
-- **Figure kinds** start as person, cat and dog. More come with the packs (the owner's list: girl, boy, old man, someone lazing; a seated customer, a barista, a mini dragon if one fits). A kind is added only when its model exists, because a saved kind can't be taken back.
-- **Guards checked by removing them:** the hidden-tab stop, the Animate stop, the stale-scene drop, figures out of the warnings, and the contract's size rule each make a test fail.
+- **Owner's choices (2026-11-11):** 3g before 3h, 3e and 3f; `blob:` in `connect-src` (QS4); **people and pets generated from code now**, the owner's CC0 models later. Kenney's site refuses automated downloads and Poly Haven has no people or pets, so no CC0 model was available to this session.
+- **Where:**
+  - contract: `shared/contracts/shop-layout.ts` (`FIGURE_SIZES`, `FIGURE_KINDS`, `isFigureKind`; figure items keep their size, have no finishes and no look);
+  - app: `designer/catalog.ts` (the `figures` category, `FigureShape`), `designer/placement-warnings.ts` (figures have no footprint), `designer/models.ts` (the CC0 model list), `scene/figures.ts` (the generated figures), `scene/models.ts` (the loader), `scene/scene.ts` (`FigureNode`), `scene/building-viewer.ts` (`setPlayback`, the idle task), `scene/materials.ts` (skin, hair, fur, krama, contact shadow); `DesignShopEditor.vue`, `FloorPlanCanvas.vue`, `BuildingView3D.vue`;
+  - pictures: `public/shop-designer/looks/<kind>.webp` (9, 3–6 KB), rendered by `node scripts/render-look-photos.mjs <ids>` (which now takes the ids to render, so other pictures stay as they are);
+  - `nuxt.config.ts` (`connect-src 'self' blob:`), `docs/server/security.md`, the assistant's `help/branch.md`.
+- **The figures:** Person, Girl, Boy, Old man (grey hair, a cane, a krama), Barista (apron and a cup), Seated customer (at chair height, to go on a chair), Someone lazing (in a krama-check hammock on a steel stand), Cat (sitting, tail curled) and Dog. A few rounded shapes each, in the furniture's warm style. Clothes, skin and fur come from the figure's id, so everyone sees the same customer, and figures differ from each other. Sampot or trousers, a krama on some.
+- **Decided while building:**
+  - **A figure is a layout item with a fixed size**, checked by the contract (no migration: kinds are text). A kind is permanent once saved, so only kinds that have a model, generated or not, are in the contract.
+  - **Figures never warn and never cause a warning:** a customer on a chair or a cat under a table is where it belongs.
+  - **`buildScene` stays pure:** each figure is generated in its anchor with a contact shadow. The viewer loads a kind's model file when the list has one (`FIGURE_MODELS`, empty for now), hides the generated figure and plays the file's own loop; a model arriving after a rebuild is dropped; a failed load keeps the generated figure.
+  - **No figure casts a sun shadow:** an animated one would redraw the shadow map every frame. A soft contact shadow stands in.
+  - **Animation:** one stage task runs the idle motion only while Animate is on, figures are shown, the tab is visible, the canvas is on screen and motion isn't reduced. Animate starts off at the low quality level; the person's own choice wins. Both switches are this viewer's, never saved.
+  - **Seated customer and barista footprints** grew while building (50 × 65 and 50 × 50) to hold their legs and the cup. Nothing was saved with the earlier sizes.
+- **Not in 3g:** the mini dragon (from the mockup, not the owner's list); the owner's CC0 models (each one: its license file checked, an entry in `FIGURE_MODELS`, the file in `public/shop-designer/models/`); a figure sitting down on the chair it's placed on by itself.
+- **Tests:**
+  - `designer-geometry.test.ts`: the contract keeps figures at their size, without finishes or a look; figures never warn nor cause warnings.
+  - `designer-scene.test.ts`: a figure stands at its place and turn over its contact shadow, casting no shadow; every kind fits its footprint, stands on the floor and has its height; clothes come from the id (same id, same clothes; different ids vary); the idle moves it and the same time gives the same pose; every figure ships its picture.
+  - `designer-viewer.test.ts`: a model goes in its place and its loop plays only while Animate is on; the loop stops while the tab is hidden and comes back; a model arriving after a rebuild is dropped and old loops stop.
+  - `models.test.ts`: the model list against the folder (empty until the owner's models).
+  - `branches.layout.service.test.ts`: people and pets save and read back, write no look use, and another size is refused by the contract.
+  - `test/e2e/shop-designer.test.ts` (18): the People and pets section and its picture; a cat placed with no size fields; a seated customer; saved at their sizes; View in 3D's **People and pets** with **Show people and pets** and **Animate** (off on the software renderer), nothing to save. `test/e2e/monitoring-headers.test.ts`: `connect-src 'self' blob:`.
+- **Guards checked by removing them:** the hidden-tab stop, the Animate stop, the stale-scene drop, figures out of the warnings and the contract's figure size each make a test fail.
+- **Not verified:** a textured `.glb` through the CSP on the built server (no model file yet; the first CC0 model adds that e2e check); the look and the animation cost on a real phone.
+- **Review on staging:** Branches → a branch → Dining tables → Design shop. In **People and pets**, place a Seated customer on a chair, a Cat near the door and Someone lazing on a terrace; save. **View in 3D** → Cutaway: find them; **People and pets** → turn Animate on and off, then Show people and pets off. On a phone, check that Animate starts off if the quality line says low.

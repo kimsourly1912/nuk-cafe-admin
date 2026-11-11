@@ -5,7 +5,7 @@ import type { Viewpoint } from '../geometry'
 import { floorViewpoints } from '../geometry'
 import { meshesOf } from './furniture'
 import { createModelLibrary } from './models'
-import type { BuiltScene, SceneInput } from './scene'
+import type { BuiltScene, FigureNode, SceneInput } from './scene'
 import { buildGround, buildScene } from './scene'
 import type { StageOptions } from './stage'
 import { createStage, tween } from './stage'
@@ -71,8 +71,12 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   const highlighted = new Map<Mesh, Material | Material[]>()
   const models = createModelLibrary()
   let playback: Playback = { figures: true, animate: true }
-  /** The idle loops of the current scene's figures. */
+  /** The current scene's figures' idle motion: generated, or a model file's own loop. */
+  let animators = new Map<FigureNode, (delta: number) => void>()
+  /** The model loops, stopped when their scene goes. */
   let mixers: AnimationMixer[] = []
+  /** Seconds of idle motion played so far. */
+  let clock = 0
   let animating = false
   let onScreen = true
   const reducedMotion = typeof window !== 'undefined' ? window.matchMedia?.('(prefers-reduced-motion: reduce)') : undefined
@@ -114,18 +118,29 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     stage.shadowsChanged()
   }
 
-  /** Puts each figure's model in its place once loaded; a rebuild meanwhile drops the late ones. */
+  /**
+   * Each figure moves with its generated idle; a kind with a model file gets the model once loaded,
+   * in place of the generated figure. A rebuild meanwhile drops the late models.
+   */
   function attachFigures(scene: BuiltScene) {
     for (const mixer of mixers) mixer.stopAllAction()
     mixers = []
+    animators = new Map()
     for (const figure of scene.figures) {
       figure.anchor.visible = playback.figures
+      animators.set(figure, () => figure.idle(clock))
       models.figure(figure.kind).then((instance) => {
         if (!instance || built !== scene) return
+        figure.body.visible = false
         figure.anchor.add(instance.object)
-        if (instance.mixer) {
-          mixers.push(instance.mixer)
-          instance.mixer.update(0)
+        const { mixer } = instance
+        if (mixer) {
+          mixers.push(mixer)
+          mixer.update(0)
+          animators.set(figure, delta => mixer.update(delta))
+        }
+        else {
+          animators.delete(figure)
         }
         stage.invalidate()
         startAnimation()
@@ -134,10 +149,11 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
         if (import.meta.dev) console.error(`[shop designer] could not load the ${figure.kind} model`, error)
       })
     }
+    startAnimation()
   }
 
   function shouldAnimate() {
-    return playback.animate && playback.figures && mixers.length > 0 && onScreen
+    return playback.animate && playback.figures && animators.size > 0 && onScreen
       && (typeof document === 'undefined' || !document.hidden) && !reducedMotion?.matches
   }
 
@@ -156,7 +172,8 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
       }
       const delta = last < 0 ? 0 : Math.min(0.1, (now - last) / 1000)
       last = now
-      for (const mixer of mixers) mixer.update(delta)
+      clock += delta
+      for (const animate of animators.values()) animate(delta)
       return true
     }, () => (animating = false))
   }
@@ -417,6 +434,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     screenObserver?.disconnect()
     for (const mixer of mixers) mixer.stopAllAction()
     mixers = []
+    animators.clear()
     stage.dispose()
     models.dispose()
   }
