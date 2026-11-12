@@ -4,8 +4,8 @@
  * library (Unplaced tables, table looks, furniture), the floor plan with its floors, Draw outline
  * and Draw wall, and the panel for what's selected. Every change goes through the editor's draft
  * (one undo step each) and is saved with Studio's Save layout (on the canvas, D277). Pieces arrive by dragging
- * from the library or with Place on map (then the move pad), so the editor works without dragging
- * on touch, with a keyboard and in the e2e tests.
+ * from the library or with Place on map, then move by drag, the arrow keys or typed X and Y in
+ * Properties, so the editor works without dragging on touch, with a keyboard and in the e2e tests.
  */
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import type { DropdownMenuItem } from '@nuxt/ui'
@@ -138,7 +138,9 @@ const confirm = useConfirm()
 
 const [DefineLibrary, ReuseLibrary] = createReusableTemplate()
 const [DefineDetails, ReuseDetails] = createReusableTemplate()
-const [DefineMovePad, ReuseMovePad] = createReusableTemplate()
+/** Properties can be on the page twice (beside the plan and in its sheet): ids stay unique. */
+const detailsId = useId()
+const [DefineTransform, ReuseTransform] = createReusableTemplate<{ x: number, y: number, rotation: number }>()
 const [DefineRail, ReuseRail] = createReusableTemplate<{ vertical: boolean }>()
 const [DefinePanelActions, ReusePanelActions] = createReusableTemplate()
 
@@ -373,15 +375,6 @@ watch(() => [mode.value, floor.value?.id], () => {
 
 function addWall(wall: Omit<InnerWall, 'id'>) {
   changeFloor(target => target.walls.push({ id: newLayoutId('wall'), ...wall }))
-}
-
-const step = ref(GRID_CM)
-
-function nudge(dx: number, dy: number) {
-  const target = selection.value
-  const current = selectedPlacement.value ?? selectedItem.value
-  if (!target || !current) return
-  move(target, { x: current.x + dx * step.value, y: current.y + dy * step.value })
 }
 
 function turn(degrees: number) {
@@ -775,13 +768,40 @@ const quickBarStyle = computed((): { left: string, top: string } | undefined => 
   }
 })
 
-const position = computed(() => {
-  const current = selectedPlacement.value ?? selectedItem.value
-  return current ? `x ${(current.x / 100).toFixed(2)} m · y ${(current.y / 100).toFixed(2)} m` : ''
-})
+/** A size field's value: whole centimetres, and only when it changed (no undo step for nothing). */
+function setNumber(value: number | null | undefined, current: number, apply: (value: number) => void) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return
+  const next = Math.round(value)
+  if (next !== current) apply(next)
+}
 
-function setNumber(value: number | null | undefined, apply: (value: number) => void) {
-  if (typeof value === 'number' && Number.isFinite(value)) apply(Math.round(value))
+// --- Typed position and turn (D277): Enter or leaving the field commits, one undo step each ---
+
+const placed = computed(() => selectedPlacement.value ?? selectedItem.value)
+
+function setPosition(axis: 'x' | 'y', value: number | null | undefined) {
+  const target = selection.value
+  const current = placed.value
+  if (!target || !current) return
+  setNumber(value, current[axis], next => move(target, { x: current.x, y: current.y, [axis]: next }))
+}
+
+/** Any angle typed is kept as 0–359°: 360 is 0, −90 is 270. */
+function setRotation(value: number | null | undefined) {
+  const target = selection.value
+  const current = placed.value
+  if (!target || !current || typeof value !== 'number' || !Number.isFinite(value)) return
+  const next = normalizeRotation(Math.round(value))
+  if (next !== current.rotation) rotate(target, next)
+}
+
+/** Escape puts back what the field showed and leaves it, so nothing changes. */
+function revertField(event: KeyboardEvent, value: number) {
+  const input = event.target
+  if (!(input instanceof HTMLInputElement)) return
+  input.value = String(value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  input.blur()
 }
 
 const wallLength = (wall: InnerWall) => Math.round(Math.hypot(wall.to.x - wall.from.x, wall.to.y - wall.from.y))
@@ -884,7 +904,7 @@ const pendingLabel = computed(() => {
           v-if="renaming?.id === candidate.id"
           v-model="renaming.name"
           :maxlength="30"
-          aria-label="Floor name"
+          aria-label="New floor name"
           autofocus
           class="w-full"
           :data-testid="`floor-name-${candidate.name}`"
@@ -1197,79 +1217,76 @@ const pendingLabel = computed(() => {
   </DefineLibrary>
 
   <!-- What's selected (md and up beside the plan; below, in a slide-over). -->
-  <DefineMovePad>
+  <!-- Position and turn (D277): typed, no steppers or wheel; Enter or leaving commits, Escape reverts. -->
+  <DefineTransform v-slot="{ x, y, rotation }">
     <div
-      class="flex flex-wrap items-center gap-3 rounded-lg border border-default bg-default p-2"
+      class="flex flex-col gap-3"
       role="group"
-      aria-label="Move the selection"
+      aria-label="Position and rotation"
     >
-      <div class="grid grid-cols-3 gap-1">
-        <span />
-        <UButton
-          icon="i-lucide-arrow-up"
-          color="neutral"
-          variant="outline"
-          :aria-label="`Move up ${step} cm`"
-          @click="nudge(0, -1)"
-        />
-        <span />
-        <UButton
-          icon="i-lucide-arrow-left"
-          color="neutral"
-          variant="outline"
-          :aria-label="`Move left ${step} cm`"
-          @click="nudge(-1, 0)"
-        />
-        <UButton
-          icon="i-lucide-rotate-cw"
-          variant="soft"
-          aria-label="Turn 90°"
-          @click="turn(90)"
-        />
-        <UButton
-          icon="i-lucide-arrow-right"
-          color="neutral"
-          variant="outline"
-          :aria-label="`Move right ${step} cm`"
-          @click="nudge(1, 0)"
-        />
-        <span />
-        <UButton
-          icon="i-lucide-arrow-down"
-          color="neutral"
-          variant="outline"
-          :aria-label="`Move down ${step} cm`"
-          @click="nudge(0, 1)"
-        />
-        <span />
-      </div>
-      <div class="flex flex-col gap-2 text-xs text-muted">
-        <UFieldGroup size="xs">
-          <UButton
-            label="25 cm"
-            :color="step === GRID_CM ? 'primary' : 'neutral'"
-            :variant="step === GRID_CM ? 'soft' : 'outline'"
-            :aria-pressed="step === GRID_CM"
-            @click="step = GRID_CM"
+      <div class="grid grid-cols-2 gap-2">
+        <UFormField label="X (cm)">
+          <UInputNumber
+            :model-value="x"
+            :min="-LAYOUT_MAX_EXTENT_CM"
+            :max="LAYOUT_MAX_EXTENT_CM"
+            :increment="false"
+            :decrement="false"
+            disable-wheel-change
+            class="w-full"
+            @update:model-value="value => setPosition('x', value)"
+            @keydown.esc.stop.prevent="revertField($event, x)"
           />
-          <UButton
-            label="5 cm"
-            :color="step === FINE_GRID_CM ? 'primary' : 'neutral'"
-            :variant="step === FINE_GRID_CM ? 'soft' : 'outline'"
-            :aria-pressed="step === FINE_GRID_CM"
-            @click="step = FINE_GRID_CM"
+        </UFormField>
+        <UFormField label="Y (cm)">
+          <UInputNumber
+            :model-value="y"
+            :min="-LAYOUT_MAX_EXTENT_CM"
+            :max="LAYOUT_MAX_EXTENT_CM"
+            :increment="false"
+            :decrement="false"
+            disable-wheel-change
+            class="w-full"
+            @update:model-value="value => setPosition('y', value)"
+            @keydown.esc.stop.prevent="revertField($event, y)"
           />
-        </UFieldGroup>
-        <span class="tabular-nums">{{ position }}</span>
-        <UButton
-          label="Done"
-          size="xs"
-          class="self-start"
-          @click="selection = null"
-        />
+        </UFormField>
       </div>
+      <UFormField label="Rotation (°)">
+        <div class="flex gap-2">
+          <UInputNumber
+            :model-value="rotation"
+            :min="-360"
+            :max="720"
+            :increment="false"
+            :decrement="false"
+            disable-wheel-change
+            class="min-w-0 flex-1"
+            @update:model-value="setRotation"
+            @keydown.esc.stop.prevent="revertField($event, rotation)"
+          />
+          <UTooltip text="Turn 90° left">
+            <UButton
+              icon="i-lucide-rotate-ccw"
+              color="neutral"
+              variant="outline"
+              aria-label="Turn 90° left"
+              @click="turn(-90)"
+            />
+          </UTooltip>
+          <UTooltip text="Turn 90° right">
+            <UButton
+              icon="i-lucide-rotate-cw"
+              color="neutral"
+              variant="outline"
+              aria-label="Turn 90° right"
+              @click="turn(90)"
+            />
+          </UTooltip>
+        </div>
+      </UFormField>
     </div>
-  </DefineMovePad>
+  </DefineTransform>
 
   <DefineDetails>
     <div
@@ -1292,6 +1309,25 @@ const pendingLabel = computed(() => {
             Dining table · {{ floor?.name }} floor
           </p>
         </div>
+        <UTooltip text="View QR">
+          <UButton
+            icon="i-lucide-qr-code"
+            color="neutral"
+            variant="ghost"
+            aria-label="View QR"
+            :disabled="!selectedDiningTable?.qrUrl"
+            @click="viewQr()"
+          />
+        </UTooltip>
+        <UTooltip text="Remove from map">
+          <UButton
+            icon="i-lucide-map-pin-off"
+            color="neutral"
+            variant="ghost"
+            aria-label="Remove from map"
+            @click="remove(selection!)"
+          />
+        </UTooltip>
         <UButton
           icon="i-lucide-x"
           color="neutral"
@@ -1322,23 +1358,29 @@ const pendingLabel = computed(() => {
         Label and seats belong to the table and save right away. Everything below saves with the layout.
       </p>
       <USeparator label="On the map" />
+      <ReuseTransform
+        :x="selectedPlacement.x"
+        :y="selectedPlacement.y"
+        :rotation="selectedPlacement.rotation"
+      />
       <div class="grid grid-cols-2 gap-2">
-        <UFormField label="X (cm)">
+        <UFormField label="Width (cm)">
           <UInputNumber
-            :model-value="selectedPlacement.x"
-            :min="-LAYOUT_MAX_EXTENT_CM"
-            :max="LAYOUT_MAX_EXTENT_CM"
+            :model-value="selectedPlacement.width"
+            :min="40"
+            :max="600"
             :step="5"
-            @update:model-value="value => setNumber(value, x => move(selection!, { x, y: selectedPlacement!.y }))"
+            @update:model-value="value => setNumber(value, selectedPlacement!.width, width => updateTable(selectedPlacement!.tableId, { width, ...(selectedLook!.shape === 'round' ? { depth: width } : {}) }))"
           />
         </UFormField>
-        <UFormField label="Y (cm)">
+        <UFormField label="Depth (cm)">
           <UInputNumber
-            :model-value="selectedPlacement.y"
-            :min="-LAYOUT_MAX_EXTENT_CM"
-            :max="LAYOUT_MAX_EXTENT_CM"
+            :model-value="selectedPlacement.depth"
+            :min="40"
+            :max="600"
             :step="5"
-            @update:model-value="value => setNumber(value, y => move(selection!, { x: selectedPlacement!.x, y }))"
+            :disabled="selectedLook.shape === 'round'"
+            @update:model-value="value => setNumber(value, selectedPlacement!.depth, depth => updateTable(selectedPlacement!.tableId, { depth }))"
           />
         </UFormField>
       </div>
@@ -1350,53 +1392,7 @@ const pendingLabel = computed(() => {
           @update:model-value="value => updateTable(selectedPlacement!.tableId, { floorId: String(value) })"
         />
       </UFormField>
-      <div class="grid grid-cols-2 gap-3">
-        <UFormField label="Width (cm)">
-          <UInputNumber
-            :model-value="selectedPlacement.width"
-            :min="40"
-            :max="600"
-            :step="5"
-            @update:model-value="value => setNumber(value, width => updateTable(selectedPlacement!.tableId, { width, ...(selectedLook!.shape === 'round' ? { depth: width } : {}) }))"
-          />
-        </UFormField>
-        <UFormField label="Depth (cm)">
-          <UInputNumber
-            :model-value="selectedPlacement.depth"
-            :min="40"
-            :max="600"
-            :step="5"
-            :disabled="selectedLook.shape === 'round'"
-            @update:model-value="value => setNumber(value, depth => updateTable(selectedPlacement!.tableId, { depth }))"
-          />
-        </UFormField>
-      </div>
-      <UFormField label="Rotation (°)">
-        <div class="flex gap-2">
-          <UInputNumber
-            :model-value="selectedPlacement.rotation"
-            :min="0"
-            :max="359"
-            :step="15"
-            class="flex-1"
-            @update:model-value="value => setNumber(value, rotation => updateTable(selectedPlacement!.tableId, { rotation: normalizeRotation(rotation) }))"
-          />
-          <UButton
-            icon="i-lucide-rotate-ccw"
-            color="neutral"
-            variant="outline"
-            aria-label="Turn 90° left"
-            @click="turn(-90)"
-          />
-          <UButton
-            icon="i-lucide-rotate-cw"
-            color="neutral"
-            variant="outline"
-            aria-label="Turn 90° right"
-            @click="turn(90)"
-          />
-        </div>
-      </UFormField>
+      <USeparator label="Look" />
       <UFormField
         label="Look"
         :help="lookUsers.length ? `Also used by ${lookUsers.join(', ')}. Editing a look changes every table that uses it.` : 'Only this table uses it.'"
@@ -1436,28 +1432,6 @@ const pendingLabel = computed(() => {
           @click="newLook(selectedLook, selectedPlacement.tableId)"
         />
       </div>
-      <div class="mt-auto flex flex-col gap-2">
-        <UButton
-          label="View QR"
-          icon="i-lucide-qr-code"
-          color="neutral"
-          variant="outline"
-          block
-          :disabled="!selectedDiningTable?.qrUrl"
-          @click="viewQr()"
-        />
-        <UButton
-          label="Remove from map"
-          icon="i-lucide-map-pin-off"
-          color="neutral"
-          variant="outline"
-          block
-          @click="remove(selection!)"
-        />
-        <p class="text-xs text-muted">
-          {{ tableLabel(selectedPlacement.tableId) ?? 'The table' }} moves to Unplaced tables. Its QR code keeps working.
-        </p>
-      </div>
     </div>
 
     <div
@@ -1479,6 +1453,15 @@ const pendingLabel = computed(() => {
             {{ selectedItem.kind === 'stairs' ? 'Structure' : isFigureKind(selectedItem.kind) ? 'Decoration' : 'Furniture' }} · no QR code
           </p>
         </div>
+        <UTooltip text="Delete">
+          <UButton
+            icon="i-lucide-trash-2"
+            color="neutral"
+            variant="ghost"
+            aria-label="Delete"
+            @click="remove(selection!)"
+          />
+        </UTooltip>
         <UButton
           icon="i-lucide-x"
           color="neutral"
@@ -1487,9 +1470,14 @@ const pendingLabel = computed(() => {
           @click="selection = null; detailsOpen = false"
         />
       </div>
+      <ReuseTransform
+        :x="selectedItem.x"
+        :y="selectedItem.y"
+        :rotation="selectedItem.rotation"
+      />
       <div
         v-if="!isFigureKind(selectedItem.kind)"
-        class="grid grid-cols-2 gap-3"
+        class="grid grid-cols-2 gap-2"
       >
         <UFormField label="Width (cm)">
           <UInputNumber
@@ -1497,7 +1485,7 @@ const pendingLabel = computed(() => {
             :min="10"
             :max="2000"
             :step="5"
-            @update:model-value="value => setNumber(value, width => updateItem(selectedItem!.id, { width, ...(ITEM_SPECS[selectedItem!.kind].footprint === 'round' ? { depth: width } : {}) }))"
+            @update:model-value="value => setNumber(value, selectedItem!.width, width => updateItem(selectedItem!.id, { width, ...(ITEM_SPECS[selectedItem!.kind].footprint === 'round' ? { depth: width } : {}) }))"
           />
         </UFormField>
         <UFormField label="Depth (cm)">
@@ -1507,63 +1495,26 @@ const pendingLabel = computed(() => {
             :max="2000"
             :step="5"
             :disabled="ITEM_SPECS[selectedItem.kind].footprint === 'round'"
-            @update:model-value="value => setNumber(value, depth => updateItem(selectedItem!.id, { depth }))"
+            @update:model-value="value => setNumber(value, selectedItem!.depth, depth => updateItem(selectedItem!.id, { depth }))"
           />
         </UFormField>
         <UFormField
           v-if="isItemLookKind(selectedItem.kind)"
           label="Height (cm)"
           :help="heightRangeMessage(selectedItem.kind)"
+          class="col-span-2"
         >
           <UInputNumber
             :model-value="pieceHeight(selectedItem)"
             :min="ITEM_HEIGHTS[selectedItem.kind].min"
             :max="ITEM_HEIGHTS[selectedItem.kind].max"
             :step="5"
-            @update:model-value="value => setNumber(value, height => updateItem(selectedItem!.id, { height }))"
+            @update:model-value="value => setNumber(value, pieceHeight(selectedItem!), height => updateItem(selectedItem!.id, { height }))"
           />
         </UFormField>
       </div>
-      <div class="grid grid-cols-2 gap-2">
-        <UFormField label="X (cm)">
-          <UInputNumber
-            :model-value="selectedItem.x"
-            :min="-LAYOUT_MAX_EXTENT_CM"
-            :max="LAYOUT_MAX_EXTENT_CM"
-            :step="5"
-            @update:model-value="value => setNumber(value, x => move(selection!, { x, y: selectedItem!.y }))"
-          />
-        </UFormField>
-        <UFormField label="Y (cm)">
-          <UInputNumber
-            :model-value="selectedItem.y"
-            :min="-LAYOUT_MAX_EXTENT_CM"
-            :max="LAYOUT_MAX_EXTENT_CM"
-            :step="5"
-            @update:model-value="value => setNumber(value, y => move(selection!, { x: selectedItem!.x, y }))"
-          />
-        </UFormField>
-      </div>
-      <UFormField label="Rotation (°)">
-        <div class="flex gap-2">
-          <UInputNumber
-            :model-value="selectedItem.rotation"
-            :min="0"
-            :max="359"
-            :step="15"
-            class="flex-1"
-            @update:model-value="value => setNumber(value, rotation => updateItem(selectedItem!.id, { rotation: normalizeRotation(rotation) }))"
-          />
-          <UButton
-            icon="i-lucide-rotate-cw"
-            color="neutral"
-            variant="outline"
-            aria-label="Turn 90° right"
-            @click="turn(90)"
-          />
-        </div>
-      </UFormField>
       <template v-if="isItemLookKind(selectedItem.kind)">
+        <USeparator label="Look" />
         <UFormField
           label="Look"
           :help="selectedItemLook
@@ -1606,6 +1557,10 @@ const pendingLabel = computed(() => {
           />
         </div>
       </template>
+      <USeparator
+        v-if="!selectedItemLook && ITEM_SPECS[selectedItem.kind].slots.length"
+        label="Finishes"
+      />
       <div
         v-for="slot in (selectedItemLook ? [] : ITEM_SPECS[selectedItem.kind].slots)"
         :key="slot.key"
@@ -1630,15 +1585,6 @@ const pendingLabel = computed(() => {
           />
         </div>
       </div>
-      <UButton
-        class="mt-auto"
-        label="Delete"
-        icon="i-lucide-trash-2"
-        color="error"
-        variant="outline"
-        block
-        @click="remove(selection!)"
-      />
     </div>
 
     <div
@@ -1690,35 +1636,97 @@ const pendingLabel = computed(() => {
       @change="updateShape"
       @close="selection = null; detailsOpen = false"
     />
+    <!-- Nothing selected (D277): the floor shown, then Explore. These were the floor bar's menu. -->
     <div
       v-else-if="floor"
-      class="flex flex-col gap-3"
+      class="flex flex-col gap-4"
+      data-testid="floor-settings"
     >
-      <p class="text-sm font-semibold text-highlighted">
-        {{ floor.name }} floor
-      </p>
-      <UFormField label="Floor height (cm)">
-        <UInputNumber
-          :model-value="floor.height"
-          :min="200"
-          :max="800"
-          :step="10"
-          @update:model-value="setHeight"
+      <section
+        class="flex flex-col gap-3"
+        :aria-labelledby="`${detailsId}-floor`"
+      >
+        <h3
+          :id="`${detailsId}-floor`"
+          class="text-sm font-semibold text-highlighted"
+        >
+          {{ floor.name }} floor
+        </h3>
+        <UFormField label="Floor name">
+          <UInput
+            v-model="floorName"
+            :maxlength="30"
+            class="w-full"
+            @blur="renameFloor()"
+            @keydown.enter="renameFloor()"
+            @keydown.esc.stop.prevent="floorName = floor.name; ($event.target as HTMLInputElement).blur()"
+          />
+        </UFormField>
+        <UFormField
+          label="Floor height (cm)"
+          help="The wall height in 3D."
+        >
+          <UInputNumber
+            :model-value="floor.height"
+            :min="200"
+            :max="800"
+            :step="10"
+            class="w-full"
+            @update:model-value="setHeight"
+          />
+        </UFormField>
+        <USwitch
+          :model-value="floor.hasRoof"
+          label="Roof over this floor"
+          description="Off: open to the sky, like a rooftop patio."
+          @update:model-value="setRoof"
         />
-      </UFormField>
-      <USwitch
-        :model-value="floor.hasRoof"
-        label="Roof over this floor"
-        @update:model-value="setRoof"
-      />
+        <USwitch
+          v-if="floorIndex > 0"
+          v-model="showBelow"
+          label="Show floor below"
+          description="On the plan only, to line this floor up."
+        />
+        <UButton
+          label="Remove floor…"
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="soft"
+          class="self-start"
+          :disabled="floors.length <= 1"
+          @click="removeFloor()"
+        />
+      </section>
+      <template v-if="exploreEnabled">
+        <USeparator />
+        <section
+          class="flex flex-col gap-2"
+          :aria-labelledby="`${detailsId}-explore`"
+        >
+          <h3
+            :id="`${detailsId}-explore`"
+            class="text-sm font-semibold text-highlighted"
+          >
+            Explore
+          </h3>
+          <p class="text-xs text-muted">
+            How customers walk into this branch in Explore.
+          </p>
+          <UButton
+            label="Explore settings"
+            icon="i-lucide-map-pin"
+            color="neutral"
+            variant="outline"
+            class="self-start"
+            @click="sheet = null; exploreOpen = true"
+          />
+        </section>
+      </template>
+      <USeparator />
       <p class="text-sm text-muted">
-        Select an object on the plan to edit its properties.
+        Select something on the plan to edit it.
       </p>
     </div>
-    <ReuseMovePad
-      v-if="isExpanded && mode === 'select' && (selectedPlacement || selectedItem)"
-      class="mt-3"
-    />
   </DefineDetails>
 
   <!-- The open panel's own actions, beside its title (Floors: Find and Add floor). -->
@@ -2124,89 +2132,16 @@ const pendingLabel = computed(() => {
               </span>
             </div>
             <template v-else>
-              <div class="pointer-events-auto flex flex-wrap items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
-                <USelect
-                  :model-value="floor.id"
-                  :items="floorItems"
-                  aria-label="Active floor"
-                  size="sm"
-                  @update:model-value="selectFloor"
-                />
-                <!-- The floor menu (9B). -->
-                <UPopover :content="{ align: 'start' }">
-                  <UButton
-                    icon="i-lucide-ellipsis"
-                    color="neutral"
-                    variant="ghost"
-                    size="sm"
-                    :aria-label="`${floor.name} floor options`"
-                    data-testid="floor-menu"
-                  />
-                  <template #content>
-                    <div
-                      class="flex w-72 flex-col gap-3 p-3"
-                      data-testid="floor-menu-panel"
-                    >
-                      <UFormField label="Rename floor">
-                        <UInput
-                          v-model="floorName"
-                          :maxlength="30"
-                          class="w-full"
-                          @blur="renameFloor()"
-                          @keydown.enter="renameFloor()"
-                        />
-                      </UFormField>
-                      <UFormField
-                        label="Floor height (cm)"
-                        help="The wall height in 3D."
-                      >
-                        <UInputNumber
-                          :model-value="floor.height"
-                          :min="200"
-                          :max="800"
-                          :step="10"
-                          @update:model-value="setHeight"
-                        />
-                      </UFormField>
-                      <USwitch
-                        :model-value="floor.hasRoof"
-                        label="Roof over this floor"
-                        description="Off: open to the sky, like a rooftop patio."
-                        @update:model-value="setRoof"
-                      />
-                      <USeparator />
-                      <UButton
-                        label="Remove floor…"
-                        icon="i-lucide-trash-2"
-                        color="error"
-                        variant="ghost"
-                        :disabled="floors.length <= 1"
-                        @click="removeFloor()"
-                      />
-                    </div>
-                  </template>
-                </UPopover>
-                <USwitch
-                  v-if="floorIndex > 0"
-                  v-model="showBelow"
-                  label="Floor below"
-                  size="sm"
-                  class="px-1"
-                />
-              </div>
+              <USelect
+                :model-value="floor.id"
+                :items="floorItems"
+                aria-label="Active floor"
+                class="pointer-events-auto"
+                @update:model-value="selectFloor"
+              />
             </template>
           </div>
           <div class="flex flex-wrap items-center justify-end gap-2">
-            <UButton
-              v-if="exploreEnabled && !drawing"
-              label="Explore settings"
-              icon="i-lucide-map-pin"
-              color="neutral"
-              variant="outline"
-              class="pointer-events-auto bg-default"
-              :ui="{ label: 'max-sm:sr-only' }"
-              @click="exploreOpen = true"
-            />
             <slot name="actions" />
             <UButton
               v-if="!isExpanded"
@@ -2254,12 +2189,6 @@ const pendingLabel = computed(() => {
         </template>
       </div>
 
-      <div
-        v-if="mode === 'select' && !pending && !isExpanded && (selectedPlacement || selectedItem)"
-        class="absolute bottom-28 left-2 max-w-52 shadow-md sm:bottom-16"
-      >
-        <ReuseMovePad />
-      </div>
       <div class="pointer-events-none absolute inset-x-2 bottom-2 flex justify-center sm:bottom-3">
         <StudioToolbar
           v-model:view="view"
@@ -2275,7 +2204,8 @@ const pendingLabel = computed(() => {
           <UTooltip text="Select">
             <UButton
               icon="i-lucide-mouse-pointer-2"
-              label="Select"
+              :label="isCompact ? undefined : 'Select'"
+              aria-label="Select"
               :variant="mode === 'select' ? 'soft' : 'ghost'"
               :color="mode === 'select' ? 'primary' : 'neutral'"
               :aria-pressed="mode === 'select'"
@@ -2286,7 +2216,8 @@ const pendingLabel = computed(() => {
           <UTooltip text="Hand">
             <UButton
               icon="i-lucide-hand"
-              label="Hand"
+              :label="isCompact ? undefined : 'Hand'"
+              aria-label="Hand"
               :variant="mode === 'hand' ? 'soft' : 'ghost'"
               :color="mode === 'hand' ? 'primary' : 'neutral'"
               :aria-pressed="mode === 'hand'"
@@ -2301,7 +2232,8 @@ const pendingLabel = computed(() => {
           >
             <UButton
               icon="i-lucide-pen-tool"
-              label="Draw"
+              :label="isCompact ? undefined : 'Draw'"
+              aria-label="Draw"
               :color="drawing ? 'primary' : 'neutral'"
               :variant="drawing ? 'soft' : 'ghost'"
               :ui="{ label: 'max-xl:sr-only' }"

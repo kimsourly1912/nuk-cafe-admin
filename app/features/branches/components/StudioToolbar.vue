@@ -37,7 +37,7 @@ const views = [
   <div
     role="toolbar"
     aria-label="Canvas tools"
-    class="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm"
+    class="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-0.5 rounded-lg border border-default bg-default p-1 shadow-sm sm:gap-1"
   >
     <template v-if="$slots.default">
       <div
@@ -87,7 +87,7 @@ const views = [
       </UTooltip>
       <span
         v-if="zoomLevel !== undefined"
-        class="min-w-10 text-center text-xs text-muted tabular-nums"
+        class="min-w-10 text-center text-xs text-muted tabular-nums max-sm:hidden"
         data-testid="zoom-level"
       >{{ zoomLevel }}%</span>
       <UTooltip text="Zoom in">
