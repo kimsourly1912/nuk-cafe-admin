@@ -114,12 +114,18 @@ export function moveWallEnd(walls: readonly InnerWall[], id: string, end: 'from'
  * closed (Figma's dragging of a shape's side).
  */
 export function moveWall(walls: readonly InnerWall[], id: string, delta: Point): InnerWall[] {
-  const wall = walls.find(candidate => candidate.id === id)
-  if (!wall) return [...walls]
+  return moveWalls(walls, new Set([id]), delta)
+}
+
+/**
+ * Moves several walls by `delta` together (multi-select): an end shared by two moved walls moves
+ * once; an unmoved wall's end joined to a moved one's stretches to follow.
+ */
+export function moveWalls(walls: readonly InnerWall[], ids: ReadonlySet<string>, delta: Point): InnerWall[] {
   const shift = (point: Point) => ({ x: point.x + delta.x, y: point.y + delta.y })
-  const ends = [wall.from, wall.to]
+  const ends = walls.filter(wall => ids.has(wall.id)).flatMap(wall => [wall.from, wall.to])
   return walls.map((candidate) => {
-    if (candidate.id === id) return refit({ ...candidate, from: shift(candidate.from), to: shift(candidate.to) })
+    if (ids.has(candidate.id)) return refit({ ...candidate, from: shift(candidate.from), to: shift(candidate.to) })
     const from = ends.some(end => same(candidate.from, end)) ? shift(candidate.from) : candidate.from
     const to = ends.some(end => same(candidate.to, end)) ? shift(candidate.to) : candidate.to
     return refit({ ...candidate, from: { ...from }, to: { ...to } })

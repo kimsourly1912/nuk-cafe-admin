@@ -19,6 +19,7 @@ export const STUDIO_SHORTCUTS = [
   { kbds: ['escape'], label: 'Cancel, leave the tool, then clear the selection' },
   { kbds: ['delete'], label: 'Delete the selection (an outline wall or railing becomes Open)' },
   { kbds: ['meta', 'd'], label: 'Duplicate the selection' },
+  { kbds: ['meta', 'a'], label: 'Select every table, piece and inside wall on the floor' },
   { kbds: ['shift', 'r'], label: 'Turn the selection 90°' },
   { kbds: ['arrowright'], label: 'Move the selection 5 cm' },
   { kbds: ['shift', 'arrowright'], label: 'Move the selection 25 cm' },
@@ -32,10 +33,13 @@ export const STUDIO_SHORTCUTS = [
   { kbds: ['?'], label: 'Show keyboard shortcuts' },
 ] as const
 
-/** While dragging a piece: what the keys held change (shown in the same list). */
+/** With the mouse: what the keys held change (shown in the same list). */
 export const STUDIO_DRAG_KEYS = [
+  { kbds: ['shift'], label: 'Click: add a piece to the selection, or take it out' },
+  { kbds: ['shift'], label: 'Drag on empty plan: add what the box touches' },
   { kbds: ['shift'], label: 'Drag: straight across or down' },
-  { kbds: ['meta'], label: 'Drag or draw: 5 cm steps instead of 25 cm' },
+  { kbds: ['meta'], label: 'Drag or draw: 5 cm steps instead of 25 cm, no snapping to other pieces' },
   { kbds: ['alt'], label: 'Drag: leave a copy behind' },
   { kbds: ['alt'], label: 'Draw: any angle' },
+  { kbds: ['alt'], label: 'Point at a piece: the gaps from the selection (or to the walls)' },
 ] as const

@@ -20,6 +20,7 @@ import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
+import { duplicateSelected, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
 import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
@@ -72,6 +73,10 @@ const floors = computed(() => layout.value.floors)
 const floor = computed(() => floors.value.find(candidate => candidate.id === props.editor.floorId.value) ?? floors.value[0])
 const floorIndex = computed(() => (floor.value ? floors.value.indexOf(floor.value) : -1))
 const selection = props.editor.selection
+/** Two or more selected together (D278), or empty. */
+const group = props.editor.group
+const multi = computed(() => group.value.length > 1)
+const inGroup = (target: PlanSelection) => multi.value && group.value.some(member => member.kind === target.kind && member.id === target.id)
 const showBelow = ref(true)
 const mode = ref<PlanMode>('select')
 const canvas = useTemplateRef<InstanceType<typeof FloorPlanCanvas>>('canvas')
@@ -266,6 +271,15 @@ watch([selection, selectedPlacement, selectedItem, selectedWall, selectedEdge], 
   }
 }, { immediate: true })
 
+// A set member gone (an undo, another floor shown): the set keeps what is still on this floor.
+watch([group, () => floor.value], ([members, current]) => {
+  if (members.length < 2 || !current) return
+  const present = members.filter(member => member.kind === 'table'
+    ? layout.value.placements.some(placement => placement.tableId === member.id && placement.floorId === current.id)
+    : member.kind === 'item' ? current.items.some(item => item.id === member.id) : current.walls.some(wall => wall.id === member.id))
+  if (present.length !== members.length) props.editor.selectMany(present)
+})
+
 const names = computed(() => (floor.value ? edgeNames(floor.value.outline) : []))
 const selectedLook = computed(() => selectedPlacement.value && findLook(props.looks, selectedPlacement.value.lookId))
 const lookUsers = computed(() => {
@@ -351,11 +365,18 @@ function updateItem(itemId: string, change: Partial<{ x: number, y: number, rota
 }
 
 function move(target: PlanSelection, position: Point) {
+  if (inGroup(target)) {
+    // An arrow key on a set (D278): the same step for all.
+    const current = target.kind === 'table' ? layout.value.placements.find(placement => placement.tableId === target.id) : floor.value?.items.find(item => item.id === target.id)
+    if (current) moveGroup({ x: position.x - current.x, y: position.y - current.y })
+    return
+  }
   if (target.kind === 'table') updateTable(target.id, position)
   else if (target.kind === 'item') updateItem(target.id, position)
 }
 
 function rotate(target: PlanSelection, rotation: number) {
+  if (inGroup(target)) return turnGroup()
   if (target.kind === 'table') updateTable(target.id, { rotation })
   else if (target.kind === 'item') updateItem(target.id, { rotation })
 }
@@ -372,6 +393,7 @@ function resize(target: PlanSelection, size: Omit<Sized, 'rotation'>) {
  * floor keeps its shape. It stays selected, so Wall or Railing puts one back.
  */
 function remove(target: PlanSelection) {
+  if (inGroup(target)) return removeGroup()
   if (target.kind === 'edge') {
     const current = floor.value
     const index = Number(target.id)
@@ -485,10 +507,79 @@ function setWalls(walls: InnerWall[]) {
 }
 
 function turn(degrees: number) {
+  if (multi.value) return turnGroup()
   const target = selection.value
   const current = selectedPlacement.value ?? selectedItem.value
   if (target && current) rotate(target, normalizeRotation(current.rotation + degrees))
 }
+
+// --- Several selected (D278) ---
+
+function moveGroup(delta: Point) {
+  const floorId = floor.value?.id
+  if (!floorId || (!delta.x && !delta.y)) return
+  draft.change(next => shiftSelected(next, floorId, group.value, delta))
+}
+
+/** 90° clockwise around the set's middle, as one piece. */
+function turnGroup() {
+  const floorId = floor.value?.id
+  const box = canvas.value?.selectedBounds
+  if (!floorId || !box) return
+  const center = { x: snap((box.minX + box.maxX) / 2, FINE_GRID_CM), y: snap((box.minY + box.maxY) / 2, FINE_GRID_CM) }
+  draft.change(next => turnSelected(next, floorId, group.value, center))
+}
+
+function removeGroup() {
+  const targets = [...group.value]
+  draft.change(next => removeSelected(next, targets))
+  selection.value = null
+}
+
+/** Shift+click: in or out of the set. */
+function toggleSelected(target: PlanSelection) {
+  const current = props.editor.selected.value.filter(member => member.kind !== 'edge')
+  const present = current.some(member => member.kind === target.kind && member.id === target.id)
+  props.editor.selectMany(present ? current.filter(member => member.kind !== target.kind || member.id !== target.id) : [...current, target])
+}
+
+/** A box selection: what it touched, added to the set with Shift. */
+function selectBox(targets: PlanSelection[], additive: boolean) {
+  const base = additive ? props.editor.selected.value.filter(member => member.kind !== 'edge') : []
+  props.editor.selectMany([...base, ...targets])
+}
+
+/** Ctrl/⌘+A: every table, piece and inside wall on the floor shown. */
+function selectAll() {
+  const current = floor.value
+  if (!current) return
+  props.editor.selectMany([
+    ...layout.value.placements.filter(placement => placement.floorId === current.id).map(placement => ({ kind: 'table' as const, id: placement.tableId })),
+    ...current.items.map(item => ({ kind: 'item' as const, id: item.id })),
+    ...current.walls.map(wall => ({ kind: 'wall' as const, id: wall.id })),
+  ])
+}
+
+/** Ctrl/⌘+D on a set: its furniture and walls copied 50 cm away and selected; tables keep their own QR. */
+function duplicateGroup() {
+  const floorId = floor.value?.id
+  if (!floorId) return
+  const targets = [...group.value]
+  let copies: PlanSelection[] = []
+  if (targets.some(target => target.kind !== 'table')) draft.change(next => void (copies = duplicateSelected(next, floorId, targets, { x: 50, y: 50 })))
+  if (targets.some(target => target.kind === 'table')) {
+    toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
+  }
+  if (copies.length) props.editor.selectMany(copies)
+}
+
+/** What the set holds, for Properties: "2 tables, 3 pieces and 1 wall". */
+const groupSummary = computed(() => {
+  const count = (kind: PlanSelection['kind']) => group.value.filter(member => member.kind === kind).length
+  const parts = [[count('table'), 'table'], [count('item'), 'piece'], [count('wall'), 'wall']] as const
+  const named = parts.filter(([n]) => n > 0).map(([n, noun]) => `${n} ${noun}${n === 1 ? '' : 's'}`)
+  return named.length > 1 ? `${named.slice(0, -1).join(', ')} and ${named.at(-1)}` : named[0] ?? ''
+})
 
 // --- Floors (9B, 6B) ---
 
@@ -876,6 +967,7 @@ function copyTo(target: PlanSelection, at: Point) {
 
 /** Ctrl/⌘+D: a piece's copy beside it; a table asks which table the copy is (its QR stays its own). */
 function duplicateSelection() {
+  if (multi.value) return duplicateGroup()
   const target = selection.value
   if (target?.kind === 'item') duplicateItem(target.id)
   else if (target?.kind === 'table') void duplicateLook(target.id)
@@ -895,6 +987,7 @@ function onStudioKey(event: KeyboardEvent) {
   if (command && !event.altKey) {
     const key = event.key.toLowerCase()
     if (key === 'd' && !event.shiftKey) return run(duplicateSelection)
+    if (key === 'a' && !event.shiftKey && mode.value === 'select') return run(selectAll)
     if (key === '=' || key === '+') return run(() => plan?.zoom(1))
     if (key === '-') return run(() => plan?.zoom(-1))
     return
@@ -937,6 +1030,14 @@ const contextItems = computed((): ContextMenuItem[][] => {
   const zoomItems: ContextMenuItem[] = [
     { label: 'Zoom to selection', icon: 'i-lucide-scan-search', kbds: ['shift', '2'], onSelect: () => plan?.zoomToSelection() },
   ]
+  if (multi.value) {
+    return [[
+      { label: 'Rotate 90°', icon: 'i-lucide-rotate-cw', kbds: ['shift', 'r'], onSelect: turnGroup },
+      { label: 'Duplicate', icon: 'i-lucide-copy', kbds: ['meta', 'd'], disabled: group.value.every(member => member.kind === 'table'), onSelect: duplicateGroup },
+    ], zoomItems, [
+      { label: `Delete ${group.value.length}`, icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: removeGroup },
+    ]]
+  }
   if (selectedPlacement.value) {
     const tableId = selectedPlacement.value.tableId
     return [[
@@ -1572,8 +1673,78 @@ const pendingLabel = computed(() => {
   </DefineTransform>
 
   <DefineDetails>
+    <!-- Several selected (D278): what the set holds and what can be done to all of it. -->
     <div
-      v-if="selectedPlacement && selectedLook"
+      v-if="multi"
+      class="flex flex-col gap-4"
+      data-testid="selected-group"
+    >
+      <div class="flex items-center gap-3">
+        <span class="flex size-9 items-center justify-center rounded-md bg-elevated text-muted">
+          <UIcon
+            name="i-lucide-boxes"
+            class="size-5"
+          />
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-base font-semibold text-highlighted">
+            {{ group.length }} selected
+          </p>
+          <p class="text-xs text-muted">
+            {{ groupSummary }}
+          </p>
+        </div>
+        <UButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          aria-label="Clear selection"
+          @click="selection = null; detailsOpen = false"
+        />
+      </div>
+      <p class="text-sm text-muted">
+        Drag any of them, or use the arrow keys, to move them together. Shift+click adds or removes one.
+      </p>
+      <div class="grid grid-cols-2 gap-2">
+        <UButton
+          label="Rotate 90°"
+          icon="i-lucide-rotate-cw"
+          color="neutral"
+          variant="outline"
+          @click="turnGroup()"
+        />
+        <UButton
+          label="Duplicate"
+          icon="i-lucide-copy"
+          color="neutral"
+          variant="outline"
+          :disabled="group.every(member => member.kind === 'table')"
+          @click="duplicateGroup()"
+        />
+        <UButton
+          label="Zoom to selection"
+          icon="i-lucide-scan-search"
+          color="neutral"
+          variant="outline"
+          @click="canvas?.zoomToSelection()"
+        />
+        <UButton
+          label="Delete"
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="outline"
+          @click="removeGroup()"
+        />
+      </div>
+      <p
+        v-if="group.some(member => member.kind === 'table')"
+        class="text-xs text-muted"
+      >
+        Delete takes tables off the map (back to Unplaced tables, QR codes unchanged). Duplicate copies furniture and walls, not tables.
+      </p>
+    </div>
+    <div
+      v-else-if="selectedPlacement && selectedLook"
       class="flex flex-col gap-4"
       data-testid="selected-table"
     >
@@ -2201,6 +2372,7 @@ const pendingLabel = computed(() => {
                 :show-below="showBelow"
                 :mode="mode"
                 :round-shape="roundShape"
+                :group="group"
                 :placing="!!pending"
                 @place="placePending"
                 @cancel-place="pending = null"
@@ -2215,6 +2387,9 @@ const pendingLabel = computed(() => {
                 @walls="setWalls"
                 @room="applyRoom"
                 @block="placeShape"
+                @toggle="toggleSelected"
+                @select-many="selectBox"
+                @move-group="moveGroup"
                 @edit-points="startTool('outline')"
                 @edit-length="editLength"
               />
@@ -2251,7 +2426,7 @@ const pendingLabel = computed(() => {
 
           <!-- Quick actions next to the selection (2B): the common moves without the panel. -->
           <div
-            v-if="showQuickBar && mode === 'select' && quickBarStyle && (selectedPlacement || selectedItem)"
+            v-if="showQuickBar && !multi && mode === 'select' && quickBarStyle && (selectedPlacement || selectedItem)"
             ref="quickBar"
             role="toolbar"
             :aria-label="selectedPlacement ? `${tableLabel(selectedPlacement.tableId) ?? 'Table'} quick actions` : 'Furniture quick actions'"
@@ -2307,7 +2482,7 @@ const pendingLabel = computed(() => {
             </UButton>
           </div>
           <div
-            v-else-if="showQuickBar && mode === 'select' && quickBarStyle && selectedWall"
+            v-else-if="showQuickBar && !multi && mode === 'select' && quickBarStyle && selectedWall"
             ref="quickBar"
             role="toolbar"
             aria-label="Wall quick actions"

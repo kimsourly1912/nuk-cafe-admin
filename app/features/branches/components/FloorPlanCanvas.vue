@@ -26,7 +26,9 @@ import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/c
 import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
-import { moveWall, moveWallEnd } from '../designer/walls'
+import { moveWall, moveWallEnd, moveWalls } from '../designer/walls'
+import { cornerBounds, distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
+import type { Gap, Guide } from '../designer/guides'
 import type { FloorShape } from '../designer/outline'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
@@ -43,6 +45,8 @@ const props = defineProps<{
   placing?: boolean
   /** The Shape tool draws a circle (a round block) rather than a rectangle (D278). */
   roundShape?: boolean
+  /** Everything selected (D278 multi-select): two or more pieces and walls moved and drawn together. */
+  group?: readonly PlanSelection[]
 }>()
 
 const emit = defineEmits<{
@@ -67,6 +71,12 @@ const emit = defineEmits<{
   block: [bounds: Bounds]
   /** A double-click on the floor or its edge in Select: open Edit points (D278). */
   editPoints: []
+  /** Shift+click (D278): this piece or wall joins the selection, or leaves it. */
+  toggle: [target: PlanSelection]
+  /** A box dragged on empty plan (D278): what it touches; `additive` with Shift keeps the rest. */
+  selectMany: [targets: PlanSelection[], additive: boolean]
+  /** The whole selection dragged (D278): by how much, one undo step. */
+  moveGroup: [delta: Point]
   /** Draw outline: an edge's length label was clicked, to type its length there (3A). */
   editLength: [index: number, at: Point]
 }>()
@@ -127,6 +137,17 @@ watch(() => props.floorId, fit, { immediate: true })
 
 /** A gesture's live result, drawn instead of the stored position until the gesture ends. */
 const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number } | null>(null)
+/** Two or more selected (D278): they drag, turn and go together; no handles. */
+const multi = computed(() => (props.group?.length ?? 0) > 1)
+/** How far the whole selection is dragged so far (D278). */
+const groupDelta = shallowRef<Point | null>(null)
+/** The box dragged on empty plan to select what it touches (D278). */
+const marquee = shallowRef<Bounds | null>(null)
+/** The smart guides a dragged piece lines up with (D278). */
+const guides = shallowRef<Guide[]>([])
+/** Alt is held over the plan: the gaps from the selection are measured (D278). */
+const altHeld = ref(false)
+
 /** The Room tool's rectangle while it's dragged, and whether it will cut (Alt) (D278). */
 const roomPreview = shallowRef<{ bounds: Bounds, cut: boolean } | null>(null)
 
@@ -214,6 +235,8 @@ const edges = computed(() => shape.value.edges.map((edge, index) => {
 }))
 
 function posed<T extends Sized>(selection: PlanSelection, object: T): T {
+  const delta = groupDelta.value
+  if (delta && multi.value && isSelected(selection.kind, selection.id)) return { ...object, x: object.x + delta.x, y: object.y + delta.y }
   const live = preview.value
   if (!live || live.selection.kind !== selection.kind || live.selection.id !== selection.id) return object
   return { ...object, x: live.x, y: live.y, rotation: live.rotation, width: live.width ?? object.width, depth: live.depth ?? object.depth }
@@ -268,14 +291,54 @@ const ghostWarning = computed(() => {
 
 const belowStairs = computed(() => (below.value?.items ?? []).filter(item => item.kind === 'stairs'))
 
-const isSelected = (kind: PlanSelection['kind'], id: string) => props.selection?.kind === kind && props.selection.id === id
+function isSelected(kind: PlanSelection['kind'], id: string): boolean {
+  if (multi.value) return props.group!.some(member => member.kind === kind && member.id === id)
+  return props.selection?.kind === kind && props.selection.id === id
+}
+
+/** Each table's, piece's and inside wall's bounds on the plan as drawn now (marquee, guides, gaps). */
+const pieceBoxes = computed((): { target: PlanSelection, bounds: Bounds, from?: Point, to?: Point }[] => [
+  ...placed.value.map(table => ({ target: { kind: 'table' as const, id: table.tableId }, bounds: boundsOf(rectCorners(table, table.extent.width, table.extent.depth, table.rotation)) })),
+  ...items.value.map(item => ({ target: { kind: 'item' as const, id: item.id }, bounds: boundsOf(rectCorners(item, item.width, item.depth, item.rotation)) })),
+  ...walls.value.map(wall => ({ target: { kind: 'wall' as const, id: wall.id }, bounds: boundsOf([wall.from, wall.to]), from: wall.from, to: wall.to })),
+])
+const boxOf = (target: PlanSelection) => pieceBoxes.value.find(box => box.target.kind === target.kind && box.target.id === target.id)?.bounds
+const union = (list: readonly Bounds[]): Bounds | null => (list.length ? boundsOf(list.flatMap(bounds => [{ x: bounds.minX, y: bounds.minY }, { x: bounds.maxX, y: bounds.maxY }])) : null)
+/** The selection's bounds: the whole set's, or the one piece's or wall's. */
+const selectedBounds = computed(() => union((multi.value ? props.group! : props.selection ? [props.selection] : []).map(boxOf).filter((bounds): bounds is Bounds => !!bounds)))
+
+/**
+ * Smart guides (D278): `moving` snapped to the other pieces' and the floor corners' lines within
+ * 8 px, unless Ctrl/⌘ asks for the fine grid. Returns the shift and draws the guides.
+ */
+function guided(moving: Bounds, exclude: (target: PlanSelection) => boolean, fine: boolean): Point {
+  if (fine) {
+    guides.value = []
+    return { x: 0, y: 0 }
+  }
+  const targets = [...pieceBoxes.value.filter(box => !exclude(box.target)).map(box => box.bounds), ...cornerBounds(shape.value.outline)]
+  const snapped = snapToGuides(moving, targets, 8 * perPixel.value)
+  guides.value = snapped.guides
+  return { x: snapped.dx, y: snapped.dy }
+}
+
+/** Alt held (D278): the gaps from the selection to the hovered piece, or to the walls around it. */
+const measurements = computed((): Gap[] => {
+  const box = selectedBounds.value
+  if (!altHeld.value || !box || props.mode !== 'select' || preview.value || groupDelta.value) return []
+  const target = hovered.value
+  const other = target && !isSelected(target.kind, target.id) ? (target.kind === 'edge' ? null : boxOf(target)) : null
+  if (other) return gapsBetween(box, other)
+  const middle = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
+  return shape.value.outline.length >= 3 && pointInPolygon(middle, shape.value.outline) ? distancesToOutline(box, shape.value.outline) : []
+})
 /** Tables and furniture take part in the select tool only; the other tools draw over them. */
 const piecesActive = computed(() => props.mode === 'select')
 
 /** A selected table's or piece's outline on the plan, its turn handle included (the selection's drawing). */
 const selectionFrames = computed(() => {
   const selection = props.selection
-  if (props.mode !== 'select' || !selection) return null
+  if (props.mode !== 'select' || !selection || multi.value) return null
   const table = selection.kind === 'table' ? placed.value.find(candidate => candidate.tableId === selection.id) : undefined
   if (table) return { pose: table, width: table.extent.width + 12, depth: table.extent.depth + 12, handle: 56 }
   const item = selection.kind === 'item' ? items.value.find(candidate => candidate.id === selection.id) : undefined
@@ -306,6 +369,10 @@ const hoverOutline = computed(() => {
 const selectionPoints = computed((): Point[] | null => {
   const selection = props.selection
   if (props.mode !== 'select' || !selection) return null
+  if (multi.value) {
+    const box = selectedBounds.value
+    return box ? [{ x: box.minX, y: box.minY }, { x: box.maxX, y: box.maxY }] : null
+  }
   const frame = selectionFrames.value
   if (frame) {
     const { pose, width, depth, handle } = frame
@@ -390,6 +457,8 @@ type Gesture
     | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'room', start: Point }
     | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
+    | { type: 'group', startPlan: Point, startClient: Point, moved: boolean }
+    | { type: 'marquee', startPlan: Point, startClient: Point, moved: boolean, additive: boolean }
     | { type: 'pan', startClient: Point, startView: typeof view.value, moved: boolean, plan: Point | null, event: { altKey: boolean, fine: boolean }, navigateOnly?: boolean }
     | { type: 'pinch', distance: number, startView: typeof view.value, middle: Point }
 
@@ -433,6 +502,10 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 })
 useEventListener('keyup', (event: KeyboardEvent) => {
   if (event.code === 'Space') spaceHeld.value = false
+  if (event.key === 'Alt') altHeld.value = false
+})
+useEventListener('keydown', (event: KeyboardEvent) => {
+  if (event.key === 'Alt' && pointerInside && !typing()) altHeld.value = true
 })
 /**
  * A right-click picks what's under the pointer (or clears the selection on empty plan), so Studio's
@@ -462,6 +535,7 @@ function onPointerLeave() {
 }
 useEventListener('blur', () => {
   spaceHeld.value = false
+  altHeld.value = false
 })
 
 function onPointerDown(event: PointerEvent) {
@@ -486,6 +560,9 @@ function onPointerDown(event: PointerEvent) {
     liveShape.value = null
     liveWalls.value = null
     roomPreview.value = null
+    marquee.value = null
+    groupDelta.value = null
+    guides.value = []
     gesture = { type: 'pinch', distance: Math.hypot(a.x - b.x, a.y - b.y), startView: { ...view.value }, middle: toPlan((a.x + b.x) / 2, (a.y + b.y) / 2) ?? { x: 0, y: 0 } }
     return
   }
@@ -497,6 +574,11 @@ function onPointerDown(event: PointerEvent) {
   if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
     gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) } }
+    return
+  }
+  // A drag on empty plan selects what the box touches (Figma); a finger still pans.
+  if (props.mode === 'select' && !props.placing && !target && plan && event.pointerType !== 'touch') {
+    gesture = { type: 'marquee', startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false, additive: event.shiftKey }
     return
   }
   if (props.placing || props.mode === 'hand' || props.mode === 'wall' || !target || !plan) return startPan()
@@ -523,6 +605,16 @@ function onPointerDown(event: PointerEvent) {
     event.preventDefault()
     const edge = edges.value[Number(id)]
     if (edge) emit('editLength', edge.index, toScreen(edge.label))
+    return
+  }
+  const pickable = props.mode === 'select' && (kind === 'table' || kind === 'item' || kind === 'wall') && !target.dataset.handle
+  if (pickable && event.shiftKey && event.pointerType !== 'touch') {
+    // Shift+click (D278): in or out of the selection, no drag.
+    emit('toggle', { kind, id })
+    return
+  }
+  if (pickable && multi.value && isSelected(kind, id)) {
+    gesture = { type: 'group', startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
     return
   }
   if (kind === 'wall-end') {
@@ -620,6 +712,29 @@ function onPointerMove(event: PointerEvent) {
   }
   if (!gesture.moved && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
   gesture.moved = true
+  if (gesture.type === 'marquee') {
+    const start = gesture.startPlan
+    marquee.value = { minX: Math.min(start.x, plan.x), minY: Math.min(start.y, plan.y), maxX: Math.max(start.x, plan.x), maxY: Math.max(start.y, plan.y) }
+    return
+  }
+  if (gesture.type === 'group') {
+    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const delta = { x: snap(plan.x - gesture.startPlan.x, step), y: snap(plan.y - gesture.startPlan.y, step) }
+    if (event.shiftKey) {
+      if (Math.abs(delta.x) >= Math.abs(delta.y)) delta.y = 0
+      else delta.x = 0
+    }
+    const box = selectedBoundsAtRest()
+    if (box) {
+      const shift = guided({ minX: box.minX + delta.x, maxX: box.maxX + delta.x, minY: box.minY + delta.y, maxY: box.maxY + delta.y }, target => isSelected(target.kind, target.id), fineSnap(event))
+      if (!event.shiftKey || delta.y === 0) delta.x += shift.x
+      if (!event.shiftKey || delta.x === 0) delta.y += shift.y
+    }
+    groupDelta.value = delta
+    const wallIds = new Set(props.group!.filter(member => member.kind === 'wall').map(member => member.id))
+    liveWalls.value = wallIds.size ? moveWalls(floor.value.walls, wallIds, delta) : null
+    return
+  }
   if (gesture.type === 'side') {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
     const base = { outline: floor.value.outline, edges: floor.value.edges }
@@ -653,11 +768,32 @@ function onPointerMove(event: PointerEvent) {
     if (Math.abs(plan.x - gesture.startPlan.x) >= Math.abs(plan.y - gesture.startPlan.y)) to.y = gesture.origin.y
     else to.x = gesture.origin.x
   }
+  if (gesture.type === 'drag') {
+    // Smart guides (D278): the piece's bounds where it would land, lined up with what's around it.
+    const { selection, origin } = gesture
+    const box = boxOf(selection)
+    if (box) {
+      const at = { x: to.x - (preview.value?.x ?? origin.x), y: to.y - (preview.value?.y ?? origin.y) }
+      const shift = guided({ minX: box.minX + at.x, maxX: box.maxX + at.x, minY: box.minY + at.y, maxY: box.maxY + at.y }, target => target.kind === selection.kind && target.id === selection.id, fineSnap(event))
+      if (!event.shiftKey || to.y === origin.y) to.x += shift.x
+      if (!event.shiftKey || to.x === origin.x) to.y += shift.y
+    }
+  }
   if (gesture.type === 'corner') {
     liveShape.value = moveCorner({ outline: floor.value.outline, edges: floor.value.edges }, gesture.index, to, !event.altKey)
     return
   }
   preview.value = { selection: gesture.selection, ...to, rotation: gesture.origin.rotation }
+}
+
+const overlaps = (a: Bounds, b: Bounds) => a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
+
+/** The selection's bounds where it rests (without a drag's offset), for the guides. */
+function selectedBoundsAtRest(): Bounds | null {
+  const box = selectedBounds.value
+  const delta = groupDelta.value
+  if (!box || !delta) return box
+  return { minX: box.minX - delta.x, maxX: box.maxX - delta.x, minY: box.minY - delta.y, maxY: box.maxY - delta.y }
 }
 
 /** The table, piece, inside wall or edge under the pointer, in the select tool. */
@@ -684,11 +820,23 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   const movedWalls = liveWalls.value
   const room = roomPreview.value
   roomPreview.value = null
+  const box = marquee.value
+  marquee.value = null
+  const delta = groupDelta.value
+  groupDelta.value = null
+  guides.value = []
   preview.value = null
   liveShape.value = null
   liveWalls.value = null
   if (!finished || cancelled) return
   if (finished.type === 'pan' && !finished.moved && !finished.navigateOnly) return tap(finished.plan, finished.event)
+  if (finished.type === 'marquee') {
+    if (!finished.moved || !box) return tap(finished.startPlan, { altKey: event.altKey, fine: fineSnap(event) })
+    const touched = pieceBoxes.value.filter(piece => piece.from && piece.to ? segmentTouches(box, piece.from, piece.to) : overlaps(box, piece.bounds))
+    emit('selectMany', touched.map(piece => piece.target), finished.additive)
+    return
+  }
+  if (finished.type === 'group' && finished.moved && delta && (delta.x || delta.y)) emit('moveGroup', delta)
   if (finished.type === 'drag' && finished.moved && live) {
     if (event.altKey) emit('copy', finished.selection, { x: live.x, y: live.y })
     else emit('move', finished.selection, { x: live.x, y: live.y })
@@ -807,7 +955,7 @@ function onWheel(event: WheelEvent) {
 function zoom(direction: 1 | -1) {
   zoomAround(viewMiddle(), direction > 0 ? 0.8 : 1.25)
 }
-defineExpose({ toPlan, viewCenter, fit, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, warnings, keydown, focus: () => svg.value?.focus() })
+defineExpose({ toPlan, viewCenter, fit, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, warnings, keydown, focus: () => svg.value?.focus() })
 
 const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }
 
@@ -877,6 +1025,18 @@ function keydown(event: KeyboardEvent): boolean {
   if (event.key === 'Delete' || event.key === 'Backspace') {
     emit('remove', selection)
     return done()
+  }
+  if (multi.value) {
+    // A set (D278): the arrows move it all, Shift+R turns it as one piece.
+    if (arrow) {
+      emit('moveGroup', { x: arrow.x * step, y: arrow.y * step })
+      return done()
+    }
+    if (event.key === 'R' && event.shiftKey) {
+      emit('rotate', selection, 0)
+      return done()
+    }
+    return false
   }
   const current = stored(selection)
   if (!current) return false
@@ -1107,7 +1267,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         v-for="wall in innerWalls"
         :key="`ends-${wall.id}`"
       >
-        <template v-if="mode === 'select' && isSelected('wall', wall.id)">
+        <template v-if="mode === 'select' && !multi && isSelected('wall', wall.id)">
           <circle
             v-for="end in (['from', 'to'] as const)"
             :key="end"
@@ -1592,6 +1752,108 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         :stroke-width="Math.max(20, perPixel * 6)"
         stroke-linecap="round"
       />
+    </g>
+
+    <!-- Several selected (D278): each one's frame and the set's bounds. -->
+    <g
+      v-if="multi && mode === 'select'"
+      pointer-events="none"
+      data-testid="plan-group"
+    >
+      <template
+        v-for="member in group"
+        :key="`${member.kind}-${member.id}`"
+      >
+        <rect
+          v-if="boxOf(member)"
+          :x="boxOf(member)!.minX - 4"
+          :y="boxOf(member)!.minY - 4"
+          :width="boxOf(member)!.maxX - boxOf(member)!.minX + 8"
+          :height="boxOf(member)!.maxY - boxOf(member)!.minY + 8"
+          fill="none"
+          stroke="var(--ui-primary)"
+          stroke-width="1.5"
+          vector-effect="non-scaling-stroke"
+        />
+      </template>
+      <rect
+        v-if="selectedBounds"
+        :x="selectedBounds.minX - 12"
+        :y="selectedBounds.minY - 12"
+        :width="selectedBounds.maxX - selectedBounds.minX + 24"
+        :height="selectedBounds.maxY - selectedBounds.minY + 24"
+        fill="none"
+        stroke="var(--ui-primary)"
+        stroke-width="2"
+        stroke-dasharray="6 4"
+        vector-effect="non-scaling-stroke"
+      />
+    </g>
+
+    <!-- A box selection being dragged (D278). -->
+    <rect
+      v-if="marquee"
+      :x="marquee.minX"
+      :y="marquee.minY"
+      :width="marquee.maxX - marquee.minX"
+      :height="marquee.maxY - marquee.minY"
+      fill="color-mix(in oklab, var(--ui-primary) 10%, transparent)"
+      stroke="var(--ui-primary)"
+      stroke-width="1"
+      vector-effect="non-scaling-stroke"
+      pointer-events="none"
+      data-testid="plan-marquee"
+    />
+
+    <!-- Smart guides while dragging, and the gaps measured with Alt (D278). -->
+    <g
+      pointer-events="none"
+      stroke="var(--ui-error)"
+      stroke-width="1"
+      vector-effect="non-scaling-stroke"
+    >
+      <line
+        v-for="(guide, index) in guides"
+        :key="`guide-${index}`"
+        :x1="guide.axis === 'x' ? guide.at : guide.from"
+        :y1="guide.axis === 'x' ? guide.from : guide.at"
+        :x2="guide.axis === 'x' ? guide.at : guide.to"
+        :y2="guide.axis === 'x' ? guide.to : guide.at"
+        vector-effect="non-scaling-stroke"
+        data-testid="plan-guide"
+      />
+    </g>
+    <g
+      v-for="(gap, index) in measurements"
+      :key="`gap-${index}`"
+      pointer-events="none"
+      data-testid="plan-gap"
+    >
+      <line
+        :x1="gap.from.x"
+        :y1="gap.from.y"
+        :x2="gap.to.x"
+        :y2="gap.to.y"
+        stroke="var(--ui-error)"
+        stroke-width="1.5"
+        vector-effect="non-scaling-stroke"
+      />
+      <rect
+        :x="(gap.from.x + gap.to.x) / 2 - chipSize(metres(gap.length)).width / 2"
+        :y="(gap.from.y + gap.to.y) / 2 - chipSize(metres(gap.length)).height / 2"
+        :width="chipSize(metres(gap.length)).width"
+        :height="chipSize(metres(gap.length)).height"
+        :rx="4 * perPixel"
+        fill="var(--ui-error)"
+      />
+      <text
+        :x="(gap.from.x + gap.to.x) / 2"
+        :y="(gap.from.y + gap.to.y) / 2"
+        text-anchor="middle"
+        dominant-baseline="central"
+        :font-size="chipSize(metres(gap.length)).font"
+        fill="var(--ui-bg)"
+      >{{ metres(gap.length) }}</text>
     </g>
 
     <!-- The selection, with its turn handle and corner handles (2B). -->
