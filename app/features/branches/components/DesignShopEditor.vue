@@ -2138,6 +2138,7 @@ const pendingLabel = computed(() => {
           />
           <UDropdownMenu
             :items="drawTools"
+            :modal="false"
             :content="{ side: 'top' }"
           >
             <UButton

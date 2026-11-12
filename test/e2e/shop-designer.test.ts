@@ -67,7 +67,9 @@ async function placeTable(page: Page, label: string) {
 
 async function drawWith(page: Page, name: 'Draw wall' | 'Draw outline') {
   await page.getByRole('button', { name: 'Draw', exact: true }).click()
-  await page.getByRole('menuitem', { name, exact: true }).click()
+  const action = page.getByRole('menuitem', { name, exact: true })
+  await action.click()
+  await action.waitFor({ state: 'hidden' })
 }
 
 /** The 3D view's first frame is on screen. */
@@ -100,6 +102,7 @@ async function clickPlan(page: Page, point: Point) {
     const screen = new DOMPoint(target.x, target.y).matrixTransform(matrix)
     return { x: screen.x, y: screen.y }
   }, point)
+  await expect.poll(() => plan(page).evaluate((svg, point) => svg.contains(document.elementFromPoint(point.x, point.y)), at)).toBe(true)
   await page.mouse.click(at.x, at.y)
 }
 
@@ -468,7 +471,7 @@ describe('the shop designer on saved layouts', () => {
     await plan(page).getByTestId('plan-table-L1').waitFor()
   })
 
-  it('opens Studio from Dining tables, keeps the selected table and zoom across views, and returns to the table list', async () => {
+  it('opens Studio from Dining tables, keeps the selected table and zoom across views, and returns to the table list', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await page.goto(url(`/c/${lab.slug}/admin/branches/${lab.branchId}?tab=tables`), { waitUntil: 'hydration' })
     await page.getByRole('link', { name: 'Open Studio' }).click()
@@ -477,6 +480,7 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Zoom in' }).click()
     const zoom = await plan(page).getAttribute('viewBox')
     await page.getByRole('button', { name: '3D', exact: true }).click()
+    await drawn(page)
     await page.getByTestId('table-card').getByRole('button', { name: 'Edit in 2D' }).click()
     expect(await plan(page).getAttribute('viewBox')).toBe(zoom)
     await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
