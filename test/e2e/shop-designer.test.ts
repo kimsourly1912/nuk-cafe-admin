@@ -56,6 +56,22 @@ async function shot(page: Page, name: string) {
 const plan = (page: Page) => page.getByTestId('floor-plan')
 const unplaced = (page: Page, label: string) => page.getByTestId(`unplaced-${label}`)
 const saveButton = (page: Page) => page.getByRole('button', { name: 'Save layout' })
+const studioPanels = (page: Page) => page.getByRole('navigation', { name: 'Studio panels' })
+const showPanel = (page: Page, name: 'Floors' | 'Tables' | 'Assets' | 'Properties') => studioPanels(page).getByRole('button', { name, exact: true }).click()
+
+async function placeTable(page: Page, label: string) {
+  await showPanel(page, 'Tables')
+  await unplaced(page, label).getByRole('button', { name: 'Place on map' }).click()
+  await page.getByRole('button', { name: 'Place at center' }).click()
+}
+
+async function drawWith(page: Page, name: 'Draw wall' | 'Draw outline') {
+  await page.getByRole('button', { name: 'Draw', exact: true }).click()
+  const action = page.getByRole('menuitem', { name, exact: true })
+  await action.click()
+  await action.waitFor({ state: 'hidden' })
+}
+
 /** The 3D view's first frame is on screen. */
 const drawn = (page: Page) => page.locator('[data-testid="building-canvas"][data-drawn="true"]').waitFor({ timeout: 40_000 })
 
@@ -86,6 +102,7 @@ async function clickPlan(page: Page, point: Point) {
     const screen = new DOMPoint(target.x, target.y).matrixTransform(matrix)
     return { x: screen.x, y: screen.y }
   }, point)
+  await expect.poll(() => plan(page).evaluate((svg, point) => svg.contains(document.elementFromPoint(point.x, point.y)), at)).toBe(true)
   await page.mouse.click(at.x, at.y)
 }
 
@@ -121,6 +138,7 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('use-starter').click()
     await page.getByTestId('floor-tab-Ground').waitFor()
     await page.getByTestId('floor-tab-Rooftop').waitFor()
+    await showPanel(page, 'Tables')
     // A starter draws the building only: every table waits unplaced.
     for (const label of ['L1', 'L2', 'L3']) await unplaced(page, label).waitFor()
     await page.getByTestId('layout-unsaved').waitFor()
@@ -144,6 +162,7 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('group', { name: 'Move the selection' }).waitFor({ state: 'hidden' })
 
     await card.getByRole('button', { name: 'Place on map' }).click()
+    await clickPlan(page, { x: 125, y: 300 })
     await plan(page).getByTestId('plan-table-L1').waitFor()
     await page.getByRole('button', { name: 'Move right 25 cm' }).click()
     await save(page)
@@ -163,6 +182,7 @@ describe('the shop designer on saved layouts', () => {
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').waitFor()
     expect(await saveButton(page).isDisabled()).toBe(true)
+    await showPanel(page, 'Tables')
     expect(await unplaced(page, 'L1').count()).toBe(0)
   })
 
@@ -183,13 +203,13 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Escape')
     await expect.poll(() => menu.count()).toBe(0)
 
-    await unplaced(page, 'L2').getByRole('button', { name: 'Place on map' }).click()
+    await placeTable(page, 'L2')
     await plan(page).getByTestId('plan-table-L2').waitFor()
     await page.getByRole('button', { name: 'Done' }).click()
 
     // An edge (3B): a railing, and a gate on it; windows need a wall.
     await plan(page).getByTestId('plan-edge-0').click({ force: true })
-    const panel = page.getByRole('complementary', { name: 'Selected' })
+    const panel = page.getByRole('complementary', { name: 'Properties' })
     await panel.getByText('Back edge').waitFor()
     await panel.getByRole('button', { name: 'Railing' }).click()
     await panel.getByRole('button', { name: 'Gate' }).click()
@@ -198,7 +218,7 @@ describe('the shop designer on saved layouts', () => {
     await shot(page, 'edge-railing-gate')
 
     // Draw wall (9A): two clicks make a wall; Escape ends the chain.
-    await page.getByRole('button', { name: 'Draw wall' }).click()
+    await drawWith(page, 'Draw wall')
     await page.getByTestId('tool-bar').getByText('Draw wall').waitFor()
     await clickPlan(page, { x: 300, y: 100 })
     await clickPlan(page, { x: 300, y: 400 })
@@ -221,13 +241,17 @@ describe('the shop designer on saved layouts', () => {
     await dialog.getByText('L2 will move to Unplaced tables. Its QR code keeps working.').waitFor()
     await dialog.getByRole('button', { name: 'Remove floor' }).click()
     await unplaced(page, 'L2').waitFor()
+    await showPanel(page, 'Floors')
     expect(await page.getByTestId('floor-tab-Loft').count()).toBe(0)
 
     // A table look from the library asks which real table it is (2A).
+    await showPanel(page, 'Assets')
     await page.getByTestId('look-oak-rectangle').click()
+    await page.getByRole('button', { name: 'Place at center' }).click()
     const pick = page.getByRole('dialog').filter({ hasText: 'Which table is this?' })
     await pick.getByTestId('pick-L2').click()
     await plan(page).getByTestId('plan-table-L2').waitFor()
+    await showPanel(page, 'Tables')
     expect(await unplaced(page, 'L2').count()).toBe(0)
     await save(page)
     const after = await savedLayout(page)
@@ -248,8 +272,8 @@ describe('the shop designer on saved layouts', () => {
     expect(await saveElsewhere(page, { version: before.version, layout: { floors: before.floors, placements: [theirs] } })).toBe(200)
 
     await page.getByRole('group', { name: 'Move the selection' }).getByRole('button', { name: 'Done' }).click()
-    const views = page.getByRole('group', { name: 'Dining tables views' })
-    await views.getByRole('button', { name: 'View in 3D' }).click()
+    const views = page.getByRole('group', { name: 'Layout view' })
+    await views.getByRole('button', { name: '3D', exact: true }).click()
     // CI uses software WebGL. Wait until startup measurement stops scheduling frames.
     await page.getByTestId('quality').waitFor({ timeout: 45_000 })
     await saveButton(page).click()
@@ -260,7 +284,7 @@ describe('the shop designer on saved layouts', () => {
     await shot(page, 'conflict')
     await conflict.getByRole('button', { name: 'Load latest' }).click()
     await expect.poll(() => conflict.count()).toBe(0)
-    await views.getByRole('button', { name: 'Design shop' }).click()
+    await views.getByRole('button', { name: '2D', exact: true }).click()
     await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: 150, y: 300 })
     expect(await saveButton(page).isDisabled()).toBe(true)
     // Undo puts my draft back, on top of the latest version: saving it now goes through.
@@ -293,7 +317,7 @@ describe('the shop designer on saved layouts', () => {
     await plan(page).getByTestId('plan-table-L1').click()
     await page.getByRole('button', { name: 'Move up 25 cm' }).click()
     const moved = await positionOf(page, 'L1')
-    await unplaced(page, 'L3').getByRole('button', { name: 'Place on map' }).click()
+    await placeTable(page, 'L3')
     await plan(page).getByTestId('plan-table-L3').waitFor()
 
     // Archived on another device while it's placed in this draft.
@@ -332,7 +356,7 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => plan(page).getByTestId('plan-edge-length-1').textContent()).toBe('400 cm')
     await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
 
-    await unplaced(page, 'A1').getByRole('button', { name: 'Place on map' }).click()
+    await placeTable(page, 'A1')
     await save(page)
     const layout = await savedLayout(page, lab.annexBranchId)
     expect(layout.floors[0]!.outline).toEqual([{ x: 0, y: 0 }, { x: 625, y: 0 }, { x: 625, y: 400 }, { x: 0, y: 400 }])
@@ -344,8 +368,10 @@ describe('the shop designer on saved layouts', () => {
     await openDesign(page, lab.branchId, '3d')
     await drawn(page)
     const lists = page.getByRole('complementary', { name: 'Navigate the building' })
+    await lists.getByRole('button', { name: 'Tables', exact: true }).click()
     await lists.getByTestId('list-table-L1').click()
     const card = page.getByTestId('table-card')
+    await expect.poll(() => card.count()).toBe(1)
     await expect.poll(() => card.textContent()).toContain('Ground floor')
     await shot(page, '3d-L1')
 
@@ -357,13 +383,13 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Escape')
     await expect.poll(() => dialog.count()).toBe(0)
 
-    await card.getByRole('button', { name: 'Show on plan' }).click()
+    await card.getByRole('button', { name: 'Edit in 2D' }).click()
     await expect.poll(() => page.getByTestId('selected-table').textContent()).toContain('L1')
 
     // The same table stays picked on the way back, and a change not saved yet is drawn and named.
     expect(await page.getByTestId('building-unsaved').count()).toBe(0)
     await page.getByRole('button', { name: 'Move up 25 cm' }).click()
-    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await page.getByRole('button', { name: '3D', exact: true }).first().click()
     await drawn(page)
     await page.getByTestId('building-unsaved').waitFor()
     await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('L1')
@@ -441,11 +467,28 @@ describe('the shop designer on saved layouts', () => {
     expect(box.x).toBeGreaterThanOrEqual(0)
     expect(box.x + box.width).toBeLessThanOrEqual(390)
     await shot(page, 'phone-3d')
-    await card.getByRole('button', { name: 'Show on plan' }).click()
+    await card.getByRole('button', { name: 'Edit in 2D' }).click()
     await plan(page).getByTestId('plan-table-L1').waitFor()
   })
 
-  it('works on a phone: the library in a slide-over, no sideways scrolling', async () => {
+  it('opens Studio from Dining tables, keeps the selected table and zoom across views, and returns to the table list', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await page.goto(url(`/c/${lab.slug}/admin/branches/${lab.branchId}?tab=tables`), { waitUntil: 'hydration' })
+    await page.getByRole('link', { name: 'Open Studio' }).click()
+    await page.waitForURL(address => address.pathname.endsWith(`/admin/studio/${lab.branchId}`))
+    await plan(page).getByTestId('plan-table-L1').click()
+    await page.getByRole('button', { name: 'Zoom in' }).click()
+    const zoom = await plan(page).getAttribute('viewBox')
+    await page.getByRole('button', { name: '3D', exact: true }).click()
+    await drawn(page)
+    await page.getByTestId('table-card').getByRole('button', { name: 'Edit in 2D' }).click()
+    expect(await plan(page).getAttribute('viewBox')).toBe(zoom)
+    await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Back to admin' }).click()
+    await page.waitForURL(address => address.pathname.endsWith(`/admin/branches/${lab.branchId}`) && address.searchParams.get('tab') === 'tables')
+  })
+
+  it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {
     const page = await signedIn(390, 844)
     await openDesign(page)
     await plan(page).waitFor()
@@ -456,7 +499,7 @@ describe('the shop designer on saved layouts', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await shot(page, 'phone-quick-actions')
     await page.getByRole('button', { name: 'Done' }).click()
-    await page.getByRole('button', { name: 'Library' }).click()
+    await showPanel(page, 'Tables')
     await page.getByRole('dialog').getByText('Unplaced tables').waitFor()
     await shot(page, 'phone-library')
   })
@@ -465,7 +508,8 @@ describe('the shop designer on saved layouts', () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').waitFor()
-    const library = page.getByRole('complementary', { name: 'Library' })
+    await showPanel(page, 'Assets')
+    const library = page.getByRole('complementary', { name: 'Assets' })
     const form = () => page.getByRole('dialog', { name: /look$/i })
 
     // New look: a name is required; a rectangle on four legs in walnut.
@@ -526,7 +570,8 @@ describe('the shop designer on saved layouts', () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').waitFor()
-    const library = page.getByRole('complementary', { name: 'Library' })
+    await showPanel(page, 'Assets')
+    const library = page.getByRole('complementary', { name: 'Assets' })
     const form = () => page.getByRole('dialog', { name: /look$/i })
     const looks = () => page.evaluate(path => fetch(path).then(response => response.json()), `/api/c/${lab.slug}/admin/furniture-looks`) as Promise<CustomLook[]>
 
@@ -557,7 +602,7 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('selected-table').getByRole('img', { name: 'Photo of Corner sofa' }).waitFor()
     await save(page)
     await shot(page, 'look-photo-panel')
-    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await page.getByRole('button', { name: '3D', exact: true }).first().click()
     await page.getByTestId('table-card').getByRole('img', { name: 'Photo of Corner sofa' }).waitFor()
 
     // Save as new look starts from its shape, never its photo: an upload is one look's only.
@@ -569,6 +614,7 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => form().count()).toBe(0)
 
     // Removed in the form: the picker shows the shape again.
+    await showPanel(page, 'Assets')
     await library.getByRole('button', { name: 'Edit the look Corner sofa' }).click()
     await form().getByRole('button', { name: 'Remove' }).click()
     await form().getByRole('button', { name: 'Save', exact: true }).click()
@@ -612,7 +658,7 @@ describe('the shop designer on saved layouts', () => {
   it('quick actions beside the selection: a corner handle resizes, Rotate 90°, Duplicate look asks which table, Remove from map', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page)
-    const panel = page.getByRole('complementary', { name: 'Selected' })
+    const panel = page.getByRole('complementary', { name: 'Properties' })
     const quick = page.getByTestId('quick-actions')
     const l1 = plan(page).getByTestId('plan-table-L1')
     await l1.click()
@@ -659,12 +705,15 @@ describe('the shop designer on saved layouts', () => {
 
     // Remove from map: L4 goes back to Unplaced tables.
     await quick.getByRole('button', { name: 'Remove from map' }).click()
+    await showPanel(page, 'Tables')
     await unplaced(page, 'L4').waitFor()
     await expect.poll(() => quick.count()).toBe(0)
 
     // Furniture: Duplicate copies it beside itself.
     const plants = await plan(page).getByTestId('plan-item-plant').count()
+    await showPanel(page, 'Assets')
     await page.getByTestId('catalog-plant').click()
+    await page.getByRole('button', { name: 'Place at center' }).click()
     await quick.getByRole('button', { name: 'Duplicate', exact: true }).click()
     await expect.poll(() => plan(page).getByTestId('plan-item-plant').count()).toBe(plants + 2)
     await save(page)
@@ -707,9 +756,11 @@ describe('the shop designer on saved layouts', () => {
     // In Design shop it waits under Extra seating; placed, its panel names the look, not finishes.
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').waitFor()
-    const library = page.getByRole('complementary', { name: 'Library' })
+    await showPanel(page, 'Assets')
+    const library = page.getByRole('complementary', { name: 'Assets' })
     await library.getByTestId('item-look-Rattan stool').click()
-    const panel = page.getByRole('complementary', { name: 'Selected' })
+    await page.getByRole('button', { name: 'Place at center' }).click()
+    const panel = page.getByRole('complementary', { name: 'Properties' })
     await expect.poll(() => panel.getByRole('combobox', { name: 'Look' }).textContent()).toContain('Rattan stool')
     // Its finishes are the look's: no swatches (a built-in stool shows Frame and Upholstery).
     await panel.getByTestId('selected-item-photo').waitFor()
@@ -753,7 +804,8 @@ describe('the shop designer on saved layouts', () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').waitFor()
-    const library = page.getByRole('complementary', { name: 'Library' })
+    await showPanel(page, 'Assets')
+    const library = page.getByRole('complementary', { name: 'Assets' })
     const loaded = (image: ReturnType<Page['locator']>) => image.evaluate(element => (element as HTMLImageElement).complete && (element as HTMLImageElement).naturalWidth > 0)
     await expect.poll(() => loaded(library.getByTestId('look-round-cafe').getByTestId('look-photo'))).toBe(true)
     await library.getByTestId('catalog-plant').scrollIntoViewIfNeeded()
@@ -785,7 +837,7 @@ describe('the shop designer on saved layouts', () => {
     // An inside wall's quick action: Delete wall (drawn just outside the building, where nothing covers it).
     const walls = () => plan(page).locator('[data-testid^="plan-wall-"]').count()
     const before = await walls()
-    await page.getByRole('button', { name: 'Draw wall' }).click()
+    await drawWith(page, 'Draw wall')
     await clickPlan(page, { x: right + 80, y: top })
     await clickPlan(page, { x: right + 80, y: top + 200 })
     await page.keyboard.press('Escape')
@@ -796,7 +848,7 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(walls).toBe(before)
 
     // Draw outline (3A): a click on a length label makes it a field; Escape leaves it, Enter sets it.
-    await page.getByRole('button', { name: 'Draw outline' }).click()
+    await drawWith(page, 'Draw outline')
     const label = plan(page).getByTestId('plan-edge-length-1')
     const length = Number((await label.textContent())!.replace(' cm', ''))
     const field = page.getByTestId('edge-length-edit').getByRole('spinbutton')
@@ -820,7 +872,7 @@ describe('the shop designer on saved layouts', () => {
     await quick.getByRole('button', { name: 'Railing' }).click()
     await expect.poll(() => quick.getByRole('button', { name: 'Railing' }).getAttribute('aria-pressed')).toBe('true')
     expect(await quick.getByRole('button', { name: 'Add a window' }).count()).toBe(0)
-    const gates = () => page.getByRole('complementary', { name: 'Selected' }).getByTestId('opening-door').count()
+    const gates = () => page.getByRole('complementary', { name: 'Properties' }).getByTestId('opening-door').count()
     const gatesBefore = await gates()
     await quick.getByRole('button', { name: 'Add a gate' }).click()
     await expect.poll(gates).toBe(gatesBefore + 1)
@@ -838,6 +890,7 @@ describe('the shop designer on saved layouts', () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).waitFor()
+    await showPanel(page, 'Assets')
     const library = page.getByTestId('catalog-cat').locator('xpath=ancestor::section[1]')
     expect((await library.getByRole('heading').textContent())?.trim()).toBe('People and pets')
     await page.getByTestId('catalog-cat').scrollIntoViewIfNeeded()
@@ -845,19 +898,21 @@ describe('the shop designer on saved layouts', () => {
 
     const cats = await plan(page).getByTestId('plan-item-cat').count()
     await page.getByTestId('catalog-cat').click()
+    await page.getByRole('button', { name: 'Place at center' }).click()
     await expect.poll(() => plan(page).getByTestId('plan-item-cat').count()).toBe(cats + 1)
     // A figure keeps its size: no width or depth to type, no corner handles; it can still turn.
-    const panel = page.getByRole('complementary', { name: 'Selected' })
+    const panel = page.getByRole('complementary', { name: 'Properties' })
     await panel.getByText('Decoration · no QR code').waitFor()
     expect(await panel.getByLabel('Width (cm)').count()).toBe(0)
     expect(await panel.getByLabel('Rotation (°)').count()).toBe(1)
     await page.getByTestId('catalog-seated-person').click()
+    await page.getByRole('button', { name: 'Place at center' }).click()
     await save(page)
     const items = (await savedLayout(page)).floors.flatMap(floor => floor.items)
     expect(items.filter(item => item.kind === 'cat').at(-1)).toMatchObject({ ...FIGURE_SIZES.cat, finishes: {} })
     expect(items.filter(item => item.kind === 'seated-person').at(-1)).toMatchObject(FIGURE_SIZES['seated-person'])
 
-    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await page.getByRole('button', { name: '3D', exact: true }).first().click()
     await drawn(page)
     await shot(page, '3d-people-and-pets')
     // In the Scene panel while the scenes flag is on (step 4a), as on this server; a popover without it.
@@ -882,9 +937,11 @@ describe('the shop designer on saved layouts', () => {
     await openDesign(page)
     await plan(page).waitFor()
     const stools = await plan(page).getByTestId('plan-item-bar-stool').count()
+    await showPanel(page, 'Assets')
     await page.getByTestId('catalog-bar-stool').click()
+    await page.getByRole('button', { name: 'Place at center' }).click()
     await expect.poll(() => plan(page).getByTestId('plan-item-bar-stool').count()).toBe(stools + 1)
-    const panel = page.getByRole('complementary', { name: 'Selected' })
+    const panel = page.getByRole('complementary', { name: 'Properties' })
     const height = panel.getByLabel('Height (cm)')
     // A built-in stool is bar height until changed; a counter stool is 65 cm.
     expect(await height.inputValue()).toBe('75')
@@ -896,13 +953,13 @@ describe('the shop designer on saved layouts', () => {
     expect(stool.height).toBe(65)
 
     // Still selected in View in 3D: its card names it, its height and floor.
-    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await page.getByRole('button', { name: '3D', exact: true }).first().click()
     await drawn(page)
     const card = page.getByTestId('piece-card')
     await expect.poll(() => card.textContent()).toContain('Bar stool')
     expect(await card.textContent()).toContain('65 cm high')
     await shot(page, '3d-piece-card')
-    await card.getByRole('button', { name: 'Show on plan' }).click()
+    await card.getByRole('button', { name: 'Edit in 2D' }).click()
     await plan(page).waitFor()
     await expect.poll(() => panel.getByLabel('Height (cm)').inputValue()).toBe('65')
     // Taken off again: the layout as the next test expects it.
@@ -915,7 +972,8 @@ describe('the shop designer on saved layouts', () => {
     await openDesign(page)
     await plan(page).waitFor()
     const before = await savedLayout(page)
-    const library = page.getByRole('complementary', { name: 'Library' })
+    await showPanel(page, 'Assets')
+    const library = page.getByRole('complementary', { name: 'Assets' })
     for (const heading of ['Lounge seating', 'Bar and service', 'Decor and lighting', 'Outdoor']) {
       await library.getByRole('heading', { name: heading }).waitFor()
     }
@@ -924,16 +982,17 @@ describe('the shop designer on saved layouts', () => {
     for (const kind of kinds) {
       await page.getByTestId(`catalog-${kind}`).scrollIntoViewIfNeeded()
       await page.getByTestId(`catalog-${kind}`).click()
+      await page.getByRole('button', { name: 'Place at center' }).click()
       await plan(page).getByTestId(`plan-item-${kind}`).first().waitFor()
     }
     // A parasol's height is its own, in its range.
-    const panel = page.getByRole('complementary', { name: 'Selected' })
+    const panel = page.getByRole('complementary', { name: 'Properties' })
     await panel.getByText('200 to 280 cm').waitFor()
     await save(page)
     const saved = (await savedLayout(page)).floors.flatMap(floor => floor.items).map(item => item.kind)
     for (const kind of kinds) expect(saved).toContain(kind)
 
-    await page.getByRole('button', { name: 'View in 3D' }).first().click()
+    await page.getByRole('button', { name: '3D', exact: true }).first().click()
     await drawn(page)
     await shot(page, '3d-more-furniture')
 
@@ -962,6 +1021,7 @@ describe('the shop designer on saved layouts', () => {
     await shot(page, '3d-scene-panel')
     // The street never gets between a person and their tables.
     const lists = page.getByRole('complementary', { name: 'Navigate the building' })
+    await lists.getByRole('button', { name: 'Tables', exact: true }).click()
     await lists.getByTestId('list-table-L1').click()
     await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('L1')
     await page.getByRole('button', { name: 'Cutaway' }).click()

@@ -37,10 +37,13 @@ const props = defineProps<{
   ghost: PlanGhost | null
   showBelow: boolean
   mode: PlanMode
+  placing?: boolean
 }>()
 
 const emit = defineEmits<{
   select: [selection: PlanSelection | null]
+  place: [position: Point]
+  cancelPlace: []
   move: [selection: PlanSelection, position: Point]
   rotate: [selection: PlanSelection, rotation: number]
   /** A corner handle was dragged: the new size, and the centre that keeps the opposite corner. */
@@ -61,6 +64,8 @@ const below = computed(() => (props.showBelow ? props.layout.floors[floorIndex.v
 
 // The visible part of the plan, in centimetres.
 const view = ref({ x: -100, y: -100, width: 1200, height: 1100 })
+const fittedWidth = ref(view.value.width)
+const zoomLevel = computed(() => Math.round(fittedWidth.value / view.value.width * 100))
 const viewBox = computed(() => `${view.value.x} ${view.value.y} ${view.value.width} ${view.value.height}`)
 /** Centimetres per screen pixel: labels and handles keep their size on screen at every zoom. */
 const perPixel = computed(() => view.value.width / Math.max(1, screenWidth.value || 800))
@@ -69,11 +74,13 @@ function fit() {
   const points = floor.value.outline.length ? floor.value.outline : below.value?.outline ?? []
   if (!points.length) {
     view.value = { x: -100, y: -100, width: 1200, height: 1100 }
+    fittedWidth.value = view.value.width
     return
   }
   const bounds = boundsOf(points)
   const margin = 160
   view.value = { x: bounds.minX - margin, y: bounds.minY - margin, width: bounds.maxX - bounds.minX + margin * 2, height: bounds.maxY - bounds.minY + margin * 2 }
+  fittedWidth.value = view.value.width
 }
 watch(() => props.floorId, fit, { immediate: true })
 
@@ -320,7 +327,7 @@ function onPointerDown(event: PointerEvent) {
   const startPan = () => {
     gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startView: { ...view.value }, moved: false, plan, event: { altKey: event.altKey, shiftKey: event.shiftKey } }
   }
-  if (!target || !plan) return startPan()
+  if (props.placing || props.mode === 'hand' || props.mode === 'wall' || !target || !plan) return startPan()
   const kind = target.dataset.kind!
   const id = target.dataset.id!
   if (kind === 'corner') {
@@ -443,6 +450,11 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
 
 /** A tap on empty plan: clears the selection, or adds a corner or a wall end while drawing. */
 function tap(plan: Point | null, keys: { altKey: boolean, shiftKey: boolean }) {
+  if (props.mode === 'hand') return
+  if (props.placing) {
+    if (plan) emit('place', plan)
+    return
+  }
   if (drawing.value && plan) {
     const first = drawn.value[0]
     const point = drawPoint(plan, drawn.value.at(-1), keys.altKey, keys.shiftKey)
@@ -505,11 +517,19 @@ function onWheel(event: WheelEvent) {
 function zoom(direction: 1 | -1) {
   zoomAround({ x: view.value.x + view.value.width / 2, y: view.value.y + view.value.height / 2 }, direction > 0 ? 0.8 : 1.25)
 }
-defineExpose({ toPlan, viewCenter, fit, zoom, selectionBox, warnings, focus: () => svg.value?.focus() })
+defineExpose({ toPlan, viewCenter, fit, zoom, zoomLevel, selectionBox, warnings, focus: () => svg.value?.focus() })
 
 const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }
 
 function onKeydown(event: KeyboardEvent) {
+  if (props.placing) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      emit('cancelPlace')
+    }
+    return
+  }
+  if (props.mode === 'hand') return
   const step = event.shiftKey ? FINE_GRID_CM : GRID_CM
   const arrow = ARROWS[event.key]
   if (drawing.value) {

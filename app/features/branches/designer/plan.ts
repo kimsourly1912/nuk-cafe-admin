@@ -15,7 +15,7 @@ export interface PlanSelection {
 }
 
 /** Pick and move (`select`), Draw outline (frame 3A) or Draw wall (9A). */
-export type PlanMode = 'select' | 'outline' | 'wall'
+export type PlanMode = 'select' | 'hand' | 'outline' | 'wall'
 
 /**
  * A piece being dragged from the library, drawn see-through where it would land: a table (with the

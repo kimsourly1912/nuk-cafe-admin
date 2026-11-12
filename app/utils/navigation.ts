@@ -46,6 +46,7 @@ export function navigationItems(options: { sampleData: boolean }): NavigationMen
       { label: 'Cafe', type: 'label' },
       cafeNavigation,
       branchesNavigation,
+      { label: 'Studio', icon: 'i-lucide-layout-dashboard', to: '/admin/studio' },
     ],
     [
       { label: 'Admin', type: 'label' },

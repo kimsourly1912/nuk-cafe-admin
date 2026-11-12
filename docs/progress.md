@@ -3,6 +3,13 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Shop Studio (D276, 2026-11-12)
+
+Branch `codex/shop-studio`. The existing editor owns the branch layout, QR-linked tables, undo and versioned saves. Studio owns panel navigation, click-to-place, the floating tools and the handoff between 2D and 3D.
+
+- **How to verify:** Open Studio from Dining tables and the Cafe sidebar. Place a table, apply a look, rotate it, zoom, and switch to 3D. Return to the same selection and zoom. Save, reload, and check the table's QR code. Repeat at desktop, tablet and phone widths. Check legacy URLs and leaving with edits.
+- **Evidence:** Added browser coverage for the Dining tables entry, selection and zoom across views, and return to the table list. Existing designer tests exercise the new panel and placement flow. Local pnpm checks are blocked by access to the installed packages and npm registry.
+
 ### Explore E5: moto (D275, 2026-11-12)
 
 Branch `codex/explore-e5-moto`, based on PR #296 (E4). [Plan → Moto](plans/explore.md#moto-e5).
