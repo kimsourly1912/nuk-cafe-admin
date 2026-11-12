@@ -197,6 +197,24 @@ describe('saving a layout', () => {
     expect(v.safeParse(floorSchema, resized).issues?.map(issue => issue.message)).toContain('People and pets keep their own size')
   })
 
+  it('saves inside walls with their kinds and doors, and named shapes, and reads them back (D278)', async () => {
+    const walls: Floor['walls'] = [
+      { id: 'kitchen', from: { x: 300, y: 0 }, to: { x: 300, y: 300 }, openings: [{ id: 'kitchen-door', kind: 'door', offset: 100, width: 90 }, { id: 'pass', kind: 'window', offset: 200, width: 80 }] },
+      { id: 'screen', from: { x: 300, y: 300 }, to: { x: 600, y: 300 }, kind: 'glass', openings: [{ id: 'gap', kind: 'door', offset: 0, width: 100 }] },
+      { id: 'old', from: { x: 100, y: 400 }, to: { x: 200, y: 400 } },
+    ]
+    const items: Floor['items'] = [{ id: 'stage', kind: 'block', name: 'Stage', x: 150, y: 150, rotation: 0, width: 200, depth: 120, height: 40, finishes: { body: 'walnut' } }]
+    const ground = floor('ground', 'Ground', { walls, items })
+    expect(v.safeParse(floorSchema, ground).success).toBe(true)
+    await save({ version: 0, layout: { floors: [ground], placements: [] } })
+    const read = (await getLayout(db, TEST_TENANT, branch)).floors[0]!
+    expect(read.walls).toEqual(walls)
+    expect(read.items).toEqual(items)
+    // A window in glass is the contract's 400 at the route, never saved.
+    const glassWindow = floor('ground', 'Ground', { walls: [{ ...walls[1]!, openings: [{ id: 'w', kind: 'window', offset: 0, width: 100 }] }] })
+    expect(v.safeParse(floorSchema, glassWindow).issues?.map(issue => issue.message)).toContain('A window needs a full wall')
+  })
+
   it('replaces the whole layout from the version read: a floor taken out goes with its tables', async () => {
     const t1 = await table('T1')
     const t2 = await table('T2')

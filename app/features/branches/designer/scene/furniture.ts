@@ -183,6 +183,13 @@ export function buildItem(context: BuildContext, item: ItemBuild): Group {
     case 'stairs':
       stairs(context, group, item.width, item.depth, item.floorHeight ?? 300, finish('tread'))
       break
+    // Shapes (D278): a solid block or round block of one finish, slightly rounded at its edges.
+    case 'block':
+      group.add(part(box(context, item.width, height, item.depth, 1.5), finish('body'), { x: 0, y: height / 2, z: 0 }))
+      break
+    case 'block-round':
+      group.add(part(cylinder(context, item.width / 2, item.width / 2, height, 40), finish('body'), { x: 0, y: height / 2, z: 0 }))
+      break
   }
   group.userData.kind = item.kind
   return group

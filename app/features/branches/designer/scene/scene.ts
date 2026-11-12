@@ -116,7 +116,7 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
       object.userData.itemId = item.id
       built.group.add(object)
       const look = findItemLook(itemLooks, item.lookId)
-      const label = look && look.kind === item.kind ? look.name : ITEM_SPECS[item.kind].label
+      const label = item.name ?? (look && look.kind === item.kind ? look.name : ITEM_SPECS[item.kind].label)
       const top = item.kind === 'stairs' ? floor.height : pieceHeight(item)
       itemNodes.set(item.id, { itemId: item.id, label, floorId: floor.id, object, labelAnchor: new Vector3(cm(item.x), cm(top + 30), cm(item.y)) })
     }

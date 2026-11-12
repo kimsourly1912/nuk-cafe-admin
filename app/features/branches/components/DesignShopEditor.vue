@@ -10,7 +10,7 @@
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import type { ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, heightRangeMessage, innerWallKind, ITEM_HEIGHTS, isFigureKind, isItemLookKind, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
+import { edgeLength, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
@@ -134,7 +134,7 @@ function showPanel(next: Panel) {
 const finding = ref(false)
 const findQuery = ref('')
 const findMatches = (label: string) => label.toLowerCase().includes(findQuery.value.trim().toLowerCase())
-const pieceLabel = (item: LayoutItem) => findItemLook(itemLooks.value, item.lookId)?.name ?? ITEM_SPECS[item.kind].label
+const pieceLabel = (item: LayoutItem) => item.name ?? findItemLook(itemLooks.value, item.lookId)?.name ?? ITEM_SPECS[item.kind].label
 const foundFloors = computed(() => floors.value.filter(candidate => findMatches(candidate.name)))
 const foundPieces = computed(() => {
   const current = floor.value
@@ -229,6 +229,8 @@ const ITEM_ICONS: Record<ItemKind, string> = {
   'lazing-person': 'i-lucide-bed',
   'cat': 'i-lucide-cat',
   'dog': 'i-lucide-dog',
+  'block': 'i-lucide-box',
+  'block-round': 'i-lucide-cylinder',
 }
 const LOOK_ICONS = { round: 'i-lucide-circle', rect: 'i-lucide-rectangle-horizontal', booth: 'i-lucide-sofa' } as const
 const catalog = CATEGORIES.map(category => ({ ...category, specs: Object.values(ITEM_SPECS).filter(spec => spec.category === category.key) }))
@@ -283,7 +285,7 @@ const placementAlerts = computed(() => {
   if (!warnings?.size || !current) return []
   const pieces = [
     ...layout.value.placements.filter(placement => placement.floorId === current.id).map(placement => ({ selection: { kind: 'table' as const, id: placement.tableId }, label: tableLabel(placement.tableId) ?? 'A table' })),
-    ...current.items.map(item => ({ selection: { kind: 'item' as const, id: item.id }, label: ITEM_SPECS[item.kind].label })),
+    ...current.items.map(item => ({ selection: { kind: 'item' as const, id: item.id }, label: item.name ?? ITEM_SPECS[item.kind].label })),
   ]
   return pieces.filter(piece => warnings.has(piece.selection.id))
 })
@@ -326,6 +328,19 @@ function updateTable(tableId: string, change: Partial<{ floorId: string, x: numb
     if (placement) Object.assign(placement, change)
   })
   if (change.floorId) props.editor.showFloor(change.floorId)
+}
+
+/** A shape's name (D278): trimmed; empty puts the kind's name back. One undo step, none when unchanged. */
+function setShapeName(itemId: string, value: string) {
+  const name = value.trim().slice(0, SHAPE_NAME_MAX)
+  const item = floor.value?.items.find(candidate => candidate.id === itemId)
+  if (!item || (item.name ?? '') === name) return
+  draft.change((next) => {
+    const target = next.floors.flatMap(candidate => candidate.items).find(candidate => candidate.id === itemId)
+    if (!target) return
+    if (name) target.name = name
+    else delete target.name
+  })
 }
 
 function updateItem(itemId: string, change: Partial<{ x: number, y: number, rotation: number, width: number, depth: number, height: number, finishes: Partial<Record<string, Finish>> }>) {
@@ -440,6 +455,23 @@ function applyRoom(bounds: Bounds, cut: boolean) {
   updateShape(result.shape)
   finishTool()
 }
+
+/** The Shape tool (D278): a block or round block where it was drawn, selected; then Select again. */
+function placeShape(bounds: Bounds) {
+  const width = Math.min(ITEM_SIZE_MAX_CM, Math.round(bounds.maxX - bounds.minX))
+  const depth = Math.min(ITEM_SIZE_MAX_CM, Math.round(bounds.maxY - bounds.minY))
+  if (Math.min(width, depth) < SHAPE_MIN_CM) {
+    toast.add({ title: 'Shape not added', description: `Drag at least ${SHAPE_MIN_CM} cm each way.`, color: 'error', icon: 'i-lucide-circle-alert' })
+    return
+  }
+  const id = newLayoutId('item')
+  const kind = roundShape.value ? 'block-round' : 'block'
+  const size = kind === 'block-round' ? { width, depth: width } : { width, depth }
+  changeFloor(target => target.items.push({ id, kind, x: Math.round((bounds.minX + bounds.maxX) / 2), y: Math.round((bounds.minY + bounds.maxY) / 2), rotation: 0, ...size, finishes: {} }))
+  finishTool()
+  selection.value = { kind: 'item', id }
+}
+const SHAPE_MIN_CM = 20
 
 function addWall(wall: Omit<InnerWall, 'id'>) {
   changeFloor(target => target.walls.push({ id: newLayoutId('wall'), ...wall }))
@@ -884,8 +916,10 @@ function onStudioKey(event: KeyboardEvent) {
     if (mode.value === 'outline') return run(finishTool)
   }
   if (event.shiftKey) return
-  const tools: Record<string, PlanMode> = { v: 'select', h: 'hand', r: 'room', p: 'outline', w: 'wall' }
-  const tool = tools[event.key.toLowerCase()]
+  const tools: Record<string, PlanMode> = { v: 'select', h: 'hand', r: 'room', s: 'shape', o: 'shape', p: 'outline', w: 'wall' }
+  const key = event.key.toLowerCase()
+  if (key === 's' || key === 'o') roundShape.value = key === 'o'
+  const tool = tools[key]
   if (tool && floor.value) return run(() => (tool === mode.value ? undefined : startTool(tool)))
 }
 useEventListener('keydown', onStudioKey)
@@ -1050,10 +1084,13 @@ const planTools = [
   { mode: 'select', label: 'Select', icon: 'i-lucide-mouse-pointer-2', kbds: ['v'] },
   { mode: 'hand', label: 'Hand', icon: 'i-lucide-hand', kbds: ['h'] },
   { mode: 'room', label: 'Room', icon: 'i-lucide-square-plus', kbds: ['r'] },
+  { mode: 'shape', label: 'Shape', icon: 'i-lucide-shapes', kbds: ['s'] },
   { mode: 'outline', label: 'Edit points', icon: 'i-lucide-pen-tool', kbds: ['p'] },
   { mode: 'wall', label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'] },
 ] as const satisfies readonly { mode: PlanMode, label: string, icon: string, kbds: readonly string[] }[]
-const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall' || mode.value === 'room')
+const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall' || mode.value === 'room' || mode.value === 'shape')
+/** The Shape tool draws a round block (O) rather than a block (S) (D278). */
+const roundShape = ref(false)
 const pendingLabel = computed(() => {
   const piece = pending.value
   if (!piece) return ''
@@ -1692,11 +1729,11 @@ const pendingLabel = computed(() => {
           />
         </span>
         <div class="min-w-0 flex-1">
-          <p class="text-base font-semibold text-highlighted">
-            {{ ITEM_SPECS[selectedItem.kind].label }}
+          <p class="truncate text-base font-semibold text-highlighted">
+            {{ selectedItem.name ?? ITEM_SPECS[selectedItem.kind].label }}
           </p>
           <p class="text-xs text-muted">
-            {{ selectedItem.kind === 'stairs' ? 'Structure' : isFigureKind(selectedItem.kind) ? 'Decoration' : 'Furniture' }} · no QR code
+            {{ isShapeKind(selectedItem.kind) ? ITEM_SPECS[selectedItem.kind].label : selectedItem.kind === 'stairs' ? 'Structure' : isFigureKind(selectedItem.kind) ? 'Decoration' : 'Furniture' }} · no QR code
           </p>
         </div>
         <UTooltip text="Delete">
@@ -1745,15 +1782,29 @@ const pendingLabel = computed(() => {
           />
         </UFormField>
         <UFormField
-          v-if="isItemLookKind(selectedItem.kind)"
+          v-if="isShapeKind(selectedItem.kind)"
+          label="Name"
+          help="Shown on the plan, for example Stage or Planter box."
+          class="col-span-2"
+        >
+          <UInput
+            :model-value="selectedItem.name ?? ''"
+            :maxlength="SHAPE_NAME_MAX"
+            placeholder="Block"
+            @change="(event: Event) => setShapeName(selectedItem!.id, (event.target as HTMLInputElement).value)"
+            @keydown.enter="(event: KeyboardEvent) => setShapeName(selectedItem!.id, (event.target as HTMLInputElement).value)"
+          />
+        </UFormField>
+        <UFormField
+          v-if="itemHeightRange(selectedItem.kind)"
           label="Height (cm)"
-          :help="heightRangeMessage(selectedItem.kind)"
+          :help="`${itemHeightRange(selectedItem.kind)!.min} to ${itemHeightRange(selectedItem.kind)!.max} cm`"
           class="col-span-2"
         >
           <UInputNumber
             :model-value="pieceHeight(selectedItem)"
-            :min="ITEM_HEIGHTS[selectedItem.kind].min"
-            :max="ITEM_HEIGHTS[selectedItem.kind].max"
+            :min="itemHeightRange(selectedItem.kind)!.min"
+            :max="itemHeightRange(selectedItem.kind)!.max"
             :step="5"
             @update:model-value="value => setNumber(value, pieceHeight(selectedItem!), height => updateItem(selectedItem!.id, { height }))"
           />
@@ -2149,6 +2200,7 @@ const pendingLabel = computed(() => {
                 :ghost="ghost"
                 :show-below="showBelow"
                 :mode="mode"
+                :round-shape="roundShape"
                 :placing="!!pending"
                 @place="placePending"
                 @cancel-place="pending = null"
@@ -2162,6 +2214,7 @@ const pendingLabel = computed(() => {
                 @add-wall="addWall"
                 @walls="setWalls"
                 @room="applyRoom"
+                @block="placeShape"
                 @edit-points="startTool('outline')"
                 @edit-length="editLength"
               />
@@ -2347,10 +2400,27 @@ const pendingLabel = computed(() => {
                   data-testid="tool-bar"
                 >
                   <span class="rounded-lg border border-default bg-default px-3 py-2 text-sm font-semibold text-highlighted shadow-sm">
-                    {{ mode === 'outline' ? 'Edit points' : mode === 'room' ? 'Room' : 'Draw wall' }}
+                    {{ mode === 'outline' ? 'Edit points' : mode === 'room' ? 'Room' : mode === 'shape' ? 'Shape' : 'Draw wall' }}
                     <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && floor.outline.length >= 3"> · {{ areaM2(floor.outline) }} m²</template></span>
                   </span>
                   <span class="pointer-events-auto flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
+                    <UFieldGroup
+                      v-if="mode === 'shape'"
+                      size="sm"
+                      role="group"
+                      aria-label="Shape"
+                    >
+                      <UButton
+                        v-for="option in [{ round: false, label: 'Rectangle', icon: 'i-lucide-square' }, { round: true, label: 'Circle', icon: 'i-lucide-circle' }]"
+                        :key="option.label"
+                        :icon="option.icon"
+                        :label="option.label"
+                        :color="roundShape === option.round ? 'primary' : 'neutral'"
+                        :variant="roundShape === option.round ? 'soft' : 'ghost'"
+                        :aria-pressed="roundShape === option.round"
+                        @click="roundShape = option.round"
+                      />
+                    </UFieldGroup>
                     <USwitch
                       v-if="floorIndex > 0"
                       v-model="showBelow"
@@ -2425,6 +2495,10 @@ const pendingLabel = computed(() => {
               <span>Drag a corner to move it (right angles kept unless you hold Alt), or drag a side to move it.</span>
               <span>Double-click a side or click its round handle to add a corner. Click a corner, then Delete to remove it.</span>
               <span>Click an edge to make it a wall, railing or open, or to add doors and windows. Escape or Enter when done.</span>
+            </template>
+            <template v-else-if="mode === 'shape'">
+              <span>Drag to draw a {{ roundShape ? 'round block' : 'block' }} for anything the library doesn't have: a stage, a planter box, a platform.</span>
+              <span>Name it, set its height and finish in Properties. S draws rectangles, O circles; Shift keeps the sides equal.</span>
             </template>
             <template v-else-if="mode === 'room'">
               <span>Drag a rectangle: the floor, or a room added to it.</span>

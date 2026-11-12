@@ -1,4 +1,4 @@
-import { FIGURE_SIZES, ITEM_HEIGHTS, isItemLookKind } from '#shared/contracts/shop-layout'
+import { FIGURE_SIZES, ITEM_HEIGHTS, itemHeightRange, SHAPE_HEIGHT } from '#shared/contracts/shop-layout'
 import type { FigureKind, Finish, ItemKind, ItemLook, LayoutItem, ScenePreset, TableLook } from '#shared/contracts/shop-layout'
 
 /**
@@ -130,6 +130,9 @@ export const ITEM_SPECS: Record<ItemKind, ItemSpec> = {
   'parasol': { kind: 'parasol', label: 'Parasol', category: 'outdoor', footprint: 'round', width: 240, depth: 240, height: ITEM_HEIGHTS['parasol'].default, slots: [{ key: 'canopy', label: 'Canopy', options: FABRICS, default: 'linen' }, { key: 'pole', label: 'Pole', options: [...WOODS, ...METALS], default: 'warm-oak' }], photo: BUILT_IN_PHOTO('parasol'), overhead: true },
   'bicycle': { kind: 'bicycle', label: 'Bicycle', category: 'outdoor', footprint: 'rect', width: 175, depth: 58, height: ITEM_HEIGHTS['bicycle'].default, slots: [{ key: 'frame', label: 'Frame', options: [...METALS, 'navy', 'terracotta', 'olive'], default: 'navy' }], photo: BUILT_IN_PHOTO('bicycle') },
   'stairs': { kind: 'stairs', label: 'Stairs', category: 'structure', footprint: 'rect', width: 100, depth: 340, height: 300, slots: [{ key: 'tread', label: 'Treads', options: WOODS, default: 'warm-oak' }], photo: null },
+  // Shapes (D278): drawn with the Shape tool or placed from Structure, any size, one finish.
+  'block': { kind: 'block', label: 'Block', category: 'structure', footprint: 'rect', width: 120, depth: 80, height: SHAPE_HEIGHT.default, slots: [{ key: 'body', label: 'Finish', options: [...STONES, ...WOODS, ...METALS, ...FABRICS], default: 'limestone' }], photo: null },
+  'block-round': { kind: 'block-round', label: 'Round block', category: 'structure', footprint: 'round', width: 100, depth: 100, height: SHAPE_HEIGHT.default, slots: [{ key: 'body', label: 'Finish', options: [...STONES, ...WOODS, ...METALS, ...FABRICS], default: 'limestone' }], photo: null },
   // People and pets (step 3g, D274): a fixed size (the contract's), no finishes. A seated customer
   // sits at chair height, so it goes on a chair; someone lazing lies in a hammock on its stand.
   'person': figure('person', 'Person', 'person', 168),
@@ -196,7 +199,7 @@ export function pieceFinishes(item: Pick<LayoutItem, 'kind' | 'finishes' | 'look
  * pets have the kind's (stairs are drawn to their floor's height).
  */
 export function pieceHeight(item: Pick<LayoutItem, 'kind' | 'height'>): number {
-  return isItemLookKind(item.kind) && item.height !== undefined ? item.height : ITEM_SPECS[item.kind].height
+  return itemHeightRange(item.kind) && item.height !== undefined ? item.height : ITEM_SPECS[item.kind].height
 }
 
 /** A scene card in View in 3D's Scene panel (step 4a, D274). */

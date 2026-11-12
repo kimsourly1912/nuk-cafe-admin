@@ -21,8 +21,8 @@
  */
 import { useElementSize, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength, innerWallKind, innerWallLength, isFigureKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
-import { findLook, ITEM_SPECS } from '../designer/catalog'
+import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
+import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
 import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
@@ -41,6 +41,8 @@ const props = defineProps<{
   showBelow: boolean
   mode: PlanMode
   placing?: boolean
+  /** The Shape tool draws a circle (a round block) rather than a rectangle (D278). */
+  roundShape?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -61,6 +63,8 @@ const emit = defineEmits<{
   walls: [walls: InnerWall[]]
   /** The Room tool's rectangle (D278), and whether Alt cuts it out. */
   room: [bounds: Bounds, cut: boolean]
+  /** The Shape tool's rectangle or circle (D278): a new shape piece there. */
+  block: [bounds: Bounds]
   /** A double-click on the floor or its edge in Select: open Edit points (D278). */
   editPoints: []
   /** Draw outline: an edge's length label was clicked, to type its length there (3A). */
@@ -490,7 +494,7 @@ function onPointerDown(event: PointerEvent) {
   const startPan = () => {
     gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startView: { ...view.value }, moved: false, plan, event: { altKey: event.altKey, fine: fineSnap(event) } }
   }
-  if (props.mode === 'room' && plan && !props.placing) {
+  if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
     gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) } }
     return
@@ -593,7 +597,13 @@ function onPointerMove(event: PointerEvent) {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
     const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
     const { start } = gesture
-    roomPreview.value = { bounds: { minX: Math.min(start.x, end.x), minY: Math.min(start.y, end.y), maxX: Math.max(start.x, end.x), maxY: Math.max(start.y, end.y) }, cut: event.altKey }
+    // A circle (or Shift, like Figma) keeps both sides equal.
+    if (props.mode === 'shape' && (props.roundShape || event.shiftKey)) {
+      const side = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y))
+      end.x = start.x + Math.sign(end.x - start.x || 1) * side
+      end.y = start.y + Math.sign(end.y - start.y || 1) * side
+    }
+    roomPreview.value = { bounds: { minX: Math.min(start.x, end.x), minY: Math.min(start.y, end.y), maxX: Math.max(start.x, end.x), maxY: Math.max(start.y, end.y) }, cut: props.mode === 'room' && event.altKey }
     return
   }
   if (gesture.type === 'rotate') {
@@ -693,7 +703,10 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     else if (!finished.moved) emit('select', { kind: 'edge', id: String(finished.index) })
   }
   if ((finished.type === 'wall' || finished.type === 'wall-end') && finished.moved && movedWalls) emit('walls', movedWalls)
-  if (finished.type === 'room' && room) emit('room', room.bounds, event.altKey)
+  if (finished.type === 'room' && room) {
+    if (props.mode === 'shape') emit('block', room.bounds)
+    else emit('room', room.bounds, event.altKey)
+  }
 }
 
 /** A tap on empty plan: clears the selection, or adds a corner or a wall end while drawing. */
@@ -889,6 +902,7 @@ const wallPreview = computed(() => (wallStart.value && hover.value ? { from: wal
 const ariaLabel = computed(() => {
   if (drawing.value) return `Draw outline, ${floor.value.name} floor. Click on the grid to add corners; Enter closes the shape, Backspace removes the last corner.`
   if (props.mode === 'outline') return `Edit points, ${floor.value.name} floor. Drag a corner or a side to move it; double-click a side to add a corner; with a corner picked, arrow keys move it and Delete removes it.`
+  if (props.mode === 'shape') return `Shape, ${floor.value.name} floor. Drag to draw a ${props.roundShape ? 'round block' : 'block'} for anything the library doesn't have.`
   if (props.mode === 'room') return `Room, ${floor.value.name} floor. Drag a rectangle to add a room to the floor; hold Alt to cut it out.`
   if (props.mode === 'wall') return `Draw wall, ${floor.value.name} floor. Click where the wall starts and where it ends; Escape stops.`
   return `Floor plan, ${floor.value.name}. Arrow keys move the selected piece 5 cm (Shift: 25 cm), Shift+R turns it, Delete removes it, Escape clears the selection. Question mark lists every shortcut.`
@@ -1208,6 +1222,34 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             stroke-width="3"
           />
         </g>
+        <!-- A shape (D278): its finish's colour and its name. -->
+        <g v-else-if="isShapeKind(item.kind)">
+          <circle
+            v-if="item.kind === 'block-round'"
+            :r="item.width / 2"
+            :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+            stroke="var(--ui-text-muted)"
+            stroke-width="3"
+          />
+          <rect
+            v-else
+            :x="-item.width / 2"
+            :y="-item.depth / 2"
+            :width="item.width"
+            :height="item.depth"
+            rx="4"
+            :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+            stroke="var(--ui-text-muted)"
+            stroke-width="3"
+          />
+          <text
+            text-anchor="middle"
+            dominant-baseline="central"
+            :font-size="Math.min(22, Math.max(10, Math.min(item.width, item.depth) / 4))"
+            fill="var(--ui-text-highlighted)"
+            :transform="`rotate(${-item.rotation})`"
+          >{{ item.name ?? ITEM_SPECS[item.kind].label }}</text>
+        </g>
         <circle
           v-else-if="ITEM_SPECS[item.kind].footprint === 'round'"
           :r="item.width / 2"
@@ -1488,7 +1530,20 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       pointer-events="none"
       data-testid="room-preview"
     >
+      <ellipse
+        v-if="mode === 'shape' && roundShape"
+        :cx="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2"
+        :cy="(roomPreview.bounds.minY + roomPreview.bounds.maxY) / 2"
+        :rx="(roomPreview.bounds.maxX - roomPreview.bounds.minX) / 2"
+        :ry="(roomPreview.bounds.maxY - roomPreview.bounds.minY) / 2"
+        fill="color-mix(in oklab, var(--ui-primary) 12%, transparent)"
+        stroke="var(--ui-primary)"
+        stroke-width="2"
+        stroke-dasharray="8 6"
+        vector-effect="non-scaling-stroke"
+      />
       <rect
+        v-else
         :x="roomPreview.bounds.minX"
         :y="roomPreview.bounds.minY"
         :width="roomPreview.bounds.maxX - roomPreview.bounds.minX"

@@ -14,8 +14,11 @@ export interface PlanSelection {
   id: string
 }
 
-/** Pick and move (`select`), the hand, Room (D278: a dragged rectangle), Draw outline (frame 3A) or Draw wall (9A). */
-export type PlanMode = 'select' | 'hand' | 'room' | 'outline' | 'wall'
+/**
+ * Pick and move (`select`), the hand, Room and Shape (D278: a dragged rectangle makes the floor or
+ * a shape piece), Edit points (`outline`, frame 3A) or Draw wall (9A).
+ */
+export type PlanMode = 'select' | 'hand' | 'room' | 'shape' | 'outline' | 'wall'
 
 /**
  * A piece being dragged from the library, drawn see-through where it would land: a table (with the

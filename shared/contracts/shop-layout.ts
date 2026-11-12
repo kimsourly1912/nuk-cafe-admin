@@ -63,6 +63,16 @@ export type FigureKind = keyof typeof FIGURE_SIZES
 export const FIGURE_KINDS = Object.keys(FIGURE_SIZES) as FigureKind[]
 export const isFigureKind = (kind: string): kind is FigureKind => Object.hasOwn(FIGURE_SIZES, kind)
 
+/**
+ * Shapes (D278): a piece the owner draws for anything the catalog lacks (a stage, a planter box, a
+ * raised platform): a rectangle or a circle of any size, with a name, a height and one finish.
+ */
+export const SHAPE_KINDS = ['block', 'block-round'] as const
+export type ShapeKind = typeof SHAPE_KINDS[number]
+export const isShapeKind = (kind: string): kind is ShapeKind => (SHAPE_KINDS as readonly string[]).includes(kind)
+export const SHAPE_HEIGHT = { default: 90, min: 20, max: 300 } as const
+export const SHAPE_NAME_MAX = 40
+
 /** Furniture, fixtures and figures that are not dining tables: they carry no QR. */
 export const ITEM_KINDS = [
   'cafe-chair', 'bentwood-chair', 'bar-stool', 'dining-bench',
@@ -73,6 +83,7 @@ export const ITEM_KINDS = [
   'pendant-lamp', 'floor-lamp', 'water-jar',
   'parasol', 'bicycle',
   ...FIGURE_KINDS,
+  ...SHAPE_KINDS,
 ] as const
 export type ItemKind = typeof ITEM_KINDS[number]
 /**
@@ -125,11 +136,17 @@ export const ITEM_HEIGHTS = {
 export const ITEM_HEIGHT_MIN_CM = 20
 export const ITEM_HEIGHT_MAX_CM = 300
 
+/** The heights a kind can take: a chair's or fixture's (`ITEM_HEIGHTS`), a shape's; none for the others. */
+export function itemHeightRange(kind: string): { default: number, min: number, max: number } | undefined {
+  if (isItemLookKind(kind)) return ITEM_HEIGHTS[kind]
+  if (isShapeKind(kind)) return SHAPE_HEIGHT
+  return undefined
+}
+
 /** Whether `height` is in the kind's range (false for a kind with no height of its own). */
 export function heightFits(kind: string, height: number): boolean {
-  if (!isItemLookKind(kind)) return false
-  const range = ITEM_HEIGHTS[kind]
-  return height >= range.min && height <= range.max
+  const range = itemHeightRange(kind)
+  return !!range && height >= range.min && height <= range.max
 }
 
 /** The kind's height range, as a message. */
@@ -231,10 +248,13 @@ export const itemSchema = v.pipe(
      * default. Stairs and people and pets have none.
      */
     height: v.optional(sizeSchema(ITEM_HEIGHT_MIN_CM, ITEM_HEIGHT_MAX_CM)),
+    /** A shape's name (D278), shown on the plan and in 3D's card. Other pieces are named by their kind. */
+    name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(SHAPE_NAME_MAX))),
   }),
   v.check(item => item.lookId === undefined || isItemLookKind(item.kind), 'Stairs, people and pets have no custom look'),
-  v.forward(v.check(item => item.height === undefined || isItemLookKind(item.kind), 'Stairs, people and pets keep their own height'), ['height']),
-  v.forward(v.check(item => item.height === undefined || !isItemLookKind(item.kind) || heightFits(item.kind, item.height), 'Out of this kind\'s height range'), ['height']),
+  v.forward(v.check(item => item.height === undefined || itemHeightRange(item.kind) !== undefined, 'Stairs, people and pets keep their own height'), ['height']),
+  v.forward(v.check(item => item.height === undefined || itemHeightRange(item.kind) === undefined || heightFits(item.kind, item.height), 'Out of this kind\'s height range'), ['height']),
+  v.forward(v.check(item => item.name === undefined || isShapeKind(item.kind), 'Only a shape has a name'), ['name']),
   v.check(item => !isFigureKind(item.kind) || (item.width === FIGURE_SIZES[item.kind].width && item.depth === FIGURE_SIZES[item.kind].depth), 'People and pets keep their own size'),
   v.check(item => !isFigureKind(item.kind) || Object.keys(item.finishes).length === 0, 'People and pets have no finishes'),
 )
