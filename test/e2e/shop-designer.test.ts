@@ -406,6 +406,9 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('building-unsaved').waitFor()
     await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('L1')
     expect(await saveButton(page).isEnabled()).toBe(true)
+    // Undo from the keyboard works in 3D too (D277).
+    await page.keyboard.press('ControlOrMeta+z')
+    await expect.poll(() => saveButton(page).isDisabled()).toBe(true)
   })
 
   it('on a phone, the lists and QR work before WebGL starts and after graphics are lost inside a floor', { timeout: 120_000 }, async () => {
@@ -580,6 +583,19 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Undo' }).click()
     await expect.poll(() => page.getByTestId(`floor-tab-${defaultName}`).count()).toBe(0)
 
+    // At the floor limit, Add floor is off and the panel says why.
+    const addFloor = floorsPanel.getByRole('button', { name: 'Add floor' })
+    let added = 0
+    while (await addFloor.isEnabled()) {
+      await addFloor.click()
+      await floorsPanel.getByRole('textbox', { name: 'New floor name' }).press('Escape')
+      added++
+    }
+    expect(await floorsPanel.getByTestId('floor-limit').textContent()).toContain('at most 10 floors')
+    for (let step = 0; step < added; step++) await page.keyboard.press('ControlOrMeta+z')
+    await expect.poll(() => floorsPanel.getByTestId('floor-limit').count()).toBe(0)
+    await page.getByTestId('layout-unsaved').waitFor()
+
     // Manage looks opens inside Studio; the unsaved move is still there.
     await showPanel(page, 'Manage looks')
     const looksPanel = page.getByRole('complementary', { name: 'Manage looks' })
@@ -614,6 +630,10 @@ describe('the shop designer on saved layouts', () => {
 
     // Any angle is kept as 0–359°: a full turn more lands on the same angle.
     const turned = turnedBefore === '90' ? 180 : 90
+    await angle.fill(String(turned + 360))
+    await angle.press('Enter')
+    await expect.poll(() => angle.inputValue()).toBe(String(turned))
+    // The same angle typed again as a turn more: the angle shown already, so no undo step.
     await angle.fill(String(turned + 360))
     await angle.press('Enter')
     await expect.poll(() => angle.inputValue()).toBe(String(turned))
