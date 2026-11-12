@@ -17,6 +17,9 @@ import { chooseTarget } from './interaction'
 import type { MapView } from './map-draw'
 import type { MotorState } from './motor'
 import { createMotor, MOTOR, stepMotor } from './motor'
+import type { MotoPose, MotoState } from './moto'
+import { createMoto, MOTO, motoDismount, motoFits, nearestMotoCurb, stepMoto } from './moto'
+import { createMotoModel } from './moto-model'
 import type { NetworkBranch } from './network'
 import { neighboursOf, sideToward } from './network'
 import type { PlayerMode } from './player'
@@ -73,6 +76,7 @@ export interface Status {
   place: string
   indoors: boolean
   seated: boolean
+  moto: boolean
   /** The waypoint's café, or null. */
   waypoint: string | null
   /** Its branch (`DEMO_PLACE` on the demo street). */
@@ -138,6 +142,7 @@ export interface ExploreWorld {
   onFrame: (callback: () => void) => () => void
   /** Back to the street's spawn point (a stuck player's way out). */
   returnToStreet: () => void
+  resetMoto: () => void
   /** A walk through a gateway that failed to load: try again, or step back from the arch. */
   retryCrossing: () => void
   cancelCrossing: () => void
@@ -180,6 +185,11 @@ interface Place {
   rideTarget: Target
   vehicleSolid: Extract<Solid, { shape: 'box' }>
   targets: Target[]
+  moto: MotoState | null
+  motoParking: MotoPose | null
+  motoCurb: MotoPose | null
+  motoTarget: Target
+  motoSolid: Extract<Solid, { shape: 'box' }>
 }
 
 const OPEN_ANGLE = Math.PI * 0.48
@@ -231,6 +241,8 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
 
   // The avatar and its ground shadow, the tuk-tuk and its pickup marker: kept across districts.
   const avatar = createAvatar(own)
+  const motoModel = createMotoModel(own)
+  stage.scene.add(motoModel.root)
   stage.scene.add(avatar.root, avatar.shadow)
   const tukTuk = createTukTuk(own)
   tukTuk.root.visible = false
@@ -279,7 +291,17 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
       rotation: 0, bottom: district.street, top: district.street + 1.85,
     }
     const rideTarget: Target = { id: 'tuk-tuk', kind: 'ride', position: pickup, y: pickup.y, reach: 2.5, anyFacing: true }
-    return { id, district, built, context, surroundings, arches, disposables: placeDisposables, doors, grid, course, pickupVehicle, pickup, rideTarget, vehicleSolid, targets: [...buildTargets(district), rideTarget] }
+    const ground = { world: district.world, road: district.moto.road, street: district.street }
+    const fits = (pose: MotoPose) => motoFits(ground, pose)
+      && motoDismount(ground, pose, nearestMotoCurb(pose.position, district.moto.curbs))
+    const motoParking = district.moto.parking.find(fits) ?? null
+    const motoCurb = district.moto.recovery.find(fits) ?? motoParking
+    const moto = motoParking && createMoto(motoParking)
+    const motoTarget: Target = { id: 'moto', kind: 'moto', position: moto?.position ?? district.spawn.position, y: district.street, reach: 1.6 }
+    const motoSolid: Place['motoSolid'] = { shape: 'box', center: motoTarget.position, halfWidth: 0.27, halfDepth: 0.9, rotation: 0, bottom: district.street, top: district.street + 1.2 }
+    const place = { id, district, built, context, surroundings, arches, disposables, doors, grid, course, pickupVehicle, pickup, rideTarget, vehicleSolid, moto, motoParking, motoCurb, motoTarget, motoSolid, targets: [...buildTargets(district), rideTarget, motoTarget] }
+    updateParkedMoto(place, true)
+    return place
   }
 
   function showPlace(place: Place) {
@@ -318,6 +340,8 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   let previous = { x: motor.position.x, y: motor.y, z: motor.position.z }
   let follow: FollowCamera = createFollowCamera(motor.heading)
   let mode: PlayerMode = WALKING
+  let motoRiding = false
+  let motoTransition: { from: PassengerPose, to: PassengerPose, elapsed: number } | null = null
   let transition: Transition | null = null
   let seatedOn: SeatInfo | null = null
   let reducedMotion = options.reducedMotion
@@ -377,7 +401,9 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   function emitPrompt() {
     let prompt: Prompt | null = null
     if (ride.phase === 'stopped' || ride.phase === 'held') prompt = { label: 'Exit', kind: 'ride' }
-    else if (rideOwnsPlayer(ride) || crossing) prompt = null
+    else if (rideOwnsPlayer(ride) || crossing || motoTransition) prompt = null
+    else if (motoRiding && currentTarget) prompt = { label: labelFor(currentTarget), kind: currentTarget.kind }
+    else if (motoRiding && landingSpot()) prompt = { label: 'Get off', kind: 'moto' }
     else if (mode.kind === 'seated') prompt = { label: 'Stand up', kind: 'stand' }
     else if (mode.kind === 'walking' && currentTarget) prompt = { label: labelFor(currentTarget), kind: currentTarget.kind }
     const key = prompt ? `${prompt.kind}:${prompt.label}` : ''
@@ -394,7 +420,8 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
       district: here.district.name,
       place: floor ? `${here.district.name} · ${floor.name}` : 'Street',
       indoors: Boolean(floor),
-      seated: mode.kind !== 'walking' || rideOwnsPlayer(ride),
+      seated: mode.kind !== 'walking' || rideOwnsPlayer(ride) || motoRiding,
+      moto: motoRiding,
       waypoint: waypoint ? nameOf(waypoint) : null,
       waypointId: waypoint,
       crossing: crossing ? { name: crossing.gateway.name, failed: crossing.failed } : null,
@@ -419,7 +446,7 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     if (ride.phase === 'exiting') label = 'Getting out…'
     return {
       label,
-      canCall: ride.phase === 'idle' && mode.kind === 'walking' && !crossing,
+      canCall: ride.phase === 'idle' && mode.kind === 'walking' && !crossing && !motoRiding,
       canCancel: rideCanCancel(ride),
       canSkip: ride.phase === 'travelling' || (ride.phase === 'crossing' && !ride.skip),
       canRetry: ride.phase === 'held',
@@ -428,6 +455,7 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   }
 
   function labelFor(target: Target): string {
+    if (target.kind === 'moto') return 'Ride moto'
     if (target.kind === 'ride') {
       if (ride.phase === 'idle') return 'Call tuk-tuk'
       if (ride.phase !== 'waiting' || !ride.stop) return 'Talk to driver'
@@ -446,6 +474,8 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   }
 
   function eligible(target: Target): boolean {
+    if (motoRiding && target.kind !== 'gateway') return false
+    if (target.kind === 'moto' && (!here.moto || !motor.grounded || ride.phase !== 'idle' || floorAt(here.district, motor.position, motor.y))) return false
     if (target.kind === 'ride') {
       if (ride.phase !== 'idle' && ride.phase !== 'waiting') return false
       if (ride.phase === 'waiting' && ride.stop) {
@@ -471,6 +501,20 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   }
 
   function interact() {
+    if (motoRiding) {
+      if (crossing || motoTransition || !here.moto) return
+      const gateway = here.district.gateways.find(entry => `gateway:${entry.side}` === currentTarget?.id)
+      if (gateway) {
+        walkThrough(gateway)
+        return
+      }
+      const landing = landingSpot()
+      if (landing) {
+        here.moto.speed = 0
+        moveMotoRider({ ...landing, heading: yawOf(sub(landing, here.moto.position)), seated: 0 }, 1)
+      }
+      return
+    }
     if (rideOwnsPlayer(ride)) {
       applyRide({ type: 'exit' })
       return
@@ -483,7 +527,8 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     // Checked again on activation: the target may have moved out of reach since it was offered.
     const target = chooseTarget(here.targets, viewer(), currentTarget.id, eligible)
     if (!target || target.id !== currentTarget.id) return
-    if (target.kind === 'door') toggleDoor(target.id.slice(5))
+    if (target.kind === 'moto') mountMoto()
+    else if (target.kind === 'door') toggleDoor(target.id.slice(5))
     else if (target.kind === 'seat') sitDown(here.district.seats.find(seat => `seat:${seat.id}` === target.id)!)
     else if (target.kind === 'gateway') {
       const gateway = here.district.gateways.find(entry => `gateway:${entry.side}` === target.id)
@@ -497,6 +542,121 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
       }
     }
     else events.counter(here.id)
+  }
+
+  function motoGround(place = here) {
+    return { world: place.district.world, road: place.district.moto.road, street: place.district.street }
+  }
+
+  function landingSpot() {
+    const moto = here.moto
+    if (!moto || Math.abs(moto.speed) >= MOTO.dismountSpeed) return null
+    return motoDismount(motoGround(), moto, nearestMotoCurb(moto.position, here.district.moto.curbs))
+  }
+
+  function motoSeat(moto: MotoPose): PassengerPose {
+    return { ...add(moto.position, facing(moto.heading), -0.19), y: here.district.street, heading: moto.heading, seated: 1 }
+  }
+
+  function moveMotoRider(to: PassengerPose, seated: number) {
+    motoTransition = { from: { ...motor.position, y: motor.y, heading: motor.heading, seated }, to, elapsed: 0 }
+    motor.velocity = { x: 0, z: 0 }
+    actions.clear()
+  }
+
+  function updateParkedMoto(place: Place, parked: boolean) {
+    const { moto, motoSolid, motoTarget, district: { world } } = place
+    const index = world.solids.indexOf(motoSolid)
+    if (moto && parked) {
+      motoSolid.center = motoTarget.position = moto.position
+      motoSolid.rotation = -moto.heading * 180 / Math.PI
+      if (index < 0) world.solids.push(motoSolid)
+    }
+    else if (index >= 0) world.solids.splice(index, 1)
+  }
+
+  function mountMoto() {
+    if (!here.moto) return
+    motoRiding = true
+    updateParkedMoto(here, false)
+    currentTarget = null
+    moveMotoRider(motoSeat(here.moto), 0)
+    startCameraBlend()
+    follow = createFollowCamera(here.moto.heading)
+    follow.far = true
+  }
+
+  function placeMotoRider(pose: PassengerPose) {
+    motor.position = { x: pose.x, z: pose.z }
+    motor.y = pose.y
+    motor.heading = pose.heading
+    avatar.rideMoto(pose.seated, MOTO.seat)
+  }
+
+  function updateMoto(dt: number) {
+    const moto = here.moto!
+    if (motoTransition) {
+      motoTransition.elapsed += dt
+      const t = reducedMotion ? 1 : Math.min(1, motoTransition.elapsed / 0.28)
+      const { from, to } = motoTransition
+      placeMotoRider({
+        ...add(from, sub(to, from), t),
+        y: from.y + (to.y - from.y) * t,
+        heading: from.heading + angleBetween(from.heading, to.heading) * t,
+        seated: from.seated + (to.seated - from.seated) * t,
+      })
+      if (t === 1) {
+        motoTransition = null
+        if (to.seated === 0) {
+          actions.clear()
+          motoRiding = false
+          motor = createMotor(motor.position, motor.y, motor.heading)
+          avatar.sit(0, MOTO.seat)
+          updateParkedMoto(here, true)
+          follow.far = false
+        }
+      }
+    }
+    else if (!crossing) {
+      const { position, heading } = moto
+      const ground = motoGround()
+      stepMoto(ground, moto, actions.drive(), dt)
+      follow.yaw += angleBetween(heading, moto.heading)
+      placeMotoRider(motoSeat(moto))
+      if (position !== moto.position) {
+        const curb = nearestMotoCurb(moto.position, here.district.moto.curbs)
+        if (distance(moto.position, curb) < 1.35 && motoDismount(ground, moto, curb)) {
+          here.motoCurb = { position: moto.position, heading: moto.heading }
+        }
+      }
+    }
+  }
+
+  function parkAtCurb() {
+    if (!here.moto || !here.motoCurb) return
+    here.moto = createMoto(here.motoCurb)
+    here.motoTarget.position = here.moto.position
+  }
+
+  function resetMoto() {
+    if (disposed || !motoRiding || !here.motoCurb) return
+    if (crossing) {
+      crossing = null
+      loadToken++
+    }
+    parkAtCurb()
+    motoTransition = null
+    currentTarget = null
+    motor = createMotor(here.moto!.position, here.district.street, here.moto!.heading)
+    placeMotoRider(motoSeat(here.moto!))
+    previous = { ...motor.position, y: motor.y }
+    follow = createFollowCamera(motor.heading)
+    follow.far = true
+    cameraBlendFrom = null
+    actions.clear()
+    routeAge = Infinity
+    emitPrompt()
+    emitStatus()
   }
 
   function toggleDoor(id: string) {
@@ -636,7 +796,7 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
 
   function rideAction(event: Parameters<ExploreWorld['rideAction']>[0]): boolean {
     if (disposed || crossing || (paused && event.type !== 'confirm' && event.type !== 'call')) return false
-    if (event.type === 'call' && mode.kind !== 'walking') return false
+    if (event.type === 'call' && (mode.kind !== 'walking' || motoRiding)) return false
     return applyRide(event)
   }
 
@@ -681,6 +841,7 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     if (crossing && !crossing.failed) return
     crossing = { gateway, failed: false }
     motor.velocity = { x: 0, z: 0 }
+    if (motoRiding && here.moto) here.moto.speed = 0
     actions.clear()
     emitStatus()
     emitPrompt()
@@ -694,15 +855,27 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
         emitStatus()
         return
       }
-      const from = here.id
+      const arrival = arrivalGateway(place, here.id)?.arrival ?? place.district.spawn
+      if (motoRiding) updateParkedMoto(place, false)
+      const arrivalMoto = motoRiding && motoFits(motoGround(place), arrival) ? arrival : place.motoCurb
+      if (motoRiding && (!arrivalMoto || !place.motoCurb)) {
+        freePlace(place)
+        crossing = { gateway, failed: true }
+        emitStatus()
+        return
+      }
       enter(place)
       crossing = null
-      const arrival = arrivalGateway(place, from)?.arrival ?? place.district.spawn
       motor = createMotor(arrival.position, arrival.y, arrival.heading)
-      previous = { x: motor.position.x, y: motor.y, z: motor.position.z }
+      if (motoRiding && arrivalMoto) {
+        here.moto = createMoto(arrivalMoto)
+        placeMotoRider(motoSeat(here.moto))
+      }
+      else avatar.sit(0, 0.46)
+      previous = { ...motor.position, y: motor.y }
       follow = createFollowCamera(motor.heading)
+      follow.far = motoRiding
       mode = WALKING
-      avatar.sit(0, 0.46)
       actions.clear()
       emitStatus()
       emitPrompt()
@@ -719,9 +892,10 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     const { arrival } = crossing.gateway
     crossing = null
     loadToken++
-    motor = createMotor(arrival.position, arrival.y, arrival.heading)
+    if (!motoRiding) motor = createMotor(arrival.position, arrival.y, arrival.heading)
     previous = { x: motor.position.x, y: motor.y, z: motor.position.z }
     follow = createFollowCamera(motor.heading)
+    follow.far = motoRiding
     actions.clear()
     emitStatus()
     emitPrompt()
@@ -771,6 +945,12 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     const changeCamera = actions.take('camera')
     const jump = actions.take('jump')
     const pressed = actions.take('interact')
+    if (actions.take('resetMoto') && motoRiding) {
+      resetMoto()
+      return
+    }
+    const wasOnMoto = motoRiding
+    const motoWasTransitioning = motoTransition !== null
     const beforeRide = ride
     const occupied = rideOwnsPlayer(beforeRide)
     applyRide({ type: 'tick', dt, reducedMotion })
@@ -810,7 +990,8 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     if (mode !== before) finishTransition()
 
     const floor = floorAt(here.district, motor.position, motor.y)
-    if (canWalk(mode) && !occupied && !rideOwnsPlayer(ride) && !crossing) {
+    if (motoRiding) updateMoto(dt)
+    if (canWalk(mode) && !wasOnMoto && !occupied && !rideOwnsPlayer(ride) && !crossing) {
       let move = worldMove(follow.yaw, actions.move())
       let sprint = actions.sprint()
       if (autopilot) {
@@ -825,10 +1006,10 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
       }
       stepMotor(here.district.world, motor, { move, sprint, jump, indoors: Boolean(floor) }, dt)
     }
-    updateFollow(follow, dt, { heading: motor.heading, moving: length(motor.velocity) > 0.3, indoors: Boolean(floor), reducedMotion })
+    updateFollow(follow, dt, { heading: motor.heading, moving: (motoRiding ? Math.abs(here.moto?.speed ?? 0) : length(motor.velocity)) > 0.3, indoors: Boolean(floor), reducedMotion })
 
     currentTarget = mode.kind === 'walking' && !rideOwnsPlayer(ride) && !crossing ? chooseTarget(here.targets, viewer(), currentTarget?.id ?? null, eligible) : null
-    if (pressed && (!occupied || beforeRide.phase === 'stopped' || beforeRide.phase === 'held')) interact()
+    if (pressed && !motoWasTransitioning && (!occupied || beforeRide.phase === 'stopped' || beforeRide.phase === 'held')) interact()
 
     // The waypoint clears once the player is inside its café.
     if (waypoint === here.id && floor) setWaypoint(null)
@@ -870,7 +1051,7 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     const z = previous.z + (motor.position.z - previous.z) * alpha
     avatar.root.position.set(x, y, z)
     avatar.root.rotation.y = motor.heading
-    if (mode.kind === 'walking' && !rideOwnsPlayer(ride)) avatar.locomotion(motor.grounded && !crossing ? length(motor.velocity) : 0, motor.grounded, Math.min(elapsed, 0.1))
+    if (mode.kind === 'walking' && !rideOwnsPlayer(ride) && !motoRiding) avatar.locomotion(motor.grounded && !crossing ? length(motor.velocity) : 0, motor.grounded, Math.min(elapsed, 0.1))
     const shadowGround = groundAt(district.world, { x, z }, y) ?? y
     avatar.shadow.position.set(x, shadowGround + 0.012, z)
 
@@ -890,10 +1071,21 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
       distanceDriven = 0
     }
 
+    const moto = here.moto
+    motoModel.root.visible = Boolean(moto)
+    avatar.root.rotation.z = 0
+    if (moto) {
+      const lean = motoModel.update(moto.steer, moto.speed, moto.wheelTurn, reducedMotion)
+      const position = motoRiding && !motoTransition ? add({ x, z }, facing(moto.heading), 0.19) : moto.position
+      motoModel.root.position.set(position.x, district.street, position.z)
+      motoModel.root.rotation.y = moto.heading
+      if (motoRiding) avatar.root.rotation.z = lean
+    }
+
     const inVehicle = ride.phase === 'travelling' || ride.phase === 'stopped' || ride.phase === 'exiting' || ride.phase === 'crossing' || ride.phase === 'held'
     const pose = inVehicle && renderedVehicle
       ? passengerCamera(passengerView, renderedVehicle, district.street, district.world)
-      : cameraPose(follow, { world: district.world, feet: { x, y, z }, ceiling: floor?.ceiling ?? null })
+      : cameraPose(follow, { world: district.world, feet: { x, y, z }, ceiling: floor?.ceiling ?? null, shoulder: motoRiding ? 0 : undefined })
     if (cameraBlendFrom && !reducedMotion) {
       cameraBlendElapsed += elapsed
       const t = Math.min(1, cameraBlendElapsed / 0.32)
@@ -911,7 +1103,7 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     // than look out from inside it.
     const head = Math.hypot(pose.position.x - x, pose.position.y - (y + 1.55), pose.position.z - z)
     avatar.root.visible = head > HIDE_AVATAR_WITHIN && !(inVehicle && ride.phase !== 'exiting' && !passengerView.outside)
-    avatar.shadow.visible = !rideOwnsPlayer(ride)
+    avatar.shadow.visible = !rideOwnsPlayer(ride) && !motoRiding
 
     let doorsMoving = false
     for (const state of doors.values()) {
@@ -953,6 +1145,7 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
     actions.clear()
     if (!next) startLoop()
     else {
+      if (motoRiding && here.moto) here.moto.speed = 0
       if (document.pointerLockElement === options.canvas) document.exitPointerLock()
       stage.invalidate()
     }
@@ -974,6 +1167,12 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
   }
 
   function returnToStreet() {
+    if (motoRiding && here.motoParking) {
+      here.moto = createMoto(here.motoParking)
+      updateParkedMoto(here, true)
+    }
+    motoRiding = false
+    motoTransition = null
     transition = null
     seatedOn = null
     ride = IDLE_RIDE
@@ -1082,6 +1281,7 @@ export async function createExploreWorld(options: ExploreWorldOptions): Promise<
       return () => frameCallbacks.delete(callback)
     },
     returnToStreet,
+    resetMoto,
     retryCrossing,
     cancelCrossing,
     benchmark,

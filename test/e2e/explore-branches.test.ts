@@ -97,6 +97,54 @@ describe('Explore with real branches', () => {
     await page.waitForURL(address => address.pathname === `/c/${trail.slug}` && address.searchParams.get('explore') === trail.riverId)
   })
 
+  it('keeps the moto and waypoint across a gateway retry', { timeout: 180_000 }, async () => {
+    const page = await createExplorePage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' })
+    // The branch with the higher id has its gateway at the start of the lane, ahead of the moto.
+    const from = trail.marketId > trail.riverId ? trail.marketId : trail.riverId
+    const to = from === trail.marketId ? trail.riverId : trail.marketId
+    const name = to === trail.marketId ? 'Old Market' : 'Riverwalk'
+    const layout = `**/api/c/${trail.slug}/public/explore/branches/${to}`
+    allowBrowserProblems(new RegExp(`GET /api/c/${trail.slug}/public/explore/branches/${to} → 503`))
+    await page.route(layout, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"Unavailable"}' }))
+    await page.goto(url(`/c/${trail.slug}/explore?at=${from}`))
+    await page.getByText('Street', { exact: true }).waitFor()
+    const action = (label: string) => page.getByRole('button', { name: label })
+    // Watch each frame for the context prompt and release movement before walking past the moto.
+    await page.keyboard.down('a')
+    await page.keyboard.down('w')
+    try {
+      await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent?.includes('Ride moto')), undefined, { timeout: 12_000 })
+    }
+    finally {
+      await page.keyboard.up('w')
+      await page.keyboard.up('a')
+    }
+    await page.getByText('Ride moto', { exact: true }).click()
+    await action('Get off').waitFor()
+    await page.keyboard.press('m')
+    const map = page.getByRole('dialog', { name: 'Map' })
+    await map.getByRole('button', { name: `Set waypoint: ${name}` }).click()
+    await map.waitFor({ state: 'hidden' })
+
+    await page.keyboard.down('w')
+    try {
+      await action(`Enter ${name}`).waitFor({ timeout: 25_000 })
+    }
+    finally {
+      await page.keyboard.up('w')
+    }
+    await action(`Enter ${name}`).click()
+    await action('Go back').waitFor()
+    await page.unroute(layout)
+    await action('Retry').click()
+    await action('Get off').waitFor()
+    await page.getByText('Riding moto', { exact: true }).waitFor()
+    await page.getByText(`Waypoint: ${name}`).waitFor()
+
+    await action('View menu').click()
+    await page.waitForURL(address => address.pathname === `/c/${trail.slug}` && address.searchParams.get('explore') === to)
+  })
+
   it('rides through the gateway, held while the next street fails to load, then arrives at its curb', { timeout: 240_000 }, async () => {
     const page = await createExplorePage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' })
     const layout = `**/api/c/${trail.slug}/public/explore/branches/${trail.riverId}`

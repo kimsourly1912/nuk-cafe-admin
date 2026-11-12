@@ -103,6 +103,47 @@ describe('Explore', () => {
     await shot(page, 'phone-street')
   })
 
+  it('mounts the moto, drives with touch, resets from the map and gets off safely', { timeout: 180_000 }, async () => {
+    const page = await createExplorePage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce' })
+    await open(page)
+    const action = (name: string) => page.getByRole('button', { name, exact: true })
+    await page.keyboard.down('a')
+    try {
+      await holdUntil(page, 'w', async () => {
+        await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent?.includes('Ride moto')))
+      })
+    }
+    finally {
+      await page.keyboard.up('a')
+    }
+    await action('Ride moto').tap()
+    await page.getByText('Riding moto', { exact: true }).waitFor()
+    await action('Get off').waitFor()
+    await expect(action('Jump').count()).resolves.toBe(0)
+
+    // Dispatch actual touchscreen pointer events so Gas remains held across multiple frames.
+    const gas = await action('Gas').boundingBox()
+    expect(gas).not.toBeNull()
+    const session = await page.context().newCDPSession(page)
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2 }],
+    })
+    await action('Get off').waitFor({ state: 'hidden' })
+    await page.keyboard.press('e')
+    await expect(page.getByText('Riding moto', { exact: true }).count()).resolves.toBe(1)
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await action('Get off').waitFor()
+
+    await action('Open the map').first().tap()
+    const map = page.getByRole('dialog', { name: 'Map' })
+    await map.getByRole('button', { name: 'Reset moto' }).tap()
+    await map.waitFor({ state: 'hidden' })
+    await action('Get off').tap()
+    await action('Jump').waitFor()
+    await expect(action('Gas').count()).resolves.toBe(0)
+  })
+
   it('calls the tuk-tuk from the map and cancels before pickup', { timeout: 120_000 }, async () => {
     const page = await createExplorePage()
     await open(page)
