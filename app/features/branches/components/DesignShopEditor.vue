@@ -1947,14 +1947,14 @@ const pendingLabel = computed(() => {
         <!-- A tool's bar replaces the floor bar while it's open (3A, 9A). -->
         <div
           v-if="mode === 'outline' || mode === 'wall'"
-          class="pointer-events-auto flex flex-wrap items-center justify-between gap-2 rounded-lg border border-default bg-default p-1 pl-3 shadow-sm"
+          class="flex flex-wrap items-start justify-between gap-2"
           data-testid="tool-bar"
         >
-          <span class="text-sm font-semibold text-highlighted">
+          <span class="rounded-lg border border-default bg-default px-3 py-2 text-sm font-semibold text-highlighted shadow-sm">
             {{ mode === 'outline' ? 'Draw outline' : 'Draw wall' }}
             <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && floor.outline.length >= 3"> · {{ areaM2(floor.outline) }} m²</template></span>
           </span>
-          <span class="flex items-center gap-1">
+          <span class="pointer-events-auto flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
             <USwitch
               v-if="floorIndex > 0"
               v-model="showBelow"
@@ -2113,9 +2113,9 @@ const pendingLabel = computed(() => {
         class="absolute bottom-16 left-2 shadow-sm lg:hidden"
         @click="detailsOpen = true"
       />
-      <div class="absolute inset-x-2 bottom-2 flex justify-center sm:bottom-3">
+      <div class="pointer-events-none absolute inset-x-2 bottom-2 flex justify-center sm:bottom-3">
         <UFieldGroup
-          class="max-w-full rounded-lg border border-default bg-default p-1 shadow-sm"
+          class="pointer-events-auto max-w-full rounded-lg border border-default bg-default p-1 shadow-sm"
           aria-label="Canvas tools"
         >
           <UButton

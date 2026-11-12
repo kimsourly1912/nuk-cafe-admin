@@ -765,8 +765,8 @@ function selectFromList(tableId: string) {
       </template>
 
       <div
-        v-if="selected || selectedPiece"
-        class="absolute inset-x-3 bottom-24 rounded-lg border border-default bg-default shadow-lg sm:inset-x-auto sm:top-16 sm:right-3 sm:bottom-auto sm:w-64 lg:hidden"
+        v-if="!isExpanded && (selected || selectedPiece)"
+        class="absolute inset-x-3 bottom-24 rounded-lg border border-default bg-default shadow-lg sm:inset-x-auto sm:top-16 sm:right-3 sm:bottom-auto sm:w-64"
       >
         <ReuseProperties />
       </div>
@@ -794,9 +794,9 @@ function selectFromList(tableId: string) {
       <ReuseProperties />
     </aside>
     <aside
-      v-if="!sceneOpen"
+      v-else-if="isExpanded"
       aria-label="Properties"
-      class="hidden w-60 shrink-0 overflow-y-auto border-l border-default bg-default lg:block xl:w-72"
+      class="w-60 shrink-0 overflow-y-auto border-l border-default bg-default xl:w-72"
     >
       <h2 class="border-b border-default p-3 text-sm font-semibold text-highlighted">
         Properties

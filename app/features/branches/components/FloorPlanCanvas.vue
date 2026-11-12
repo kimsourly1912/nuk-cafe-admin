@@ -327,7 +327,7 @@ function onPointerDown(event: PointerEvent) {
   const startPan = () => {
     gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startView: { ...view.value }, moved: false, plan, event: { altKey: event.altKey, shiftKey: event.shiftKey } }
   }
-  if (props.placing || props.mode === 'hand' || !target || !plan) return startPan()
+  if (props.placing || props.mode === 'hand' || props.mode === 'wall' || !target || !plan) return startPan()
   const kind = target.dataset.kind!
   const id = target.dataset.id!
   if (kind === 'corner') {

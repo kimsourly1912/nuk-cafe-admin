@@ -368,6 +368,7 @@ describe('the shop designer on saved layouts', () => {
     await lists.getByRole('button', { name: 'Tables', exact: true }).click()
     await lists.getByTestId('list-table-L1').click()
     const card = page.getByTestId('table-card')
+    await expect.poll(() => card.count()).toBe(1)
     await expect.poll(() => card.textContent()).toContain('Ground floor')
     await shot(page, '3d-L1')
 
@@ -609,6 +610,7 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => form().count()).toBe(0)
 
     // Removed in the form: the picker shows the shape again.
+    await showPanel(page, 'Assets')
     await library.getByRole('button', { name: 'Edit the look Corner sofa' }).click()
     await form().getByRole('button', { name: 'Remove' }).click()
     await form().getByRole('button', { name: 'Save', exact: true }).click()
@@ -976,6 +978,7 @@ describe('the shop designer on saved layouts', () => {
     for (const kind of kinds) {
       await page.getByTestId(`catalog-${kind}`).scrollIntoViewIfNeeded()
       await page.getByTestId(`catalog-${kind}`).click()
+      await page.getByRole('button', { name: 'Place at center' }).click()
       await plan(page).getByTestId(`plan-item-${kind}`).first().waitFor()
     }
     // A parasol's height is its own, in its range.
