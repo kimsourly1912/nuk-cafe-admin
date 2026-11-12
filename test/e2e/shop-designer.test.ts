@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Page } from 'playwright-core'
+import type { Locator, Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { afterEach, describe, expect, inject, it } from 'vitest'
 import type { DiningTable } from '#shared/contracts/branches'
@@ -57,12 +57,24 @@ const plan = (page: Page) => page.getByTestId('floor-plan')
 const unplaced = (page: Page, label: string) => page.getByTestId(`unplaced-${label}`)
 const saveButton = (page: Page) => page.getByRole('button', { name: 'Save layout' })
 const studioPanels = (page: Page) => page.getByRole('navigation', { name: 'Studio panels' })
-const showPanel = (page: Page, name: 'Floors' | 'Tables' | 'Assets' | 'Properties') => studioPanels(page).getByRole('button', { name, exact: true }).click()
+/** Opens a panel of the sidebar; below 1024 px the sidebar opens over the plan first (D277). */
+async function showPanel(page: Page, name: 'Floors' | 'Tables' | 'Assets' | 'Manage looks') {
+  const open = page.getByRole('button', { name: 'Open Studio sidebar' })
+  await studioPanels(page).or(open).first().waitFor()
+  if (!(await studioPanels(page).isVisible())) await open.click()
+  await studioPanels(page).getByRole('button', { name, exact: true }).click()
+}
 
 async function placeTable(page: Page, label: string) {
   await showPanel(page, 'Tables')
   await unplaced(page, label).getByRole('button', { name: 'Place on map' }).click()
   await page.getByRole('button', { name: 'Place at center' }).click()
+}
+
+/** Assets' create menu (D277): New look, then New table look. */
+async function newTableLook(library: Locator) {
+  await library.getByRole('button', { name: 'New look' }).click()
+  await library.page().getByRole('menuitem', { name: 'New table look' }).click()
 }
 
 async function drawWith(page: Page, name: 'Draw wall' | 'Draw outline') {
@@ -159,12 +171,12 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: 115, y: 305 })
     await page.getByRole('button', { name: 'Undo' }).click()
     await card.waitFor()
-    await page.getByRole('group', { name: 'Move the selection' }).waitFor({ state: 'hidden' })
+    await page.getByRole('group', { name: 'Position and rotation' }).waitFor({ state: 'hidden' })
 
     await card.getByRole('button', { name: 'Place on map' }).click()
     await clickPlan(page, { x: 125, y: 300 })
     await plan(page).getByTestId('plan-table-L1').waitFor()
-    await page.getByRole('button', { name: 'Move right 25 cm' }).click()
+    await plan(page).press('ArrowRight')
     await save(page)
     await shot(page, 'saved-L1')
 
@@ -192,20 +204,20 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('floor-tab-Ground').waitFor()
 
     await page.getByRole('button', { name: 'Add floor' }).click()
-    await expect.poll(() => page.getByTestId('floor-tab-Second').getAttribute('aria-pressed')).toBe('true')
-    // The floor menu (9B): rename, roof.
-    await page.getByTestId('floor-menu').click()
-    const menu = page.getByTestId('floor-menu-panel')
-    await menu.getByLabel('Rename floor').fill('Loft')
-    await menu.getByLabel('Rename floor').press('Enter')
-    await page.getByTestId('floor-tab-Loft').waitFor()
-    await menu.getByRole('switch', { name: 'Roof over this floor' }).click()
-    await page.keyboard.press('Escape')
-    await expect.poll(() => menu.count()).toBe(0)
+    // Add floor (D277): the new floor is shown with its name ready to type; Enter keeps it.
+    const floorName = page.getByRole('textbox', { name: 'New floor name' })
+    await expect.poll(() => floorName.evaluate(input => input === document.activeElement)).toBe(true)
+    expect(await floorName.inputValue()).toBe('Second')
+    await floorName.fill('Loft')
+    await floorName.press('Enter')
+    await expect.poll(() => page.getByTestId('floor-tab-Loft').getAttribute('aria-pressed')).toBe('true')
+    // The floor's settings (9B) are in Properties while nothing is selected (D277): roof.
+    const floorSettings = page.getByTestId('floor-settings')
+    await floorSettings.getByRole('switch', { name: 'Roof over this floor' }).click()
 
     await placeTable(page, 'L2')
     await plan(page).getByTestId('plan-table-L2').waitFor()
-    await page.getByRole('button', { name: 'Done' }).click()
+    await plan(page).press('Escape')
 
     // An edge (3B): a railing, and a gate on it; windows need a wall.
     await plan(page).getByTestId('plan-edge-0').click({ force: true })
@@ -235,8 +247,8 @@ describe('the shop designer on saved layouts', () => {
     expect(saved.placements.find(placement => placement.floorId === loft.id)).toBeTruthy()
 
     // Removing it names the table that goes back to Unplaced (6B).
-    await page.getByTestId('floor-menu').click()
-    await page.getByTestId('floor-menu-panel').getByRole('button', { name: 'Remove floor…' }).click()
+    await plan(page).press('Escape')
+    await floorSettings.getByRole('button', { name: 'Remove floor…' }).click()
     const dialog = page.getByRole('alertdialog').or(page.getByRole('dialog')).filter({ hasText: 'Remove the Loft floor?' })
     await dialog.getByText('L2 will move to Unplaced tables. Its QR code keeps working.').waitFor()
     await dialog.getByRole('button', { name: 'Remove floor' }).click()
@@ -263,7 +275,7 @@ describe('the shop designer on saved layouts', () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').click()
-    await page.getByRole('button', { name: 'Move down 25 cm' }).click()
+    await plan(page).press('ArrowDown')
     const mine = await positionOf(page, 'L1')
 
     // Another device saves meanwhile: L1 somewhere else.
@@ -271,7 +283,7 @@ describe('the shop designer on saved layouts', () => {
     const theirs = { ...before.placements[0]!, x: 150, y: 300 }
     expect(await saveElsewhere(page, { version: before.version, layout: { floors: before.floors, placements: [theirs] } })).toBe(200)
 
-    await page.getByRole('group', { name: 'Move the selection' }).getByRole('button', { name: 'Done' }).click()
+    await plan(page).press('Escape')
     const views = page.getByRole('group', { name: 'Layout view' })
     await views.getByRole('button', { name: '3D', exact: true }).click()
     // CI uses software WebGL. Wait until startup measurement stops scheduling frames.
@@ -297,7 +309,7 @@ describe('the shop designer on saved layouts', () => {
     const latest = await savedLayout(page)
     expect(await saveElsewhere(page, { version: latest.version, layout: { floors: latest.floors, placements: [{ ...latest.placements[0]!, x: 150, y: 300 }] } })).toBe(200)
     await plan(page).getByTestId('plan-table-L1').click()
-    await page.getByRole('button', { name: 'Move right 25 cm' }).click()
+    await plan(page).press('ArrowRight')
     const final = await positionOf(page, 'L1')
     await saveButton(page).click()
     await conflict.getByRole('button', { name: 'Overwrite with mine' }).click()
@@ -315,7 +327,7 @@ describe('the shop designer on saved layouts', () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').click()
-    await page.getByRole('button', { name: 'Move up 25 cm' }).click()
+    await plan(page).press('ArrowUp')
     const moved = await positionOf(page, 'L1')
     await placeTable(page, 'L3')
     await plan(page).getByTestId('plan-table-L3').waitFor()
@@ -388,7 +400,7 @@ describe('the shop designer on saved layouts', () => {
 
     // The same table stays picked on the way back, and a change not saved yet is drawn and named.
     expect(await page.getByTestId('building-unsaved').count()).toBe(0)
-    await page.getByRole('button', { name: 'Move up 25 cm' }).click()
+    await plan(page).press('ArrowUp')
     await page.getByRole('button', { name: '3D', exact: true }).first().click()
     await drawn(page)
     await page.getByTestId('building-unsaved').waitFor()
@@ -488,6 +500,132 @@ describe('the shop designer on saved layouts', () => {
     await page.waitForURL(address => address.pathname.endsWith(`/admin/branches/${lab.branchId}`) && address.searchParams.get('tab') === 'tables')
   })
 
+  it('Studio shell (D277): the sidebar hides and resizes without mounting the plan again, and the toolbar and Save layout work in both views', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').click()
+    await page.getByRole('button', { name: 'Zoom in' }).click()
+    // A mark on the plan's element: it is still there only if the plan was never mounted again.
+    await plan(page).evaluate(svg => svg.setAttribute('data-kept', 'yes'))
+    const width = (await plan(page).boundingBox())!.width
+    const sidebar = page.getByTestId('studio-sidebar')
+    await page.getByRole('button', { name: 'Hide sidebar' }).click()
+    await sidebar.waitFor({ state: 'detached' })
+    await expect.poll(async () => (await plan(page).boundingBox())!.width).toBeGreaterThan(width)
+    await shot(page, 'sidebar-hidden')
+    await page.getByRole('button', { name: 'Show sidebar' }).click()
+    await sidebar.waitFor()
+    expect(await plan(page).getAttribute('data-kept')).toBe('yes')
+    await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+
+    // The sidebar resizes from its handle, also by keyboard; hiding it keeps the width, 3D uses it too.
+    const sidebarWidth = () => sidebar.evaluate(element => Math.round(element.getBoundingClientRect().width))
+    const initial = await sidebarWidth()
+    await page.getByRole('separator', { name: 'Resize sidebar' }).focus()
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(sidebarWidth).toBeGreaterThan(initial)
+    const widened = await sidebarWidth()
+    await page.getByRole('button', { name: 'Hide sidebar' }).click()
+    await sidebar.waitFor({ state: 'detached' })
+    await page.getByRole('button', { name: 'Show sidebar' }).click()
+    await expect.poll(sidebarWidth).toBe(widened)
+    expect(await plan(page).getAttribute('data-kept')).toBe('yes')
+
+    // One toolbar, the same groups in 3D; Save layout stays on the canvas.
+    const toolbar = page.getByRole('toolbar', { name: 'Canvas tools' })
+    expect(await toolbar.getByRole('group').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')))).toEqual(['Tools', 'Layout view', 'Zoom', 'History'])
+    await toolbar.getByRole('button', { name: '3D', exact: true }).click()
+    await drawn(page)
+    expect(await toolbar.getByRole('group').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')))).toEqual(['Layout view', 'Zoom', 'History'])
+    await toolbar.getByRole('button', { name: 'Fit building' }).waitFor()
+    expect(await page.getByRole('complementary', { name: 'Navigate the building' }).evaluate(element => Math.round(element.getBoundingClientRect().width))).toBe(widened)
+    await saveButton(page).waitFor()
+    await page.getByRole('button', { name: 'Back to admin' }).waitFor()
+    await shot(page, 'studio-3d')
+    await toolbar.getByRole('button', { name: '2D', exact: true }).click()
+    await plan(page).waitFor()
+    await shot(page, 'studio-2d')
+  })
+
+  it('Studio panels (D277): Find, a new floor named in place, and Manage looks without losing the draft', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').click()
+    await plan(page).press('ArrowRight')
+    await page.getByTestId('layout-unsaved').waitFor()
+
+    // Find: the floors and the named pieces on the floor shown.
+    await showPanel(page, 'Floors')
+    const floorsPanel = page.getByRole('complementary', { name: 'Floors' })
+    const find = floorsPanel.getByRole('textbox', { name: 'Find floors and pieces' })
+    await floorsPanel.getByRole('button', { name: 'Find' }).click()
+    await find.fill('nothing like this')
+    await floorsPanel.getByText('No floors or pieces match.').waitFor()
+    await floorsPanel.getByRole('button', { name: 'Close Find' }).click()
+    await page.getByTestId('floor-tab-Ground').waitFor()
+    // Choosing a result selects it and closes Find.
+    await floorsPanel.getByRole('button', { name: 'Find' }).click()
+    await find.fill('stair')
+    await floorsPanel.getByRole('button', { name: 'Stairs' }).click()
+    await page.getByRole('complementary', { name: 'Properties' }).getByText('Stairs', { exact: true }).first().waitFor()
+    await page.getByTestId('floor-tab-Ground').waitFor()
+
+    // Escape keeps the new floor's default name.
+    await floorsPanel.getByRole('button', { name: 'Add floor' }).click()
+    const floorName = floorsPanel.getByRole('textbox', { name: 'New floor name' })
+    const defaultName = await floorName.inputValue()
+    await floorName.press('Escape')
+    await page.getByTestId(`floor-tab-${defaultName}`).waitFor()
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => page.getByTestId(`floor-tab-${defaultName}`).count()).toBe(0)
+
+    // Manage looks opens inside Studio; the unsaved move is still there.
+    await showPanel(page, 'Manage looks')
+    const looksPanel = page.getByRole('complementary', { name: 'Manage looks' })
+    await looksPanel.getByTestId('looks-tables').waitFor()
+    await looksPanel.getByRole('button', { name: 'New look' }).waitFor()
+    await shot(page, 'studio-manage-looks')
+    await page.getByTestId('layout-unsaved').waitFor()
+    expect(new URL(page.url()).pathname).toContain('/admin/studio/')
+  })
+
+  it('Properties (D277): typed position and turn commit on Enter, Escape changes nothing, one undo step each', async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').click()
+    const panel = page.getByRole('complementary', { name: 'Properties' })
+    const before = await positionOf(page, 'L1')
+    const x = panel.getByLabel('X (cm)')
+    const angle = panel.getByLabel('Rotation (°)')
+    const turnedBefore = await angle.inputValue()
+
+    await x.fill(String(before.x + 50))
+    await x.press('Enter')
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: before.x + 50, y: before.y })
+    await page.getByTestId('layout-unsaved').waitFor()
+
+    // Escape puts the field back and leaves the table and the selection as they were.
+    await x.fill('999')
+    await x.press('Escape')
+    expect(await x.inputValue()).toBe(String(before.x + 50))
+    expect(await positionOf(page, 'L1')).toEqual({ x: before.x + 50, y: before.y })
+    await page.getByTestId('selected-table').waitFor()
+
+    // Any angle is kept as 0–359°: a full turn more lands on the same angle.
+    const turned = turnedBefore === '90' ? 180 : 90
+    await angle.fill(String(turned + 360))
+    await angle.press('Enter')
+    await expect.poll(() => angle.inputValue()).toBe(String(turned))
+
+    // One undo step for each committed edit, none for the field left with Escape.
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => angle.inputValue()).toBe(turnedBefore)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => positionOf(page, 'L1')).toEqual(before)
+    await expect.poll(() => saveButton(page).isDisabled()).toBe(true)
+  })
+
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {
     const page = await signedIn(390, 844)
     await openDesign(page)
@@ -498,7 +636,13 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('quick-actions').getByRole('button', { name: 'Duplicate look' }).waitFor()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await shot(page, 'phone-quick-actions')
-    await page.getByRole('button', { name: 'Done' }).click()
+    // Properties has its own button on a phone (D277): typed position, no move pad.
+    await page.getByRole('button', { name: 'Properties' }).click()
+    await page.getByRole('dialog', { name: 'Properties' }).getByRole('group', { name: 'Position and rotation' }).waitFor()
+    await shot(page, 'phone-properties')
+    await page.getByRole('dialog', { name: 'Properties' }).getByRole('button', { name: 'Close', exact: true }).click()
+    await page.getByRole('dialog').waitFor({ state: 'hidden' })
+    await plan(page).press('Escape')
     await showPanel(page, 'Tables')
     await page.getByRole('dialog').getByText('Unplaced tables').waitFor()
     await shot(page, 'phone-library')
@@ -513,7 +657,7 @@ describe('the shop designer on saved layouts', () => {
     const form = () => page.getByRole('dialog', { name: /look$/i })
 
     // New look: a name is required; a rectangle on four legs in walnut.
-    await library.getByRole('button', { name: 'New look' }).click()
+    await newTableLook(library)
     await form().getByRole('button', { name: 'Save look' }).click()
     await form().getByText('Name is required').waitFor()
     await form().getByLabel('Name').fill('Walnut window')
@@ -527,7 +671,7 @@ describe('the shop designer on saved layouts', () => {
     await library.getByTestId('look-custom-Walnut window').waitFor()
 
     // The same name again is refused on its field.
-    await library.getByRole('button', { name: 'New look' }).click()
+    await newTableLook(library)
     await form().getByLabel('Name').fill('walnut WINDOW')
     await form().getByRole('button', { name: 'Save look' }).click()
     await form().getByText('Already used by another look').waitFor()
@@ -576,7 +720,7 @@ describe('the shop designer on saved layouts', () => {
     const looks = () => page.evaluate(path => fetch(path).then(response => response.json()), `/api/c/${lab.slug}/admin/furniture-looks`) as Promise<CustomLook[]>
 
     // New look with a photo: framed 4:3 in the crop dialog, uploaded before the look is saved.
-    await library.getByRole('button', { name: 'New look' }).click()
+    await newTableLook(library)
     await form().getByLabel('Name').fill('Corner sofa')
     const uploaded = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/admin/media'))
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), form().getByRole('button', { name: 'Upload photo' }).click()])
@@ -977,7 +1121,10 @@ describe('the shop designer on saved layouts', () => {
     for (const heading of ['Lounge seating', 'Bar and service', 'Decor and lighting', 'Outdoor']) {
       await library.getByRole('heading', { name: heading }).waitFor()
     }
-    await library.getByRole('button', { name: 'New lounge look' }).waitFor()
+    // One create menu beside the search (D277) offers every kind of look.
+    await library.getByRole('button', { name: 'New look' }).click()
+    await page.getByRole('menuitem', { name: 'New lounge look' }).waitFor()
+    await page.keyboard.press('Escape')
     const kinds = ['armchair', 'coffee-station', 'pendant-lamp', 'parasol'] as const
     for (const kind of kinds) {
       await page.getByTestId(`catalog-${kind}`).scrollIntoViewIfNeeded()
@@ -1115,7 +1262,11 @@ describe('the shop designer on saved layouts', () => {
     }).toBe(11.5564)
 
     await openDesign(page, branchId)
-    const openExplore = () => page.getByRole('button', { name: 'Explore settings' }).click()
+    // Explore settings is in Properties with nothing selected; on a phone Properties opens first (D277).
+    async function openExplore() {
+      await page.getByRole('button', { name: 'Properties' }).click()
+      await page.getByRole('button', { name: 'Explore settings' }).click()
+    }
     const dialog = page.getByRole('dialog', { name: 'Explore settings' })
     const toggle = dialog.getByRole('switch', { name: 'Show in Explore' })
     await openExplore()

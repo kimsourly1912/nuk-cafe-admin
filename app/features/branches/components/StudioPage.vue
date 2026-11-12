@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createReusableTemplate } from '@vueuse/core'
 import { NO_SCENE } from '#shared/contracts/shop-layout'
 import type { ScenePreset } from '#shared/contracts/shop-layout'
 import { SupportBanner } from '~/features/support'
@@ -7,6 +8,8 @@ import { useLayoutEditor } from '../composables/useLayoutEditor'
 import BuildingView3D from './BuildingView3D.vue'
 import DesignShopEditor from './DesignShopEditor.vue'
 import LayoutSaveAlerts from './LayoutSaveAlerts.vue'
+import StudioToolbar from './StudioToolbar.vue'
+import { STUDIO_SIDEBAR } from './studio'
 
 const props = defineProps<{ id: string }>()
 const route = useRoute()
@@ -19,12 +22,31 @@ const hasPin = computed(() => settings.value?.latitude != null && settings.value
 const editor = useLayoutEditor(props.id)
 const { ready, isDirty, saving } = editor
 const view = useUrlTab(['design', '3d'] as const, 'view')
+/**
+ * 2D mounts the first time it is shown, then stays mounted (`v-show`) so its pan, zoom and tools
+ * survive 3D. Its sidebar splitter needs a real width to start: mounted hidden, it had none (D277).
+ */
+const designMounted = ref(view.value === 'design')
+watch(view, (current) => {
+  if (current === 'design') designMounted.value = true
+})
 editor.load()
 const layout = editor.draft.layout
 const hasOutline = computed(() => layout.value.floors.some(floor => floor.outline.length >= 3))
 const explore = useRuntimeConfig().public.explore
 const publishes = computed(() => explore && hasPin.value && (layout.value.scene?.explore || editor.query.data.value?.scene?.explore))
 const exitOpen = ref(false)
+const title = computed(() => cafe.name.value ? `${cafe.name.value} Studio` : 'Studio')
+/** The left sidebar on a wide screen (D277). Kept across 2D and 3D. Hiding it keeps the canvas as it is. */
+const sidebarOpen = ref(true)
+const sidebarWidth = ref<number>(STUDIO_SIDEBAR.initial)
+const saveStatus = computed(() => saving.value ? 'Saving…' : isDirty.value ? 'Unsaved changes' : ready.value ? 'Saved' : '')
+const [DefineHeader, ReuseHeader] = createReusableTemplate<{ collapsible?: boolean }>()
+const [DefineSave, ReuseSave] = createReusableTemplate()
+function exit() {
+  if (isDirty.value) exitOpen.value = true
+  else void navigateTo(backTo.value)
+}
 function adminReturnPath() {
   const back = router.options.history.state.back
   if (typeof back !== 'string' || !back.startsWith(tenantPath('/admin'))) return tenantPath('/admin')
@@ -92,71 +114,75 @@ function showItemOnPlan(itemId: string) {
 </script>
 
 <template>
-  <div class="flex h-dvh min-h-0 flex-col overflow-hidden bg-default">
-    <SupportBanner />
-    <header class="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 border-b border-default px-2 py-2 sm:gap-3 sm:px-4">
-      <div class="flex min-w-0 items-center gap-1 sm:gap-3">
+  <!-- The sidebar's header (D277): Back, the cafe's Studio and the branch, the color mode and Hide sidebar. -->
+  <DefineHeader v-slot="{ collapsible }">
+    <div class="flex shrink-0 items-center gap-2 border-b border-default p-2">
+      <UTooltip text="Back to admin">
         <UButton
           icon="i-lucide-arrow-left"
           color="neutral"
           variant="ghost"
           aria-label="Back to admin"
-          @click="isDirty ? exitOpen = true : navigateTo(backTo)"
+          @click="exit()"
         />
-        <UIcon
-          name="i-lucide-box"
-          class="hidden size-5 shrink-0 text-primary sm:block"
-        />
-        <div class="min-w-0">
-          <h1 class="truncate text-sm font-semibold text-highlighted">
-            {{ cafe.name.value ? `${cafe.name.value} Studio` : 'Studio' }}
-          </h1>
-          <p class="truncate text-xs text-muted">
-            {{ settings?.name }}
-          </p>
-        </div>
+      </UTooltip>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-semibold text-highlighted">
+          {{ title }}
+        </p>
+        <p class="truncate text-xs text-muted">
+          {{ settings?.name }}
+        </p>
       </div>
-      <UFieldGroup
-        role="group"
-        aria-label="Layout view"
+      <UColorModeButton />
+      <UTooltip
+        v-if="collapsible"
+        text="Hide sidebar"
       >
         <UButton
-          label="2D"
-          :variant="view === 'design' ? 'soft' : 'ghost'"
-          :color="view === 'design' ? 'primary' : 'neutral'"
-          :aria-pressed="view === 'design'"
-          @click="view = 'design'"
+          icon="i-lucide-panel-left-close"
+          color="neutral"
+          variant="ghost"
+          aria-label="Hide sidebar"
+          @click="sidebarOpen = false"
         />
-        <UButton
-          label="3D"
-          :variant="view === '3d' ? 'soft' : 'ghost'"
-          :color="view === '3d' ? 'primary' : 'neutral'"
-          :aria-pressed="view === '3d'"
-          @click="view = '3d'"
-        />
-      </UFieldGroup>
-      <div class="flex min-w-0 items-center justify-end gap-2">
-        <span
-          class="hidden text-xs text-muted sm:inline"
-          role="status"
-          :data-testid="isDirty ? 'layout-unsaved' : undefined"
-        >{{ saving ? 'Saving…' : isDirty ? 'Unsaved changes' : ready ? 'Saved' : '' }}</span>
-        <UColorModeButton class="hidden sm:inline-flex" />
-        <UButton
-          label="Save layout"
-          :disabled="!ready || !isDirty"
-          :loading="saving"
-          @click="editor.save()"
-        />
-      </div>
-    </header>
-    <ApiErrorAlert
-      v-if="error"
-      :error="error"
-      title="Could not load the branch"
-      class="m-3"
-      @retry="refresh()"
-    />
+      </UTooltip>
+    </div>
+  </DefineHeader>
+  <!-- Save layout (D277): explicit, on the canvas in both views. Saving also updates Explore. -->
+  <DefineSave>
+    <div class="pointer-events-auto flex items-center gap-2 rounded-lg border border-default bg-default p-1 shadow-sm">
+      <span
+        v-if="saveStatus"
+        class="pl-2 text-xs text-muted max-sm:sr-only"
+        role="status"
+        :data-testid="isDirty ? 'layout-unsaved' : undefined"
+      >{{ saveStatus }}</span>
+      <UButton
+        label="Save layout"
+        :disabled="!ready || !isDirty"
+        :loading="saving"
+        @click="editor.save()"
+      />
+    </div>
+  </DefineSave>
+
+  <div class="flex h-dvh min-h-0 flex-col overflow-hidden bg-default">
+    <h1 class="sr-only">
+      {{ title }}<template v-if="settings?.name">
+        · {{ settings.name }}
+      </template>
+    </h1>
+    <SupportBanner />
+    <template v-if="error">
+      <ReuseHeader />
+      <ApiErrorAlert
+        :error="error"
+        title="Could not load the branch"
+        class="m-3"
+        @retry="refresh()"
+      />
+    </template>
     <template v-else>
       <LayoutSaveAlerts
         :editor="editor"
@@ -170,62 +196,78 @@ function showItemOnPlan(itemId: string) {
         Saving can update the customer-facing Explore layout.
       </p>
       <div
+        v-if="designMounted"
         v-show="view === 'design'"
         class="min-h-0 flex-1"
       >
         <DesignShopEditor
+          v-model:view="view"
+          v-model:sidebar="sidebarOpen"
+          v-model:sidebar-width="sidebarWidth"
           :editor="editor"
           :branch-id="id"
           :has-pin="hasPin"
           :dining-tables="tables ?? []"
           :looks="editor.looks.value"
           :active="view === 'design'"
-        />
+        >
+          <template #sidebar-header="{ collapsible }">
+            <ReuseHeader :collapsible="collapsible" />
+          </template>
+          <template #actions>
+            <ReuseSave />
+          </template>
+        </DesignShopEditor>
       </div>
       <div
         v-if="view === '3d'"
-        class="min-h-0 flex-1"
+        class="flex min-h-0 flex-1 flex-col"
       >
-        <div
-          v-if="editor.error.value"
-          class="p-4"
-        >
-          <ApiErrorAlert
-            :error="editor.error.value"
-            title="Could not load the shop layout"
-            @retry="editor.retry()"
-          />
-        </div>
-        <div
-          v-else-if="!ready"
-          class="p-4"
-        >
-          <ListSkeleton
-            label="Loading the shop layout…"
-            variant="card"
-          />
-        </div>
-        <div
-          v-else-if="!hasOutline"
-          class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center"
-        >
-          <p class="font-semibold text-highlighted">
-            No shop layout yet
-          </p>
-          <p class="text-sm text-muted">
-            Draw the shop in 2D to see it here.
-          </p>
-          <UButton
-            label="Edit in 2D"
-            icon="i-lucide-layout-dashboard"
-            @click="view = 'design'"
-          />
-        </div>
+        <template v-if="editor.error.value || !ready || !hasOutline">
+          <ReuseHeader />
+          <div
+            v-if="editor.error.value"
+            class="p-4"
+          >
+            <ApiErrorAlert
+              :error="editor.error.value"
+              title="Could not load the shop layout"
+              @retry="editor.retry()"
+            />
+          </div>
+          <div
+            v-else-if="!ready"
+            class="p-4"
+          >
+            <ListSkeleton
+              label="Loading the shop layout…"
+              variant="card"
+            />
+          </div>
+          <div
+            v-else
+            class="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center"
+          >
+            <p class="font-semibold text-highlighted">
+              No shop layout yet
+            </p>
+            <p class="text-sm text-muted">
+              Draw the shop in 2D to see it here.
+            </p>
+            <UButton
+              label="Edit in 2D"
+              icon="i-lucide-layout-dashboard"
+              @click="view = 'design'"
+            />
+          </div>
+        </template>
         <BuildingView3D
           v-else
           v-model:selected-table="selectedTable"
           v-model:selected-item="selectedItem"
           v-model:scene="scene"
+          v-model:sidebar="sidebarOpen"
+          :sidebar-width="sidebarWidth"
           :layout="layout"
           :tables="editor.tables.value"
           :looks="editor.looks.value"
@@ -236,7 +278,27 @@ function showItemOnPlan(itemId: string) {
           @show-on-plan="showOnPlan"
           @show-item-on-plan="showItemOnPlan"
           @design-shop="view = 'design'"
-        />
+        >
+          <template #sidebar-header="{ collapsible }">
+            <ReuseHeader :collapsible="collapsible" />
+          </template>
+          <template #actions>
+            <ReuseSave />
+          </template>
+          <template #toolbar="{ zoom, fit, canFit, fitLabel }">
+            <StudioToolbar
+              v-model:view="view"
+              :fit-label="fitLabel"
+              :can-fit="canFit"
+              :can-undo="editor.draft.canUndo.value"
+              :can-redo="editor.draft.canRedo.value"
+              @zoom="zoom"
+              @fit="fit"
+              @undo="editor.draft.undo()"
+              @redo="editor.draft.redo()"
+            />
+          </template>
+        </BuildingView3D>
       </div>
     </template>
     <AppModal
