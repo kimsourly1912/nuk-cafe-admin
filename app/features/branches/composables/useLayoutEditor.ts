@@ -286,6 +286,7 @@ export function useLayoutEditor(branchId: string) {
     selection,
     load,
     save,
+    discard: () => applied && start(applied),
     loadLatest,
     overwrite,
     removeUnavailable,

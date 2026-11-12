@@ -47,15 +47,17 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - **⋮ → Delete permanently** (on an archived table, owners only): removes it for good; its QR code never works again. It asks first, and it can't be restored. Only a table **no order was ever placed at** can be deleted; otherwise the action is greyed out ("it has orders") and it stays archived for your order history. Managers archive and restore from the counter, but can't delete.
 - Up to 200 tables per branch, archived ones included.
 
-## Design shop (the shop layout)
+## Studio (the shop layout)
 
-**Dining tables** has three views at the top right: **Table list** (the tables and their QR codes), **Design shop** (a plan of the shop) and **View in 3D** (the same shop as a small building). The plan never changes a table's name, seats or QR code: a printed QR code keeps working wherever the table stands.
+Open **Cafe → Studio** and choose a branch if the cafe has several. **Open Studio** on the branch's **Dining tables** tab opens the same workspace. **2D** and **3D** share the layout and selection. Moving a table on the plan keeps its printed QR code working.
+
+In 2D, **Floors** lists the floors and their objects. **Tables** shows unplaced and placed dining tables. **Assets** contains furniture, looks, people, pets and finishes. Select a piece or edge to edit it in **Properties**. The bottom toolbar has **Select**, **Hand**, **Draw**, **Undo** and **Redo**. On a phone, the panel buttons open bottom sheets.
 
 **Start:** a branch without a layout offers a starting shape: **Blank** (draw your own outline), **Narrow shophouse**, **Wide café** or **Rooftop café** (two floors, an open patio on top). A starter draws only walls, doors and windows; your tables wait in **Unplaced tables**.
 
 **Tables:**
 
-- **Unplaced tables** lists the branch's tables that aren't on the plan. Drag one onto the plan, or press **Place on map** (it goes in the middle; move it with the arrow pad or the arrow keys, Shift for 5 cm).
+- **Unplaced tables** lists the branch's tables that aren't on the plan. Drag one onto the plan, or press **Place on map** and tap where it goes. **Place at center** is also available. Move it with the arrow pad or arrow keys, with Shift for 5 cm.
 - A **table look** (Round café table, Oak rectangle, booth…) dropped on the plan asks **Which table is this?**: pick an unplaced table, or **New table** to add one.
 - Click a table to select it: drag it, turn it with the round handle (15° steps) or **R**, resize it with a square corner handle (5 cm steps; the opposite corner stays put), and set its floor, size, rotation and look in the panel on the right. **Edit table** opens the table's own form (name, area, seats: it saves at once). **View QR** shows its code. **Remove from map** puts it back in Unplaced tables.
 - Next to a selected table, a small bar has **Rotate 90°**, **Duplicate look** and **Remove from map** (icons only on a phone). **Duplicate look** asks **Which table is this?** and puts that table beside this one with the same look, size and turn; it never copies this table or its QR code. For furniture the bar has **Rotate 90°**, **Duplicate** (a copy beside it) and **Delete**.
@@ -82,7 +84,7 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 
 **Furniture looks page:** the **Looks** button on **Dining tables** (or **Manage looks** at the bottom of the library) lists every look: table looks, chairs and fixtures, each with **Your looks** and **Built in**. **New look** adds one; click your look's name to edit it; its **⋮** menu has **Edit**, **New look from this** and **Delete** (off while the look is in use). A built-in one's **⋮** has **New look from this**.
 
-**Floors:** the tabs above the plan. **Add floor** puts a floor on top with the same outline. The **⋯** menu next to the tabs renames the floor, sets its **height** (200–800 cm, the wall height in 3D), turns its **roof** on or off (off: an open patio), or **Remove floor…**: it names the tables that go back to Unplaced tables. Up to 10 floors. **Floor below** shows the floor underneath faintly, so stairs and walls line up.
+**Floors:** the **Floors** panel and the floor picker above the plan. **Add floor** puts a floor on top with the same outline. The **⋯** menu next to the tabs renames the floor, sets its **height** (200–800 cm, the wall height in 3D), turns its **roof** on or off (off: an open patio), or **Remove floor…**: it names the tables that go back to Unplaced tables. Up to 10 floors. **Floor below** shows the floor underneath faintly, so stairs and walls line up.
 
 **Walls, doors and windows:**
 
@@ -90,13 +92,13 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - Click an **edge** of the outline to choose what it is: **Wall**, **Railing** or **Open**, and to set its length. **Door** and **Window** add one on that edge; set its width and how far it is from the corner. On a railing a door is a **gate**, and windows need a wall. The bar under a selected edge does the same quickly: **Wall**, **Railing**, **Open**, **Door** (or **Gate**) and **Window**.
 - **Draw wall** adds walls inside the floor (a stair kiosk, a kitchen): click where it starts and where it ends; walls carry on from the last end until Escape. Click a wall, then **Delete wall** (in the bar under it or the panel).
 
-**View in 3D:** the same layout as a small building. Drag to turn it, scroll or pinch to zoom. **Fit building** frames the whole building. **Exterior** shows it from outside; **Cutaway** takes the roof and the near walls away and pulls the floors apart. Pick a floor in **Floors**, then **Enter floor** to stand inside it. To find a table, pick it in **Tables** (on a phone: **Floors and tables**) or tap it in the building: its card shows its area, seats and floor, **View QR** (its code, to scan or download) and **Show on plan** (opens Design shop with that table selected). Tap a chair, a fixture, the stairs or a person or pet to select it: its card shows what it is, its size and height and its floor, and **Show on plan** opens Design shop with it selected. A piece selected in Design shop is selected in 3D too. A table that is not on the plan is not in 3D. **Unsaved changes shown** means the building includes changes you haven't saved yet. When the layout has people or pets, **People and pets** (top right) has **Show people and pets** and **Animate** (small movements: breathing, a tail, a swaying hammock). These are only for your own screen and are not saved; Animate starts off on a device that draws 3D slowly, and pauses while the tab is hidden.
+**3D:** the same layout as a small building. Drag to turn it, scroll or pinch to zoom. **Fit building** frames the whole building. **Exterior** shows it from outside; **Cutaway** takes the roof and the near walls away and pulls the floors apart. Pick a floor in **Floors**, then **Enter floor** to stand inside it. To find a table, pick it in **Tables** (on a phone: **Floors and tables**) or tap it in the building: its card shows its area, seats and floor, **View QR** (its code, to scan or download) and **Edit in 2D** (opens the plan with that table selected). Tap a chair, a fixture, the stairs or a person or pet to select it: its card shows what it is, its size and height and its floor, and **Edit in 2D** opens the plan with it selected. A piece selected in 2D is selected in 3D too. A table that is not on the plan is not in 3D. **Unsaved changes shown** means the building includes changes you haven't saved yet. When the layout has people or pets, **People and pets** (top right) has **Show people and pets** and **Animate** (small movements: breathing, a tail, a swaying hammock). These are only for your own screen and are not saved; Animate starts off on a device that draws 3D slowly, and pauses while the tab is hidden.
 
-**Save:** **Save layout** and its recovery actions are available in both Design shop and View in 3D. Every change can be undone (**Undo**, Ctrl/⌘ Z) until you press **Save layout** (top right; **Unsaved changes** shows next to it). The whole layout saves at once. Leaving the page with unsaved changes asks first.
+**Save:** **Save layout** and its recovery actions are available in both 2D and 3D. Every change can be undone (**Undo**, Ctrl/⌘ Z) until you press **Save layout** (top right; **Unsaved changes** shows next to it). The whole layout saves at once. Leaving the page with unsaved changes asks first.
 
 ### Publish the layout in Explore
 
-In **Design shop**, open **Explore settings**, choose a ground-floor **Street door**, and turn on **Show in Explore**. Use **Save layout** to publish. The branch needs a saved map pin. Turn the switch off and save the layout to withdraw it.
+In the **2D** view, open **Explore settings**, choose a ground-floor **Street door**, and turn on **Show in Explore**. Use **Save layout** to publish. The branch needs a saved map pin. Turn the switch off and save the layout to withdraw it.
 
 ## Common problems
 

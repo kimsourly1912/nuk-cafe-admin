@@ -9,7 +9,7 @@
  */
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, heightRangeMessage, ITEM_HEIGHTS, isFigureKind, isItemLookKind } from '#shared/contracts/shop-layout'
+import { edgeLength, heightRangeMessage, ITEM_HEIGHTS, isFigureKind, isItemLookKind, LAYOUT_MAX_EXTENT_CM } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
@@ -35,13 +35,14 @@ import TableQrModal from './TableQrModal.vue'
 const props = defineProps<{
   editor: LayoutEditor
   branchId: string
+  active: boolean
   hasPin: boolean
   /** Every table of the branch (the table list's query): for Edit table, View QR and names. */
   diningTables: readonly DiningTable[]
   looks: readonly TableLook[]
 }>()
 
-const emit = defineEmits<{ view3d: [] }>()
+
 
 const exploreEnabled = useRuntimeConfig().public.explore
 const exploreOpen = ref(false)
@@ -55,15 +56,59 @@ const selection = props.editor.selection
 const showBelow = ref(true)
 const mode = ref<PlanMode>('select')
 const canvas = useTemplateRef<InstanceType<typeof FloorPlanCanvas>>('canvas')
-const libraryOpen = ref(false)
-const detailsOpen = ref(false)
+const { isCompact, isExpanded } = useLayoutContext()
+const panels = [
+  { value: 'floors', label: 'Floors', icon: 'i-lucide-layers' },
+  { value: 'tables', label: 'Tables', icon: 'i-lucide-table-2' },
+  { value: 'assets', label: 'Assets', icon: 'i-lucide-box' },
+  { value: 'properties', label: 'Properties', icon: 'i-lucide-sliders-horizontal' },
+] as const
+type Panel = typeof panels[number]['value']
+const panel = ref<Exclude<Panel, 'properties'>>('floors')
+const panelOpen = ref<Panel | null>(null)
+const detailsOpen = computed({
+  get: () => panelOpen.value === 'properties',
+  set: open => panelOpen.value = open ? 'properties' : null,
+})
+const focusMode = ref(false)
+const search = ref('')
+const assetTab = ref<'objects' | 'finishes'>('objects')
+const panelTitle = computed(() => panels.find(option => option.value === (panelOpen.value ?? panel.value))?.label ?? 'Floors')
+const matches = (label: string) => label.toLowerCase().includes(search.value.trim().toLowerCase())
+
+function showPanel(next: Panel) {
+  if (next !== 'properties' && next !== panel.value) {
+    panel.value = next
+    search.value = ''
+  }
+  if (!isExpanded.value) panelOpen.value = panelOpen.value === next ? null : next
+  else focusMode.value = false
+}
+
+watch(() => props.active, (active) => {
+  if (!active) {
+    exploreOpen.value = false
+    panelOpen.value = null
+    pending.value = null
+    if (mode.value === 'outline' || mode.value === 'wall') finishTool()
+  }
+})
 const confirm = useConfirm()
 const tenantPath = useTenantPath()
 
 const [DefineLibrary, ReuseLibrary] = createReusableTemplate()
 const [DefineDetails, ReuseDetails] = createReusableTemplate()
+const [DefineMovePad, ReuseMovePad] = createReusableTemplate()
+
+function selectPlaced(target: PlanSelection, floorId: string) {
+  if (floor.value?.id !== floorId) selectFloor(floorId)
+  selection.value = target
+  panelOpen.value = null
+}
 
 function selectFloor(id: string) {
+  if (id === floor.value?.id) return
+  pending.value = null
   props.editor.showFloor(id)
   selection.value = null
 }
@@ -114,7 +159,12 @@ const itemLooksIn = (category: ItemCategory) => itemLooks.value.filter(look => I
 
 const placedIds = computed(() => new Set(layout.value.placements.map(placement => placement.tableId)))
 const unplaced = computed(() => tables.value.filter(table => !placedIds.value.has(table.id)))
-const tablesOn = (id: string) => layout.value.placements.filter(placement => placement.floorId === id).length
+const tablesOn = (id: string) => layout.value.placements.filter(placement => placement.floorId === id)
+const placedTables = computed(() => layout.value.placements.flatMap((placement) => {
+  const table = tables.value.find(table => table.id === placement.tableId)
+  const on = floors.value.find(floor => floor.id === placement.floorId)
+  return table && on && matches(table.label) ? [{ ...table, floorId: on.id, floorName: on.name }] : []
+}))
 const tableLabel = (id: string) => tables.value.find(table => table.id === id)?.label ?? props.diningTables.find(table => table.id === id)?.label
 
 const selectedPlacement = computed(() => selection.value?.kind === 'table' ? layout.value.placements.find(placement => placement.tableId === selection.value!.id && placement.floorId === floor.value?.id) : undefined)
@@ -146,6 +196,7 @@ const lookUsers = computed(() => {
     .filter(Boolean)
 })
 const lookItems = computed(() => props.looks.map(look => ({ label: look.name, value: look.id })))
+
 const floorItems = computed(() => floors.value.map(candidate => ({ label: candidate.name, value: candidate.id })))
 const placementAlerts = computed(() => {
   const warnings = canvas.value?.warnings
@@ -359,7 +410,13 @@ function listLabels(labels: readonly string[]): string {
 let toolStart: { floorId: string, shape: FloorShape, walls: InnerWall[] } | null = null
 
 function startTool(next: PlanMode) {
+  pending.value = null
   if (mode.value === next) return finishTool()
+  if (next === 'select' || next === 'hand') {
+    finishTool()
+    mode.value = next
+    return
+  }
   const current = floor.value
   toolStart = current ? { floorId: current.id, shape: shapeOf(current), walls: current.walls } : null
   mode.value = next
@@ -447,6 +504,7 @@ function duplicateItem(itemId: string) {
 const itemLookModal = overlay.create(ItemLookFormModal)
 const isCustomItem = (look: ItemLook): look is CustomItemLook => 'version' in look
 const selectedItemLook = computed(() => (selectedItem.value ? findItemLook(itemLooks.value, selectedItem.value.lookId) : undefined))
+const finishSlots = computed(() => selectedItem.value && !selectedItemLook.value ? ITEM_SPECS[selectedItem.value.kind].slots : [])
 /** The piece's look choices: its own finishes, or one of the cafe's looks of its kind. */
 const OWN_FINISHES = 'own'
 const itemLookItems = computed(() => {
@@ -533,14 +591,35 @@ function place(piece: LibraryPiece, at: Point) {
   else placeItem(piece.itemKind, at, piece.lookId)
 }
 
-function placeInMiddle(piece: LibraryPiece) {
-  // A drag that ended back on its card also clicks it: that drag already placed (or cancelled).
+const pending = shallowRef<LibraryPiece | null>(null)
+
+function beginPlacement(piece: LibraryPiece) {
+  // A drag that ended back on its card also clicks it.
   if (performance.now() < suppressClickUntil) return
-  libraryOpen.value = false
+  panelOpen.value = null
   mode.value = 'select'
-  const center = canvas.value?.viewCenter() ?? { x: 0, y: 0 }
-  place(piece, { x: snap(center.x), y: snap(center.y) })
-  canvas.value?.focus()
+  pending.value = piece
+  nextTick(() => canvas.value?.focus())
+}
+
+function placePending(at?: Point) {
+  const piece = pending.value
+  if (!piece) return
+  const point = at ?? canvas.value?.viewCenter() ?? { x: 0, y: 0 }
+  pending.value = null
+  place(piece, { x: snap(point.x), y: snap(point.y) })
+}
+
+function applyLook(tableId: string, lookId: string) {
+  const look = findLook(props.looks, lookId)
+  updateTable(tableId, { lookId: look.id, width: look.defaultWidth, depth: look.defaultDepth })
+}
+
+function chooseLook(lookId: string) {
+  if (performance.now() < suppressClickUntil) return
+  const placement = selectedPlacement.value
+  if (placement) applyLook(placement.tableId, lookId)
+  else beginPlacement({ kind: 'look', lookId })
 }
 
 // Dragging from the library: past a few pixels it's a drag (a ghost follows over the plan, drop
@@ -550,7 +629,7 @@ let suppressClickUntil = 0
 let libraryDrag: { pointerId: number, piece: LibraryPiece, start: Point, dragging: boolean } | null = null
 
 function startLibraryDrag(event: PointerEvent, piece: LibraryPiece) {
-  if (event.button !== 0 || libraryDrag) return
+  if (!isExpanded.value || event.button !== 0 || libraryDrag) return
   libraryDrag = { pointerId: event.pointerId, piece, start: { x: event.clientX, y: event.clientY }, dragging: false }
   window.addEventListener('pointermove', onLibraryMove)
   window.addEventListener('pointerup', onLibraryUp)
@@ -599,15 +678,16 @@ function onLibraryUp(event: PointerEvent) {
   event.preventDefault()
   if (!dropped || !canvas.value?.toPlan(event.clientX, event.clientY, true)) return
   mode.value = 'select'
+  pending.value = null
   place(drag.piece, dropped)
 }
 
 onBeforeUnmount(clearLibraryDrag)
 
 defineShortcuts({
-  meta_z: () => draft.undo(),
-  meta_shift_z: () => draft.redo(),
-  meta_y: () => draft.redo(),
+  meta_z: () => props.active && draft.undo(),
+  meta_shift_z: () => props.active && draft.redo(),
+  meta_y: () => props.active && draft.redo(),
 })
 
 // --- Quick actions beside the selection (2B) ---
@@ -652,6 +732,18 @@ const swatch = (finish: Finish) => FINISH_SWATCHES[finish]
 function chooseStarter(starter: Starter) {
   props.editor.begin(starter.layout())
 }
+
+const drawTools = [
+  { label: 'Draw outline', icon: 'i-lucide-pen-tool', onSelect: () => startTool('outline') },
+  { label: 'Draw wall', icon: 'i-lucide-brick-wall', onSelect: () => startTool('wall') },
+]
+const pendingLabel = computed(() => {
+  const piece = pending.value
+  if (!piece) return ''
+  if (piece.kind === 'table') return tableLabel(piece.tableId) ?? 'the table'
+  if (piece.kind === 'look') return findLook(props.looks, piece.lookId).name
+  return findItemLook(itemLooks.value, piece.lookId)?.name ?? ITEM_SPECS[piece.itemKind].label
+})
 </script>
 
 <template>
@@ -664,8 +756,85 @@ function chooseStarter(starter: Starter) {
   />
   <!-- The library (lg and up beside the plan; below, in a slide-over). -->
   <DefineLibrary>
-    <div class="flex flex-col gap-5">
-      <section class="flex flex-col gap-2">
+    <div v-if="panel === 'floors'" class="flex flex-col gap-2">
+      <div v-for="candidate in floors" :key="candidate.id">
+        <UButton
+          :label="candidate.name"
+          :color="candidate.id === floor?.id ? 'primary' : 'neutral'"
+          :variant="candidate.id === floor?.id ? 'soft' : 'ghost'"
+          :aria-pressed="candidate.id === floor?.id"
+          :data-testid="`floor-tab-${candidate.name}`"
+          icon="i-lucide-layers"
+          block
+          class="justify-start"
+          @click="selectFloor(candidate.id); panelOpen = null"
+        >
+          <template #trailing>
+            <span class="ml-auto text-xs text-muted">{{ tablesOn(candidate.id).length }} tables</span>
+          </template>
+        </UButton>
+        <div v-if="candidate.id === floor?.id" class="mt-1 ml-3 flex flex-col gap-1 border-l border-default pl-2">
+          <UButton
+            v-for="table in tablesOn(candidate.id)"
+            :key="table.tableId"
+            :label="tableLabel(table.tableId) ?? 'Unavailable table'"
+            icon="i-lucide-table-2"
+            :color="selection?.kind === 'table' && selection.id === table.tableId ? 'primary' : 'neutral'"
+            variant="ghost"
+            @click="selectPlaced({ kind: 'table', id: table.tableId }, candidate.id)"
+          />
+          <UButton
+            v-for="item in candidate.items"
+            :key="item.id"
+            :label="ITEM_SPECS[item.kind].label"
+            :icon="ITEM_ICONS[item.kind]"
+            :color="selection?.kind === 'item' && selection.id === item.id ? 'primary' : 'neutral'"
+            variant="ghost"
+            @click="selectPlaced({ kind: 'item', id: item.id }, candidate.id)"
+          />
+          <UButton
+            v-for="(wall, index) in candidate.walls"
+            :key="wall.id"
+            :label="`Interior wall ${index + 1}`"
+            icon="i-lucide-brick-wall"
+            :color="selection?.kind === 'wall' && selection.id === wall.id ? 'primary' : 'neutral'"
+            variant="ghost"
+            @click="selectPlaced({ kind: 'wall', id: wall.id }, candidate.id)"
+          />
+        </div>
+      </div>
+      <UButton
+        label="Add floor"
+        icon="i-lucide-plus"
+        color="neutral"
+        variant="ghost"
+        :disabled="!canAddFloor(layout)"
+        @click="addFloor(); panelOpen = null"
+      />
+    </div>
+    <div v-else class="flex flex-col gap-4">
+      <SearchInput
+        v-model="search"
+        :placeholder="panel === 'tables' ? 'Search tables…' : 'Search assets…'"
+      />
+      <UFieldGroup
+        v-if="panel === 'assets'"
+        aria-label="Asset types"
+      >
+        <UButton
+          label="Objects"
+          :variant="assetTab === 'objects' ? 'soft' : 'ghost'"
+          :aria-pressed="assetTab === 'objects'"
+          @click="assetTab = 'objects'; search = ''"
+        />
+        <UButton
+          label="Finishes"
+          :variant="assetTab === 'finishes' ? 'soft' : 'ghost'"
+          :aria-pressed="assetTab === 'finishes'"
+          @click="assetTab = 'finishes'; search = ''"
+        />
+      </UFieldGroup>
+      <section v-if="panel === 'tables'" class="flex flex-col gap-2">
         <div class="flex items-center gap-2">
           <h2 class="text-sm font-semibold text-highlighted">
             Unplaced tables
@@ -681,13 +850,13 @@ function chooseStarter(starter: Starter) {
           Real tables with a QR code that are not on the map yet.
         </p>
         <p
-          v-if="!unplaced.length"
+          v-if="!unplaced.some(table => matches(table.label))"
           class="text-sm text-muted"
         >
-          {{ tables.length ? 'Every table is on the map.' : 'This branch has no tables yet.' }}
+          {{ search ? 'No unplaced tables match.' : tables.length ? 'Every table is on the map.' : 'This branch has no tables yet.' }}
         </p>
         <div
-          v-for="table in unplaced"
+          v-for="table in unplaced.filter(table => matches(table.label))"
           :key="table.id"
           class="flex items-center gap-2 rounded-md border border-default py-1.5 pr-1.5 pl-1"
           :data-testid="`unplaced-${table.label}`"
@@ -708,7 +877,7 @@ function chooseStarter(starter: Starter) {
             label="Place on map"
             size="xs"
             variant="ghost"
-            @click="placeInMiddle({ kind: 'table', tableId: table.id })"
+            @click="beginPlacement({ kind: 'table', tableId: table.id })"
           />
         </div>
         <UButton
@@ -722,15 +891,51 @@ function chooseStarter(starter: Starter) {
         />
       </section>
 
-      <USeparator />
+      <section v-if="panel === 'tables'" class="flex flex-col gap-2">
+        <h2 class="text-sm font-semibold text-highlighted">On plan</h2>
+        <UButton
+          v-for="table in placedTables"
+          :key="table.id"
+          :label="table.label"
+          icon="i-lucide-table-2"
+          :color="selection?.kind === 'table' && selection.id === table.id ? 'primary' : 'neutral'"
+          variant="ghost"
+          @click="selectPlaced({ kind: 'table', id: table.id }, table.floorId)"
+        >
+          <template #trailing>
+            <span class="ml-auto text-xs text-muted">{{ table.floorName }}</span>
+          </template>
+        </UButton>
+        <p v-if="!placedTables.length" class="text-sm text-muted">No placed tables match.</p>
+      </section>
 
-      <section class="flex flex-col gap-2">
+      <section v-if="panel === 'assets' && assetTab === 'finishes'" class="flex flex-col gap-3">
+        <p v-if="!finishSlots.length" class="text-sm text-muted">Select a piece with editable finishes to apply one here.</p>
+        <div v-for="slot in finishSlots" :key="slot.key" class="flex flex-col gap-2">
+          <h2 class="text-sm font-semibold text-highlighted">{{ slot.label }}</h2>
+          <UButton
+            v-for="finish in slot.options.filter(option => matches(swatch(option).label))"
+            :key="finish"
+            :label="swatch(finish).label"
+            color="neutral"
+            variant="outline"
+            :aria-pressed="itemFinish(selectedItem!.kind, selectedItem!.finishes, slot.key) === finish"
+            @click="updateItem(selectedItem!.id, { finishes: { ...selectedItem!.finishes, [slot.key]: finish } })"
+          >
+            <template #leading>
+              <span class="size-4 rounded-full border border-default" :style="{ background: swatch(finish).color }" />
+            </template>
+          </UButton>
+        </div>
+      </section>
+
+      <section v-if="panel === 'assets' && assetTab === 'objects' && (!search || looks.some(look => matches(look.name)))" class="flex flex-col gap-2">
         <h2 class="text-xs font-semibold tracking-wide text-muted uppercase">
           Table looks · chairs follow the table’s seats
         </h2>
         <div class="grid grid-cols-2 gap-2">
           <div
-            v-for="look in looks"
+            v-for="look in looks.filter(look => matches(look.name))"
             :key="look.id"
             class="relative"
           >
@@ -739,7 +944,7 @@ function chooseStarter(starter: Starter) {
               class="flex size-full touch-none flex-col items-start gap-1 rounded-md border border-default p-2 text-left text-sm text-highlighted hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
               :data-testid="isCustom(look) ? `look-custom-${look.name}` : `look-${look.id}`"
               @pointerdown="startLibraryDrag($event, { kind: 'look', lookId: look.id })"
-              @click="placeInMiddle({ kind: 'look', lookId: look.id })"
+              @click="chooseLook(look.id)"
             >
               <!-- A custom look's photo of the real piece (step 3b); the plan and 3D keep the simple shape. -->
               <img
@@ -783,7 +988,7 @@ function chooseStarter(starter: Starter) {
       </section>
 
       <section
-        v-for="category in catalog"
+        v-for="category in (panel === 'assets' && assetTab === 'objects' ? catalog.filter(category => category.specs.some(spec => matches(spec.label)) || itemLooksIn(category.key).some(look => matches(look.name))) : [])"
         :key="category.key"
         class="flex flex-col gap-2"
       >
@@ -792,13 +997,13 @@ function chooseStarter(starter: Starter) {
         </h2>
         <div class="grid grid-cols-2 gap-2">
           <button
-            v-for="spec in category.specs"
+            v-for="spec in category.specs.filter(spec => matches(spec.label))"
             :key="spec.kind"
             type="button"
             class="flex touch-none flex-col items-start gap-1 rounded-md border border-default p-2 text-left text-sm text-highlighted hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
             :data-testid="`catalog-${spec.kind}`"
             @pointerdown="startLibraryDrag($event, { kind: 'item', itemKind: spec.kind })"
-            @click="placeInMiddle({ kind: 'item', itemKind: spec.kind })"
+            @click="beginPlacement({ kind: 'item', itemKind: spec.kind })"
           >
             <img
               v-if="spec.photo"
@@ -821,7 +1026,7 @@ function chooseStarter(starter: Starter) {
           </button>
           <!-- The cafe's own looks of this category (step 3d): shared by the pieces placed with them. -->
           <div
-            v-for="look in itemLooksIn(category.key)"
+            v-for="look in itemLooksIn(category.key).filter(look => matches(look.name))"
             :key="look.id"
             class="relative"
           >
@@ -830,7 +1035,7 @@ function chooseStarter(starter: Starter) {
               class="flex size-full touch-none flex-col items-start gap-1 rounded-md border border-default p-2 text-left text-sm text-highlighted hover:bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
               :data-testid="`item-look-${look.name}`"
               @pointerdown="startLibraryDrag($event, { kind: 'item', itemKind: look.kind, lookId: look.id })"
-              @click="placeInMiddle({ kind: 'item', itemKind: look.kind, lookId: look.id })"
+              @click="beginPlacement({ kind: 'item', itemKind: look.kind, lookId: look.id })"
             >
               <img
                 v-if="look.photo"
@@ -871,10 +1076,8 @@ function chooseStarter(starter: Starter) {
           @click="newItemLook({ category: category.key })"
         />
       </section>
-      <p class="text-xs text-muted">
-        Drag onto the plan, or click to place it in the middle. Doors and windows go on an edge: click one on the plan.
-      </p>
       <UButton
+        v-if="panel === 'assets'"
         label="Manage looks"
         icon="i-lucide-swatch-book"
         color="neutral"
@@ -887,6 +1090,89 @@ function chooseStarter(starter: Starter) {
   </DefineLibrary>
 
   <!-- What's selected (md and up beside the plan; below, in a slide-over). -->
+  <DefineMovePad>
+    <div
+      class="flex flex-wrap items-center gap-3 rounded-lg border border-default bg-default p-2"
+      role="group"
+      aria-label="Move the selection"
+    >
+      <div class="grid grid-cols-3 gap-1">
+        <span />
+        <UButton
+          icon="i-lucide-arrow-up"
+          color="neutral"
+          variant="outline"
+          :aria-label="`Move up ${step} cm`"
+          @click="nudge(0, -1)"
+        />
+        <span />
+        <UButton
+          icon="i-lucide-arrow-left"
+          color="neutral"
+          variant="outline"
+          :aria-label="`Move left ${step} cm`"
+          @click="nudge(-1, 0)"
+        />
+        <UButton
+          icon="i-lucide-rotate-cw"
+          variant="soft"
+          aria-label="Turn 90°"
+          @click="turn(90)"
+        />
+        <UButton
+          icon="i-lucide-arrow-right"
+          color="neutral"
+          variant="outline"
+          :aria-label="`Move right ${step} cm`"
+          @click="nudge(1, 0)"
+        />
+        <span />
+        <UButton
+          icon="i-lucide-arrow-down"
+          color="neutral"
+          variant="outline"
+          :aria-label="`Move down ${step} cm`"
+          @click="nudge(0, 1)"
+        />
+        <span />
+      </div>
+      <div class="flex flex-col gap-2 text-xs text-muted">
+        <UFieldGroup size="xs">
+          <UButton
+            label="25 cm"
+            :color="step === GRID_CM ? 'primary' : 'neutral'"
+            :variant="step === GRID_CM ? 'soft' : 'outline'"
+            :aria-pressed="step === GRID_CM"
+            @click="step = GRID_CM"
+          />
+          <UButton
+            label="5 cm"
+            :color="step === FINE_GRID_CM ? 'primary' : 'neutral'"
+            :variant="step === FINE_GRID_CM ? 'soft' : 'outline'"
+            :aria-pressed="step === FINE_GRID_CM"
+            @click="step = FINE_GRID_CM"
+          />
+        </UFieldGroup>
+        <span class="tabular-nums">{{ position }}</span>
+        <div class="flex gap-1">
+          <UButton
+            label="Details"
+            size="xs"
+            color="neutral"
+            variant="outline"
+            class="lg:hidden"
+            @click="detailsOpen = true"
+          />
+          <UButton
+            label="Done"
+            size="xs"
+            @click="selection = null"
+          />
+        </div>
+      </div>
+    </div>
+  </DefineMovePad>
+
   <DefineDetails>
     <div
       v-if="selectedPlacement && selectedLook"
@@ -938,6 +1224,26 @@ function chooseStarter(starter: Starter) {
         Label and seats belong to the table and save right away. Everything below saves with the layout.
       </p>
       <USeparator label="On the map" />
+      <div class="grid grid-cols-2 gap-2">
+        <UFormField label="X (cm)">
+          <UInputNumber
+            :model-value="selectedPlacement.x"
+            :min="-LAYOUT_MAX_EXTENT_CM"
+            :max="LAYOUT_MAX_EXTENT_CM"
+            :step="5"
+            @update:model-value="value => setNumber(value, x => move(selection!, { x, y: selectedPlacement!.y }))"
+          />
+        </UFormField>
+        <UFormField label="Y (cm)">
+          <UInputNumber
+            :model-value="selectedPlacement.y"
+            :min="-LAYOUT_MAX_EXTENT_CM"
+            :max="LAYOUT_MAX_EXTENT_CM"
+            :step="5"
+            @update:model-value="value => setNumber(value, y => move(selection!, { x: selectedPlacement!.x, y }))"
+          />
+        </UFormField>
+      </div>
       <UFormField label="Floor">
         <USelect
           :model-value="selectedPlacement.floorId"
@@ -1009,7 +1315,7 @@ function chooseStarter(starter: Starter) {
             :model-value="selectedPlacement.lookId"
             :items="lookItems"
             class="min-w-0 flex-1"
-            @update:model-value="value => { const look = findLook(looks, String(value)); updateTable(selectedPlacement!.tableId, { lookId: look.id, width: look.defaultWidth, depth: look.defaultDepth }) }"
+            @update:model-value="value => applyLook(selectedPlacement!.tableId, String(value))"
           />
         </div>
       </UFormField>
@@ -1117,6 +1423,26 @@ function chooseStarter(starter: Starter) {
             :max="ITEM_HEIGHTS[selectedItem.kind].max"
             :step="5"
             @update:model-value="value => setNumber(value, height => updateItem(selectedItem!.id, { height }))"
+          />
+        </UFormField>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <UFormField label="X (cm)">
+          <UInputNumber
+            :model-value="selectedItem.x"
+            :min="-LAYOUT_MAX_EXTENT_CM"
+            :max="LAYOUT_MAX_EXTENT_CM"
+            :step="5"
+            @update:model-value="value => setNumber(value, x => move(selection!, { x, y: selectedItem!.y }))"
+          />
+        </UFormField>
+        <UFormField label="Y (cm)">
+          <UInputNumber
+            :model-value="selectedItem.y"
+            :min="-LAYOUT_MAX_EXTENT_CM"
+            :max="LAYOUT_MAX_EXTENT_CM"
+            :step="5"
+            @update:model-value="value => setNumber(value, y => move(selection!, { x: selectedItem!.x, y }))"
           />
         </UFormField>
       </div>
@@ -1266,6 +1592,28 @@ function chooseStarter(starter: Starter) {
       @change="updateShape"
       @close="selection = null; detailsOpen = false"
     />
+    <div v-else-if="floor" class="flex flex-col gap-3">
+      <p class="text-sm font-semibold text-highlighted">{{ floor.name }} floor</p>
+      <UFormField label="Floor height (cm)">
+        <UInputNumber
+          :model-value="floor.height"
+          :min="200"
+          :max="800"
+          :step="10"
+          @update:model-value="setHeight"
+        />
+      </UFormField>
+      <USwitch
+        :model-value="floor.hasRoof"
+        label="Roof over this floor"
+        @update:model-value="setRoof"
+      />
+      <p class="text-sm text-muted">Select an object on the plan to edit its properties.</p>
+    </div>
+    <ReuseMovePad
+      v-if="isExpanded && mode === 'select' && (selectedPlacement || selectedItem)"
+      class="mt-3"
+    />
   </DefineDetails>
 
   <div
@@ -1295,22 +1643,59 @@ function chooseStarter(starter: Starter) {
 
   <div
     v-else
-    class="flex h-full min-h-0"
+    class="relative flex h-full min-h-0 pb-12 sm:pb-0"
   >
-    <aside
-      aria-label="Library"
-      class="hidden w-72 shrink-0 overflow-y-auto border-r border-default p-4 lg:block"
-    >
+    <nav aria-label="Studio panels" class="absolute inset-x-0 bottom-0 z-10 flex h-12 shrink-0 items-center justify-around border-t border-default bg-elevated sm:static sm:h-auto sm:w-16 sm:flex-col sm:justify-start sm:gap-1 sm:border-t-0 sm:border-r sm:p-1">
+      <UButton
+        v-for="option in panels"
+        :key="option.value"
+        :label="option.label"
+        :icon="option.icon"
+        :color="(isExpanded ? !focusMode && (option.value === panel || option.value === 'properties') : panelOpen === option.value) ? 'primary' : 'neutral'"
+        :variant="(isExpanded ? !focusMode && (option.value === panel || option.value === 'properties') : panelOpen === option.value) ? 'soft' : 'ghost'"
+        :aria-pressed="isExpanded ? !focusMode && (option.value === panel || option.value === 'properties') : panelOpen === option.value"
+        size="sm"
+        class="flex-col gap-1 sm:w-full"
+        :class="option.value === 'properties' && 'sm:mt-auto'"
+        :ui="{ label: 'text-xs', leadingIcon: 'size-4' }"
+        @click="showPanel(option.value)"
+      />
+      <UButton
+        :label="focusMode ? 'Show panels' : 'Hide panels'"
+        icon="i-lucide-panels-left-right"
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        class="hidden flex-col gap-1 lg:flex"
+        :ui="{ label: 'text-xs whitespace-normal text-center', leadingIcon: 'size-4' }"
+        @click="focusMode = !focusMode"
+      />
+    </nav>
+    <aside v-if="!focusMode" :aria-label="panelTitle" class="hidden w-48 shrink-0 overflow-y-auto border-r border-default bg-default p-3 lg:block xl:w-60">
+      <h2 class="mb-3 border-b border-default pb-3 text-sm font-semibold text-highlighted">{{ panelTitle }}</h2>
       <ReuseLibrary />
     </aside>
-    <AppSlideover
-      v-model:open="libraryOpen"
-      title="Library"
-      side="left"
-      class="lg:hidden"
+    <AppDrawer
+      v-if="isCompact"
+      :open="panelOpen !== null"
+      :title="panelTitle"
+      @update:open="open => !open && (panelOpen = null)"
     >
       <template #body>
-        <ReuseLibrary />
+        <ReuseDetails v-if="detailsOpen" />
+        <ReuseLibrary v-else />
+      </template>
+    </AppDrawer>
+    <AppSlideover
+      v-else-if="!isExpanded"
+      :open="panelOpen !== null"
+      :title="panelTitle"
+      :side="detailsOpen ? 'right' : 'left'"
+      @update:open="open => !open && (panelOpen = null)"
+    >
+      <template #body>
+        <ReuseDetails v-if="detailsOpen" />
+        <ReuseLibrary v-else />
       </template>
     </AppSlideover>
 
@@ -1330,6 +1715,9 @@ function chooseStarter(starter: Starter) {
         :ghost="ghost"
         :show-below="showBelow"
         :mode="mode"
+        :placing="!!pending"
+        @place="placePending"
+        @cancel-place="pending = null"
         @select="selection = $event"
         @move="move"
         @rotate="rotate"
@@ -1499,7 +1887,7 @@ function chooseStarter(starter: Starter) {
       <div class="pointer-events-none absolute inset-x-3 top-3 flex flex-col gap-2">
         <!-- A tool's bar replaces the floor bar while it's open (3A, 9A). -->
         <div
-          v-if="mode !== 'select'"
+          v-if="mode === 'outline' || mode === 'wall'"
           class="pointer-events-auto flex flex-wrap items-center justify-between gap-2 rounded-lg border border-default bg-default p-1 pl-3 shadow-sm"
           data-testid="tool-bar"
         >
@@ -1537,37 +1925,13 @@ function chooseStarter(starter: Starter) {
           class="flex flex-wrap items-start justify-between gap-2"
         >
           <div class="pointer-events-auto flex flex-wrap items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
-            <UButton
-              icon="i-lucide-library"
-              color="neutral"
-              variant="ghost"
+            <USelect
+              :model-value="floor.id"
+              :items="floorItems"
+              aria-label="Active floor"
               size="sm"
-              aria-label="Library"
-              class="lg:hidden"
-              @click="libraryOpen = true"
+              @update:model-value="selectFloor"
             />
-            <UFieldGroup>
-              <UButton
-                v-for="candidate in floors"
-                :key="candidate.id"
-                :label="candidate.name"
-                :color="candidate.id === floor.id ? 'primary' : 'neutral'"
-                :variant="candidate.id === floor.id ? 'soft' : 'ghost'"
-                size="sm"
-                :aria-pressed="candidate.id === floor.id"
-                :data-testid="`floor-tab-${candidate.name}`"
-                @click="selectFloor(candidate.id)"
-              >
-                <template #trailing>
-                  <UBadge
-                    :label="String(tablesOn(candidate.id))"
-                    color="neutral"
-                    variant="subtle"
-                    size="sm"
-                  />
-                </template>
-              </UButton>
-            </UFieldGroup>
             <!-- The floor menu (9B). -->
             <UPopover :content="{ align: 'start' }">
               <UButton
@@ -1622,18 +1986,6 @@ function chooseStarter(starter: Starter) {
                 </div>
               </template>
             </UPopover>
-            <UTooltip :text="canAddFloor(layout) ? 'A new floor on top, with this outline' : 'A layout has at most 10 floors'">
-              <UButton
-                label="Add floor"
-                icon="i-lucide-plus"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                :disabled="!canAddFloor(layout)"
-                :ui="{ label: 'max-sm:sr-only' }"
-                @click="addFloor()"
-              />
-            </UTooltip>
             <USwitch
               v-if="floorIndex > 0"
               v-model="showBelow"
@@ -1642,108 +1994,17 @@ function chooseStarter(starter: Starter) {
               class="px-1"
             />
           </div>
-          <div class="pointer-events-auto flex flex-wrap items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
-            <UButton
-              label="Draw outline"
-              icon="i-lucide-pen-tool"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :ui="{ label: 'max-xl:sr-only' }"
-              @click="startTool('outline')"
-            />
-            <UButton
-              label="Draw wall"
-              icon="i-lucide-brick-wall"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :ui="{ label: 'max-xl:sr-only' }"
-              @click="startTool('wall')"
-            />
-            <USeparator
-              orientation="vertical"
-              class="h-5"
-            />
-            <UTooltip
-              text="Undo"
-              :kbds="['meta', 'z']"
-            >
-              <UButton
-                icon="i-lucide-undo-2"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                aria-label="Undo"
-                :disabled="!draft.canUndo.value"
-                @click="draft.undo()"
-              />
-            </UTooltip>
-            <UTooltip
-              text="Redo"
-              :kbds="['meta', 'shift', 'z']"
-            >
-              <UButton
-                icon="i-lucide-redo-2"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                aria-label="Redo"
-                :disabled="!draft.canRedo.value"
-                @click="draft.redo()"
-              />
-            </UTooltip>
-            <USeparator
-              orientation="vertical"
-              class="h-5"
-            />
-            <UButton
-              icon="i-lucide-zoom-out"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              aria-label="Zoom out"
-              @click="canvas?.zoom(-1)"
-            />
-            <UButton
-              icon="i-lucide-zoom-in"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              aria-label="Zoom in"
-              @click="canvas?.zoom(1)"
-            />
-            <UButton
-              icon="i-lucide-scan"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              aria-label="Fit to screen"
-              @click="canvas?.fit()"
-            />
-            <USeparator
-              orientation="vertical"
-              class="h-5"
-            />
-            <UButton
-              v-if="exploreEnabled"
-              label="Explore settings"
-              icon="i-lucide-map-pin"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :ui="{ label: 'max-xl:sr-only' }"
-              @click="exploreOpen = true"
-            />
-            <UButton
-              label="View in 3D"
-              icon="i-lucide-box"
-              variant="soft"
-              size="sm"
-              :ui="{ label: 'max-sm:sr-only' }"
-              @click="emit('view3d')"
-            />
-          </div>
+          <UButton
+            v-if="exploreEnabled"
+            label="Explore settings"
+            icon="i-lucide-map-pin"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            class="pointer-events-auto bg-default"
+            :ui="{ label: 'max-sm:sr-only' }"
+            @click="exploreOpen = true"
+          />
         </div>
 
         <UAlert
@@ -1761,8 +2022,8 @@ function chooseStarter(starter: Starter) {
 
       <!-- How the tool works (3A, 9A). -->
       <div
-        v-if="mode !== 'select'"
-        class="absolute right-3 bottom-3 flex max-w-60 flex-col gap-1 rounded-lg border border-default bg-default px-3 py-2 text-xs text-toned shadow-sm"
+        v-if="mode === 'outline' || mode === 'wall'"
+        class="pointer-events-none absolute bottom-28 left-2 flex max-w-60 flex-col gap-1 rounded-lg border border-default bg-default px-3 py-2 text-xs text-toned shadow-sm"
       >
         <template v-if="mode === 'outline' && floor.outline.length === 0">
           <span>Click on the grid to add corners.</span>
@@ -1779,119 +2040,114 @@ function chooseStarter(starter: Starter) {
         </template>
       </div>
 
-      <!-- The move pad: no dragging needed (2C). -->
-      <div
-        v-if="mode === 'select' && (selectedPlacement || selectedItem)"
-        class="absolute bottom-3 left-3 flex items-center gap-3 rounded-lg border border-default bg-default p-2 shadow-md"
-        role="group"
-        aria-label="Move the selection"
-      >
-        <div class="grid grid-cols-3 gap-1">
-          <span />
-          <UButton
-            icon="i-lucide-arrow-up"
-            color="neutral"
-            variant="outline"
-            :aria-label="`Move up ${step} cm`"
-            @click="nudge(0, -1)"
-          />
-          <span />
-          <UButton
-            icon="i-lucide-arrow-left"
-            color="neutral"
-            variant="outline"
-            :aria-label="`Move left ${step} cm`"
-            @click="nudge(-1, 0)"
-          />
-          <UButton
-            icon="i-lucide-rotate-cw"
-            variant="soft"
-            aria-label="Turn 90°"
-            @click="turn(90)"
-          />
-          <UButton
-            icon="i-lucide-arrow-right"
-            color="neutral"
-            variant="outline"
-            :aria-label="`Move right ${step} cm`"
-            @click="nudge(1, 0)"
-          />
-          <span />
-          <UButton
-            icon="i-lucide-arrow-down"
-            color="neutral"
-            variant="outline"
-            :aria-label="`Move down ${step} cm`"
-            @click="nudge(0, 1)"
-          />
-          <span />
-        </div>
-        <div class="flex flex-col gap-2 text-xs text-muted">
-          <UFieldGroup size="xs">
-            <UButton
-              label="25 cm"
-              :color="step === GRID_CM ? 'primary' : 'neutral'"
-              :variant="step === GRID_CM ? 'soft' : 'outline'"
-              :aria-pressed="step === GRID_CM"
-              @click="step = GRID_CM"
-            />
-            <UButton
-              label="5 cm"
-              :color="step === FINE_GRID_CM ? 'primary' : 'neutral'"
-              :variant="step === FINE_GRID_CM ? 'soft' : 'outline'"
-              :aria-pressed="step === FINE_GRID_CM"
-              @click="step = FINE_GRID_CM"
-            />
-          </UFieldGroup>
-          <span class="tabular-nums">{{ position }}</span>
-          <div class="flex gap-1">
-            <UButton
-              label="Details"
-              size="xs"
-              color="neutral"
-              variant="outline"
-              class="md:hidden"
-              @click="detailsOpen = true"
-            />
-            <UButton
-              label="Done"
-              size="xs"
-              @click="selection = null"
-            />
-          </div>
-        </div>
+      <div v-if="mode === 'select' && !pending && !isExpanded && (selectedPlacement || selectedItem)" class="absolute bottom-16 left-2 max-w-52 shadow-md">
+        <ReuseMovePad />
       </div>
       <UButton
-        v-else-if="mode !== 'wall' && selection"
+        v-else-if="mode === 'select' && !pending && !isExpanded && selection"
         label="Details"
         color="neutral"
         variant="outline"
-        class="absolute bottom-3 left-3 shadow-sm md:hidden"
+        class="absolute bottom-16 left-2 shadow-sm lg:hidden"
         @click="detailsOpen = true"
       />
-      <p
-        v-else-if="mode === 'select'"
-        class="absolute right-3 bottom-3 hidden rounded-md border border-default bg-default px-2 py-1 text-xs text-muted shadow-sm sm:block"
-      >
-        Drag empty space to pan · Scroll or pinch to zoom · R turns the selection
-      </p>
+      <div class="absolute inset-x-2 bottom-2 flex justify-center sm:bottom-3">
+        <UFieldGroup
+          class="max-w-full rounded-lg border border-default bg-default p-1 shadow-sm"
+          aria-label="Canvas tools"
+        >
+          <UButton
+            icon="i-lucide-mouse-pointer-2"
+            label="Select"
+            :variant="mode === 'select' ? 'soft' : 'ghost'"
+            :color="mode === 'select' ? 'primary' : 'neutral'"
+            :aria-pressed="mode === 'select'"
+            :ui="{ label: 'max-xl:sr-only' }"
+            @click="startTool('select')"
+          />
+          <UButton
+            icon="i-lucide-hand"
+            label="Hand"
+            :variant="mode === 'hand' ? 'soft' : 'ghost'"
+            :color="mode === 'hand' ? 'primary' : 'neutral'"
+            :aria-pressed="mode === 'hand'"
+            :ui="{ label: 'max-xl:sr-only' }"
+            @click="startTool('hand')"
+          />
+          <UDropdownMenu
+            :items="drawTools"
+            :content="{ side: 'top' }"
+          >
+            <UButton
+              icon="i-lucide-pen-tool"
+              label="Draw"
+              color="neutral"
+              variant="ghost"
+              :ui="{ label: 'max-xl:sr-only' }"
+            />
+          </UDropdownMenu>
+          <UButton
+            icon="i-lucide-undo-2"
+            color="neutral"
+            variant="ghost"
+            aria-label="Undo"
+            :disabled="!draft.canUndo.value"
+            @click="draft.undo()"
+          />
+          <UButton
+            icon="i-lucide-redo-2"
+            color="neutral"
+            variant="ghost"
+            aria-label="Redo"
+            :disabled="!draft.canRedo.value"
+            @click="draft.redo()"
+          />
+        </UFieldGroup>
+      </div>
+      <div class="absolute right-2 bottom-16 flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
+        <UButton
+          icon="i-lucide-zoom-out"
+          color="neutral"
+          variant="ghost"
+          aria-label="Zoom out"
+          @click="canvas?.zoom(-1)"
+        />
+        <span class="text-xs tabular-nums text-muted">{{ canvas?.zoomLevel ?? 100 }}%</span>
+        <UButton
+          icon="i-lucide-zoom-in"
+          color="neutral"
+          variant="ghost"
+          aria-label="Zoom in"
+          @click="canvas?.zoom(1)"
+        />
+        <UButton
+          icon="i-lucide-scan"
+          color="neutral"
+          variant="ghost"
+          aria-label="Fit to screen"
+          @click="canvas?.fit()"
+        />
+      </div>
+      <div v-if="pending" class="absolute inset-x-2 bottom-28 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-default bg-default p-2 shadow-sm">
+        <span class="text-sm text-toned" role="status">Click or tap the plan to place {{ pendingLabel }}.</span>
+        <UButton
+          label="Place at center"
+          color="neutral"
+          variant="outline"
+          @click="placePending()"
+        />
+        <UButton
+          label="Cancel"
+          color="neutral"
+          variant="ghost"
+          @click="pending = null"
+        />
+      </div>
     </main>
 
-    <aside
-      v-if="mode !== 'wall' && (selectedPlacement || selectedItem || selectedWall || selectedEdge !== undefined)"
-      aria-label="Selected"
-      class="hidden w-80 shrink-0 overflow-y-auto border-l border-default p-4 md:block"
-    >
+    <aside v-if="!focusMode" aria-label="Properties" class="hidden w-60 shrink-0 overflow-y-auto border-l border-default bg-default p-3 lg:block xl:w-72">
+      <h2 class="mb-3 border-b border-default pb-3 text-sm font-semibold text-highlighted">Properties</h2>
       <ReuseDetails />
     </aside>
-    <AppSlideover
-      v-model:open="detailsOpen"
-      title="Details"
-      class="md:hidden"
-    >
-      <template #body>
-        <ReuseDetails />
-      </template>
-    </AppSlideover>
   </div>
 </template>

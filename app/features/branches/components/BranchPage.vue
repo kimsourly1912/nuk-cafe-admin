@@ -1,35 +1,18 @@
 <script setup lang="ts">
-/**
- * A branch (`/admin/branches/[id]`, D91, the owner's mockups): **Settings** and **Dining tables** tabs
- * under the navbar. Dining tables has three views (D273): **Table list**, **Design shop** (the 2D
- * editor) and **View in 3D**; the last two use the page's full width. The navbar's action follows
- * the tab: Save changes (from `lg`; below it the bottom bar), New table, or Save layout. Both tabs
- * and the layout's draft stay alive, so switching keeps the settings and the layout drafts; the tab
- * and view are kept in the URL (`?tab=tables&view=design`, `useUrlTab`) without a route change, so
- * switching never asks about unsaved changes.
- */
-import { NO_SCENE } from '#shared/contracts/shop-layout'
-import type { ScenePreset } from '#shared/contracts/shop-layout'
 import { useAddBranch } from '../composables/useAddBranch'
 import { useBranchOptions } from '../composables/useBranchOptions'
 import { useBranchSettings, useBranchTables } from '../composables/useBranches'
-import { useLayoutEditor } from '../composables/useLayoutEditor'
 import BranchSkeleton from './BranchSkeleton.vue'
 import BranchSettingsTab from './BranchSettingsTab.vue'
 import BranchTablesTab from './BranchTablesTab.vue'
-import BuildingView3D from './BuildingView3D.vue'
-import DesignShopEditor from './DesignShopEditor.vue'
-import LayoutSaveAlerts from './LayoutSaveAlerts.vue'
 
 const tenantPath = useTenantPath()
 
 const props = defineProps<{ id: string }>()
 
 const { data: settings, error, refresh } = useBranchSettings(props.id)
-const hasPin = computed(() => settings.value?.latitude != null && settings.value?.longitude != null)
 const { data: tables } = useBranchTables(props.id)
 const { data: branches } = useBranchOptions()
-const editor = useLayoutEditor(props.id)
 
 type Tab = 'settings' | 'tables'
 const tab = useUrlTab<Tab>(['settings', 'tables'])
@@ -43,63 +26,6 @@ const tabs = computed(() => [
   },
 ])
 
-type View = 'list' | 'design' | '3d'
-const view = useUrlTab<View>(['list', 'design', '3d'], 'view')
-const VIEWS: { value: View, label: string, icon: string }[] = [
-  { value: 'list', label: 'Table list', icon: 'i-lucide-list' },
-  { value: 'design', label: 'Design shop', icon: 'i-lucide-layout-dashboard' },
-  { value: '3d', label: 'View in 3D', icon: 'i-lucide-box' },
-]
-const designing = computed(() => tab.value === 'tables' && view.value !== 'list')
-watch(designing, value => value && editor.load(), { immediate: true })
-const layout = computed(() => editor.draft.layout.value)
-const summary = computed(() => {
-  const count = editor.tables.value.length
-  if (!editor.ready.value || !layout.value.floors.length) return ''
-  const placed = layout.value.placements.length
-  const floors = layout.value.floors.length
-  return `${placed} of ${count} ${count === 1 ? 'table' : 'tables'} on the map · ${floors} ${floors === 1 ? 'floor' : 'floors'}`
-})
-
-/** One selected table for Design shop and View in 3D: picked in one, it is picked in the other. */
-const selectedTable = computed<string | null>({
-  get: () => (editor.selection.value?.kind === 'table' ? editor.selection.value.id : null),
-  set: (id) => {
-    if (id) {
-      const placement = layout.value.placements.find(candidate => candidate.tableId === id)
-      if (placement) editor.showFloor(placement.floorId)
-      editor.selection.value = { kind: 'table', id }
-    }
-    else if (editor.selection.value?.kind === 'table') editor.selection.value = null
-  },
-})
-function showOnPlan(tableId: string) {
-  selectedTable.value = tableId
-  view.value = 'design'
-}
-
-/** One selected piece too (step 3e), the same way: picked in 3D, it is selected in Design shop. */
-const selectedItem = computed<string | null>({
-  get: () => (editor.selection.value?.kind === 'item' ? editor.selection.value.id : null),
-  set: (id) => {
-    if (id) {
-      const floor = layout.value.floors.find(candidate => candidate.items.some(item => item.id === id))
-      if (floor) editor.showFloor(floor.id)
-      editor.selection.value = { kind: 'item', id }
-    }
-    else if (editor.selection.value?.kind === 'item') editor.selection.value = null
-  },
-})
-/** The branch's scene (step 4a): part of the draft, so Save layout saves it with the layout. */
-const scene = computed<ScenePreset>({
-  get: () => (layout.value.scene ?? NO_SCENE).preset,
-  set: preset => editor.setScene(preset),
-})
-function showItemOnPlan(itemId: string) {
-  selectedItem.value = itemId
-  view.value = 'design'
-}
-
 const settingsTab = useTemplateRef('settingsTab')
 const tablesTab = useTemplateRef('tablesTab')
 const several = computed(() => (branches.value?.length ?? 0) > 1)
@@ -111,8 +37,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
 <template>
   <UDashboardPanel
     id="branch"
-    :class="!designing && 'page-narrow'"
-    :ui="designing ? { body: 'p-0 sm:p-0 overflow-hidden' } : undefined"
+    class="page-narrow"
   >
     <template #header>
       <UDashboardNavbar>
@@ -138,7 +63,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
         </template>
         <template #right>
           <UButton
-            v-if="branches?.length === 1 && settings && !designing"
+            v-if="branches?.length === 1 && settings"
             label="Add branch"
             icon="i-lucide-plus"
             color="neutral"
@@ -160,23 +85,6 @@ const title = computed(() => settings.value?.name ?? 'Branch')
               @click="settingsTab?.save()"
             />
           </UTooltip>
-          <template v-else-if="designing">
-            <span
-              v-if="editor.isDirty.value"
-              class="hidden items-center gap-1.5 text-sm text-muted sm:inline-flex"
-              data-testid="layout-unsaved"
-            >
-              <span class="size-2 rounded-full bg-warning" />
-              Unsaved changes
-            </span>
-            <UButton
-              label="Save layout"
-              icon="i-lucide-save"
-              :disabled="!editor.isDirty.value"
-              :loading="editor.saving.value"
-              @click="editor.save()"
-            />
-          </template>
           <UTooltip
             v-else-if="tab === 'tables'"
             text="New table"
@@ -201,27 +109,14 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           v-if="tab === 'tables'"
           class="flex shrink-0 items-center gap-3"
         >
-          <span
-            v-if="summary"
-            class="hidden text-sm text-muted xl:inline"
-          >{{ summary }}</span>
-          <UFieldGroup
+          <UButton
+            :to="{ path: tenantPath(`/admin/studio/${id}`), query: { from: 'tables' } }"
+            label="Open Studio"
+            icon="i-lucide-layout-dashboard"
+            color="neutral"
+            variant="outline"
             size="sm"
-            role="group"
-            aria-label="Dining tables views"
-          >
-            <UButton
-              v-for="option in VIEWS"
-              :key="option.value"
-              :label="option.label"
-              :icon="option.icon"
-              :color="view === option.value ? 'primary' : 'neutral'"
-              :variant="view === option.value ? 'soft' : 'outline'"
-              :aria-pressed="view === option.value"
-              :ui="{ label: 'max-md:sr-only' }"
-              @click="view = option.value"
-            />
-          </UFieldGroup>
+          />
           <UButton
             :to="tenantPath('/admin/branches/looks')"
             label="Looks"
@@ -242,7 +137,9 @@ const title = computed(() => settings.value?.name ?? 'Branch')
         title="Could not load the branch"
         @retry="refresh()"
       />
-      <BranchSkeleton v-else-if="!settings" />
+      <BranchSkeleton
+        v-else-if="!settings"
+      />
       <template v-else>
         <BranchSettingsTab
           v-show="tab === 'settings'"
@@ -251,81 +148,10 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           @saved="value => settings = value"
         />
         <BranchTablesTab
-          v-show="tab === 'tables' && view === 'list'"
+          v-show="tab === 'tables'"
           ref="tablesTab"
           :branch-id="id"
         />
-        <LayoutSaveAlerts
-          v-if="designing"
-          :editor="editor"
-          :dining-tables="tables ?? []"
-        />
-        <DesignShopEditor
-          v-if="tab === 'tables' && view === 'design'"
-          :editor="editor"
-          :branch-id="id"
-          :has-pin="hasPin"
-          :dining-tables="tables ?? []"
-          :looks="editor.looks.value"
-          @view3d="view = '3d'"
-        />
-        <template v-else-if="tab === 'tables' && view === '3d'">
-          <div
-            v-if="editor.error.value"
-            class="p-4"
-          >
-            <ApiErrorAlert
-              :error="editor.error.value"
-              title="Could not load the shop layout"
-              @retry="editor.retry()"
-            />
-          </div>
-          <div
-            v-else-if="!editor.ready.value"
-            class="p-4"
-          >
-            <ListSkeleton
-              label="Loading the shop layout…"
-              variant="card"
-            />
-          </div>
-          <div
-            v-else-if="!layout.floors.some(floor => floor.outline.length >= 3)"
-            class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center"
-          >
-            <UIcon
-              name="i-lucide-box"
-              class="size-8 text-muted"
-            />
-            <p class="font-semibold text-highlighted">
-              No shop layout yet
-            </p>
-            <p class="max-w-sm text-sm text-muted">
-              Draw the shop in Design shop and place its tables; then explore it here as a building.
-            </p>
-            <UButton
-              label="Design shop"
-              icon="i-lucide-layout-dashboard"
-              @click="view = 'design'"
-            />
-          </div>
-          <BuildingView3D
-            v-else
-            v-model:selected-table="selectedTable"
-            v-model:selected-item="selectedItem"
-            v-model:scene="scene"
-            :layout="layout"
-            :tables="editor.tables.value"
-            :looks="editor.looks.value"
-            :item-looks="editor.itemLooks.value"
-            :dining-tables="tables ?? []"
-            :unsaved="editor.isDirty.value"
-            :branch-id="id"
-            @show-on-plan="showOnPlan"
-            @show-item-on-plan="showItemOnPlan"
-            @design-shop="view = 'design'"
-          />
-        </template>
       </template>
     </template>
   </UDashboardPanel>

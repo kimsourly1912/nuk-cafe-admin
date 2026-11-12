@@ -12,6 +12,7 @@ const props = defineProps<{
   insideFloor: string | null
   selectedTable: string | null
   canEnter: boolean
+  section?: 'floors' | 'tables'
 }>()
 
 const emit = defineEmits<{
@@ -38,7 +39,7 @@ const unplaced = computed(() => {
 <template>
   <div class="flex flex-col gap-5">
     <section
-      v-if="!insideFloor"
+      v-if="!insideFloor && section !== 'tables'"
       class="flex flex-col gap-1"
     >
       <h2 class="mb-1 text-sm font-semibold text-highlighted">
@@ -82,7 +83,7 @@ const unplaced = computed(() => {
       </div>
     </section>
 
-    <section class="flex flex-col gap-3">
+    <section v-if="section !== 'floors' || insideFloor" class="flex flex-col gap-3">
       <h2 class="text-sm font-semibold text-highlighted">
         {{ insideFloor ? 'Tables on this floor' : 'Tables' }}
       </h2>
