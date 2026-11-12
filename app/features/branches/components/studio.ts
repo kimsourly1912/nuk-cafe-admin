@@ -11,6 +11,7 @@ export const STUDIO_SIDEBAR = { min: 232, initial: 288, max: 430 } as const
 export const STUDIO_SHORTCUTS = [
   { kbds: ['v'], label: 'Select' },
   { kbds: ['h'], label: 'Hand (or hold Space and drag)' },
+  { kbds: ['r'], label: 'Room: drag a rectangle (Alt cuts it out)' },
   { kbds: ['p'], label: 'Draw outline' },
   { kbds: ['w'], label: 'Draw wall' },
   { kbds: ['escape'], label: 'Cancel, leave the tool, then clear the selection' },

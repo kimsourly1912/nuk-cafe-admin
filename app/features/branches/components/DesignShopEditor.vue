@@ -16,10 +16,11 @@ import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
 import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, placementExtent, snap } from '../designer/geometry'
-import type { Sized } from '../designer/geometry'
+import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
+import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
 import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
 import type { Starter } from '../designer/starters'
@@ -63,6 +64,7 @@ defineSlots<{
 
 const exploreEnabled = useRuntimeConfig().public.explore
 const exploreOpen = ref(false)
+const toast = useToast()
 const draft = props.editor.draft
 const layout = computed(() => draft.layout.value)
 const tables = computed(() => props.editor.tables.value)
@@ -422,6 +424,22 @@ function applyLength() {
 watch(() => [mode.value, floor.value?.id], () => {
   lengthEdit.value = null
 })
+
+/**
+ * The Room tool (D278): the rectangle becomes the floor, merges into it or, with Alt, is cut out of
+ * it, as one undo step; then Select again, as Figma's shape tools do. A refused room says why.
+ */
+function applyRoom(bounds: Bounds, cut: boolean) {
+  const current = floor.value
+  if (!current) return
+  const result = addRoom(shapeOf(current), bounds, cut)
+  if ('refused' in result) {
+    toast.add({ title: cut ? 'Room not cut out' : 'Room not added', description: result.refused, color: 'error', icon: 'i-lucide-circle-alert' })
+    return
+  }
+  updateShape(result.shape)
+  finishTool()
+}
 
 function addWall(wall: Omit<InnerWall, 'id'>) {
   changeFloor(target => target.walls.push({ id: newLayoutId('wall'), ...wall }))
@@ -861,7 +879,7 @@ function onStudioKey(event: KeyboardEvent) {
     return
   }
   if (event.shiftKey) return
-  const tools: Record<string, PlanMode> = { v: 'select', h: 'hand', p: 'outline', w: 'wall' }
+  const tools: Record<string, PlanMode> = { v: 'select', h: 'hand', r: 'room', p: 'outline', w: 'wall' }
   const tool = tools[event.key.toLowerCase()]
   if (tool && floor.value) return run(() => (tool === mode.value ? undefined : startTool(tool)))
 }
@@ -1025,10 +1043,11 @@ function chooseStarter(starter: Starter) {
 const planTools = [
   { mode: 'select', label: 'Select', icon: 'i-lucide-mouse-pointer-2', kbds: ['v'] },
   { mode: 'hand', label: 'Hand', icon: 'i-lucide-hand', kbds: ['h'] },
+  { mode: 'room', label: 'Room', icon: 'i-lucide-square-plus', kbds: ['r'] },
   { mode: 'outline', label: 'Draw outline', icon: 'i-lucide-pen-tool', kbds: ['p'] },
   { mode: 'wall', label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'] },
 ] as const satisfies readonly { mode: PlanMode, label: string, icon: string, kbds: readonly string[] }[]
-const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall')
+const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall' || mode.value === 'room')
 const pendingLabel = computed(() => {
   const piece = pending.value
   if (!piece) return ''
@@ -2136,6 +2155,7 @@ const pendingLabel = computed(() => {
                 @shape="updateShape"
                 @add-wall="addWall"
                 @walls="setWalls"
+                @room="applyRoom"
                 @edit-length="editLength"
               />
             </div>
@@ -2320,7 +2340,7 @@ const pendingLabel = computed(() => {
                   data-testid="tool-bar"
                 >
                   <span class="rounded-lg border border-default bg-default px-3 py-2 text-sm font-semibold text-highlighted shadow-sm">
-                    {{ mode === 'outline' ? 'Draw outline' : 'Draw wall' }}
+                    {{ mode === 'outline' ? 'Draw outline' : mode === 'room' ? 'Room' : 'Draw wall' }}
                     <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && floor.outline.length >= 3"> · {{ areaM2(floor.outline) }} m²</template></span>
                   </span>
                   <span class="pointer-events-auto flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
@@ -2387,7 +2407,7 @@ const pendingLabel = computed(() => {
 
           <!-- How the tool works (3A, 9A). -->
           <div
-            v-if="mode === 'outline' || mode === 'wall'"
+            v-if="drawing"
             class="pointer-events-none absolute bottom-28 left-2 flex max-w-60 flex-col gap-1 rounded-lg border border-default bg-default px-3 py-2 text-xs text-toned shadow-sm"
           >
             <template v-if="mode === 'outline' && floor.outline.length === 0">
@@ -2398,6 +2418,10 @@ const pendingLabel = computed(() => {
               <span>Drag a corner to move it; it keeps right angles unless you hold Alt.</span>
               <span>Click a round handle to add a corner. Click a corner, then Delete to remove it.</span>
               <span>Click an edge to make it a wall, railing or open, or to add doors and windows.</span>
+            </template>
+            <template v-else-if="mode === 'room'">
+              <span>Drag a rectangle: the floor, or a room added to it.</span>
+              <span>Hold Alt while you let go to cut it out instead. Ctrl or ⌘ for 5 cm steps.</span>
             </template>
             <template v-else>
               <span>Click where the wall starts, then where it ends.</span>
