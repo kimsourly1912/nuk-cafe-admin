@@ -4,6 +4,7 @@ import type { BrowserContextOptions, Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { afterEach, describe, expect, inject, it } from 'vitest'
 import { allowBrowserProblems } from './support/browser-problems'
+import { approachAndInteract } from './support/explore-input'
 import { setupE2e } from './support/mock-api'
 
 // Explore's real branches (D275 step E4, docs/plans/explore.md → Districts and gateways) on the
@@ -109,31 +110,14 @@ describe('Explore with real branches', () => {
     await page.goto(url(`/c/${trail.slug}/explore?at=${from}`))
     await page.getByText('Street', { exact: true }).waitFor()
     const action = (label: string) => page.getByRole('button', { name: label })
-    // Watch each frame for the context prompt and release movement before walking past the moto.
-    await page.keyboard.down('a')
-    await page.keyboard.down('w')
-    try {
-      await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent?.includes('Ride moto')), undefined, { timeout: 12_000 })
-    }
-    finally {
-      await page.keyboard.up('w')
-      await page.keyboard.up('a')
-    }
-    await page.getByText('Ride moto', { exact: true }).click()
+    await approachAndInteract(page, ['KeyA', 'KeyW'], 'Ride moto')
     await action('Get off').waitFor()
     await page.keyboard.press('m')
     const map = page.getByRole('dialog', { name: 'Map' })
     await map.getByRole('button', { name: `Set waypoint: ${name}` }).click()
     await map.waitFor({ state: 'hidden' })
 
-    await page.keyboard.down('w')
-    try {
-      await action(`Enter ${name}`).waitFor({ timeout: 25_000 })
-    }
-    finally {
-      await page.keyboard.up('w')
-    }
-    await action(`Enter ${name}`).click()
+    await approachAndInteract(page, ['KeyW'], `Enter ${name}`)
     await action('Go back').waitFor()
     await page.unroute(layout)
     await action('Retry').click()
@@ -165,16 +149,7 @@ describe('Explore with real branches', () => {
     await page.getByText('To Riverwalk', { exact: true }).waitFor({ timeout: 60_000 })
 
     // Back and right, around the rear of the tuk-tuk and onto the pickup curb (as in E2's test).
-    await page.keyboard.down('s')
-    try {
-      await page.keyboard.down('d')
-      await action('Open passenger door').waitFor({ timeout: 35_000 })
-    }
-    finally {
-      await page.keyboard.up('d')
-      await page.keyboard.up('s')
-    }
-    await action('Open passenger door').click()
+    await approachAndInteract(page, ['KeyS', 'KeyD'], 'Open passenger door')
     await action('Get in').click()
     await action('Skip ride').click()
     await page.getByText('Can\'t reach Riverwalk right now', { exact: true }).waitFor()

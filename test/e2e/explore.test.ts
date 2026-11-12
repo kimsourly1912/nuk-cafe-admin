@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { BrowserContextOptions, Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { afterEach, describe, expect, inject, it } from 'vitest'
+import { approachAndInteract } from './support/explore-input'
 import { setupE2e } from './support/mock-api'
 
 // Close each WebGL context after the failure-capture hook has taken its evidence.
@@ -107,16 +108,7 @@ describe('Explore', () => {
     const page = await createExplorePage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce' })
     await open(page)
     const action = (name: string) => page.getByRole('button', { name, exact: true })
-    await page.keyboard.down('a')
-    try {
-      await holdUntil(page, 'w', async () => {
-        await page.waitForFunction(() => Array.from(document.querySelectorAll('button')).some(button => button.textContent?.includes('Ride moto')))
-      })
-    }
-    finally {
-      await page.keyboard.up('a')
-    }
-    await action('Ride moto').tap()
+    await approachAndInteract(page, ['KeyA', 'KeyW'], 'Ride moto')
     await page.getByText('Riding moto', { exact: true }).waitFor()
     await action('Get off').waitFor()
     await expect(action('Jump').count()).resolves.toBe(0)
@@ -184,14 +176,7 @@ describe('Explore', () => {
     await picker.waitFor({ state: 'hidden' })
 
     // Back and right, around the rear of the tuk-tuk and onto the pickup curb.
-    await page.keyboard.down('s')
-    try {
-      await holdUntil(page, 'd', () => action('Open passenger door').waitFor({ timeout: 35_000 }))
-    }
-    finally {
-      await page.keyboard.up('s')
-    }
-    await action('Open passenger door').click()
+    await approachAndInteract(page, ['KeyS', 'KeyD'], 'Open passenger door')
     await action('Get in').click()
     await action('Outside view').waitFor()
     await shot(page, 'phone-ride-inside')
