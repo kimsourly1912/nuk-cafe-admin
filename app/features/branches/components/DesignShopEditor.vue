@@ -780,8 +780,12 @@ onBeforeUnmount(clearLibraryDrag)
 
 const shortcutsHelp = overlay.create(ShortcutsHelp)
 
-/** A dialog, menu or open select is on screen: Studio's keys must not act behind it. */
-const somethingOnTop = () => !!document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')
+/**
+ * A dialog, menu or open select is on screen: Studio's keys must not act behind it. One that is
+ * closing (its 100 ms animation, `data-state="closed"`) no longer counts: Delete right after a
+ * menu choice acts on the plan.
+ */
+const somethingOnTop = () => !!document.querySelector(['dialog', 'alertdialog', 'menu', 'listbox'].map(role => `[role="${role}"]:not([data-state="closed"])`).join(', '))
 
 /**
  * Whether the focused element uses this key itself: typing in a field, or the arrows of the

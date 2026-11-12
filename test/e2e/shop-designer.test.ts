@@ -83,12 +83,12 @@ async function drawWith(page: Page, name: 'Draw wall' | 'Draw outline') {
   await page.getByTestId('tool-bar').getByText(name).waitFor()
 }
 
-/** Right-clicks a piece on the plan and picks an action from Studio's menu (D278). */
+/** Right-clicks a piece on the plan and picks an action from Studio's menu (D278). An item's name ends with its keys. */
 async function fromMenu(target: Locator, name: string) {
   await target.click({ button: 'right' })
-  const item = target.page().getByRole('menu').getByRole('menuitem', { name, exact: true }).or(target.page().getByRole('menu').getByRole('menuitemcheckbox', { name, exact: true }))
-  await item.click()
-  await target.page().getByRole('menu').waitFor({ state: 'hidden' })
+  const menu = target.page().getByRole('menu')
+  await menu.getByRole('menuitem', { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).click()
+  await menu.waitFor({ state: 'hidden' })
 }
 
 /** The 3D view's first frame is on screen. */
@@ -927,9 +927,6 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Redo' }).click()
     await expect.poll(width).toBe(String(before + 40))
 
-    await l1.click({ button: 'right' })
-    await shot(page, 'context-menu')
-    await page.keyboard.press('Escape')
     await fromMenu(l1, 'Rotate 90°')
     await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(90)')
 
@@ -1125,7 +1122,7 @@ describe('the shop designer on saved layouts', () => {
     const properties = page.getByRole('complementary', { name: 'Properties' })
     let menu = await rightClickEdge()
     await menu.getByRole('menuitemcheckbox', { name: 'Railing' }).click()
-    await expect.poll(() => properties.getByRole('button', { name: 'Railing' }).getAttribute('aria-pressed')).toBe('true')
+    await expect.poll(() => properties.getByRole('button', { name: 'Railing', exact: true }).getAttribute('aria-pressed')).toBe('true')
     menu = await rightClickEdge()
     await menu.getByRole('menuitem', { name: 'Remove railing' }).waitFor()
     expect(await menu.getByRole('menuitem', { name: 'Add a window' }).count()).toBe(0)
@@ -1137,7 +1134,7 @@ describe('the shop designer on saved layouts', () => {
 
     // Delete on an edge makes it Open (its gate goes with it); Undo puts the railing back.
     await page.keyboard.press('Delete')
-    await expect.poll(() => properties.getByRole('button', { name: 'Open' }).getAttribute('aria-pressed')).toBe('true')
+    await expect.poll(() => properties.getByRole('button', { name: 'Open', exact: true }).getAttribute('aria-pressed')).toBe('true')
     await page.getByRole('button', { name: 'Undo' }).click()
     await expect.poll(gates).toBe(gatesBefore + 1)
 
