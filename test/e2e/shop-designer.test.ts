@@ -77,8 +77,8 @@ async function newTableLook(library: Locator) {
   await library.page().getByRole('menuitem', { name: 'New table look' }).click()
 }
 
-/** Draw outline and Draw wall are toolbar tools of their own (D278). */
-async function drawWith(page: Page, name: 'Draw wall' | 'Draw outline') {
+/** Edit points and Draw wall are toolbar tools of their own (D278). */
+async function drawWith(page: Page, name: 'Draw wall' | 'Edit points') {
   await page.getByRole('toolbar', { name: 'Canvas tools' }).getByRole('button', { name, exact: true }).click()
   await page.getByTestId('tool-bar').getByText(name).waitFor()
 }
@@ -112,6 +112,26 @@ async function save(page: Page) {
   await saveButton(page).click()
   await page.getByText('Shop layout saved').first().waitFor()
   await expect.poll(() => saveButton(page).isDisabled()).toBe(true)
+}
+
+/** Screen pixels for a point in plan centimetres. */
+function onScreen(page: Page, point: Point): Promise<Point> {
+  return plan(page).evaluate((svg, target) => {
+    const screen = new DOMPoint(target.x, target.y).matrixTransform((svg as SVGSVGElement).getScreenCTM()!)
+    return { x: screen.x, y: screen.y }
+  }, point)
+}
+
+/** Drags on the plan from one point to another, in plan centimetres, with keys held (D278's tools). */
+async function dragPlan(page: Page, from: Point, to: Point, keys: string[] = []) {
+  const start = await onScreen(page, from)
+  const end = await onScreen(page, to)
+  await page.mouse.move(start.x, start.y)
+  for (const key of keys) await page.keyboard.down(key)
+  await page.mouse.down()
+  await page.mouse.move(end.x, end.y, { steps: 8 })
+  await page.mouse.up()
+  for (const key of keys) await page.keyboard.up(key)
 }
 
 /** Clicks the plan at a point in plan centimetres. */
@@ -726,6 +746,86 @@ describe('the shop designer on saved layouts', () => {
     expect(await plan(page).getByTestId('plan-edge-selected').count()).toBe(0)
   })
 
+  it('draws like Figma (D278 PR 2): Room adds and refuses, Edit points drags a side, inside glass with a gap, a named Shape', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').waitFor()
+    const before = (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!
+    const right = Math.max(...before.outline.map(point => point.x))
+    const top = Math.min(...before.outline.map(point => point.y))
+    const groundOf = async () => (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!
+    const mode = () => plan(page).getAttribute('data-mode')
+
+    // Room (R): a rectangle beside the floor merges into it; then Select again.
+    await page.keyboard.press('r')
+    await expect.poll(mode).toBe('room')
+    await dragPlan(page, { x: right - 50, y: top }, { x: right + 200, y: top + 200 })
+    await expect.poll(mode).toBe('select')
+    await save(page)
+    // The new room reaches past the view: Shift+1 fits the floor again.
+    await page.keyboard.press('Shift+1')
+    let ground = await groundOf()
+    expect(Math.max(...ground.outline.map(point => point.x))).toBe(right + 200)
+    // A cut inside the floor would leave a hole: refused, and it says why.
+    await page.keyboard.press('r')
+    await dragPlan(page, { x: right + 50, y: top + 50 }, { x: right + 100, y: top + 150 }, ['Alt'])
+    await page.getByText('That would leave a hole in the floor', { exact: false }).first().waitFor()
+    await page.keyboard.press('Escape')
+    await expect.poll(mode).toBe('select')
+
+    // Edit points (Enter): the new room's right side dragged 100 cm out, both its corners together.
+    await page.keyboard.press('Enter')
+    await expect.poll(mode).toBe('outline')
+    await dragPlan(page, { x: right + 200, y: top + 50 }, { x: right + 300, y: top + 50 })
+    await page.keyboard.press('Escape')
+    await expect.poll(mode).toBe('select')
+    await save(page)
+    ground = await groundOf()
+    expect(ground.outline.filter(point => point.x === right + 300)).toHaveLength(2)
+
+    // Draw wall (W) inside the new room, then make it glass with a gap, and drag its end.
+    await page.keyboard.press('w')
+    await clickPlan(page, { x: right + 25, y: top + 100 })
+    await clickPlan(page, { x: right + 225, y: top + 100 })
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    await expect.poll(mode).toBe('select')
+    await clickPlan(page, { x: right + 125, y: top + 100 })
+    const properties = page.getByRole('complementary', { name: 'Properties' })
+    await properties.getByTestId('selected-wall').waitFor()
+    await properties.getByRole('group', { name: 'Wall type' }).getByRole('button', { name: 'Glass' }).click()
+    await properties.getByRole('button', { name: 'Opening', exact: true }).click()
+    await properties.getByTestId('wall-opening-door').waitFor()
+    expect(await properties.getByRole('button', { name: 'Window' }).count()).toBe(0)
+    await shot(page, 'inside-glass')
+    const end = (await plan(page).getByTestId('wall-end-to').boundingBox())!
+    await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2)
+    await page.mouse.down()
+    const target = await onScreen(page, { x: right + 275, y: top + 100 })
+    await page.mouse.move(target.x, target.y, { steps: 6 })
+    await page.mouse.up()
+
+    // Shape (S): a block drawn on the floor (over whatever is there), named Stage and 40 cm high.
+    await page.keyboard.press('s')
+    await expect.poll(mode).toBe('shape')
+    await dragPlan(page, { x: right - 400, y: top + 400 }, { x: right - 200, y: top + 500 })
+    await expect.poll(mode).toBe('select')
+    const name = properties.getByLabel('Name')
+    await name.fill('Stage')
+    await name.press('Enter')
+    await properties.getByLabel('Height (cm)').fill('40')
+    await properties.getByLabel('Height (cm)').press('Enter')
+    await plan(page).getByText('Stage').waitFor()
+    await shot(page, 'shape-stage')
+
+    await save(page)
+    ground = await groundOf()
+    const glass = ground.walls.find(wall => wall.kind === 'glass')!
+    expect(glass).toMatchObject({ from: { x: right + 25, y: top + 100 }, to: { x: right + 275, y: top + 100 } })
+    expect(glass.openings).toHaveLength(1)
+    expect(ground.items.find(item => item.kind === 'block')).toMatchObject({ name: 'Stage', height: 40, width: 200, depth: 100 })
+  })
+
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {
     const page = await signedIn(390, 844)
     await openDesign(page)
@@ -1090,8 +1190,8 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Delete')
     await expect.poll(walls).toBe(before)
 
-    // Draw outline (3A): a click on a length label makes it a field; Escape leaves it, Enter sets it.
-    await drawWith(page, 'Draw outline')
+    // Edit points (3A, D278): a click on a length label makes it a field; Escape leaves it, Enter sets it.
+    await drawWith(page, 'Edit points')
     const label = plan(page).getByTestId('plan-edge-length-1')
     const length = Number((await label.textContent())!.replace(' cm', ''))
     const field = page.getByTestId('edge-length-edit').getByRole('spinbutton')
