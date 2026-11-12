@@ -77,11 +77,18 @@ async function newTableLook(library: Locator) {
   await library.page().getByRole('menuitem', { name: 'New table look' }).click()
 }
 
+/** Draw outline and Draw wall are toolbar tools of their own (D278). */
 async function drawWith(page: Page, name: 'Draw wall' | 'Draw outline') {
-  await page.getByRole('button', { name: 'Draw', exact: true }).click()
-  const action = page.getByRole('menuitem', { name, exact: true })
-  await action.click()
-  await action.waitFor({ state: 'hidden' })
+  await page.getByRole('toolbar', { name: 'Canvas tools' }).getByRole('button', { name, exact: true }).click()
+  await page.getByTestId('tool-bar').getByText(name).waitFor()
+}
+
+/** Right-clicks a piece on the plan and picks an action from Studio's menu (D278). An item's name ends with its keys. */
+async function fromMenu(target: Locator, name: string) {
+  await target.click({ button: 'right' })
+  const menu = target.page().getByRole('menu')
+  await menu.getByRole('menuitem', { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).click()
+  await menu.waitFor({ state: 'hidden' })
 }
 
 /** The 3D view's first frame is on screen. */
@@ -162,12 +169,13 @@ describe('the shop designer on saved layouts', () => {
       return { x: point.x, y: point.y }
     })
     await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2)
-    await page.keyboard.down('Shift')
+    // Ctrl/⌘ snaps to 5 cm while dragging (D278; Shift did before).
+    await page.keyboard.down('Control')
     await page.mouse.down()
     await page.mouse.move(target.x, target.y, { steps: 5 })
     await expect.poll(() => plan(page).getByTestId('plan-ghost').getAttribute('transform')).toBe('translate(115 305)')
     await page.mouse.up()
-    await page.keyboard.up('Shift')
+    await page.keyboard.up('Control')
     await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: 115, y: 305 })
     await page.getByRole('button', { name: 'Undo' }).click()
     await card.waitFor()
@@ -363,7 +371,7 @@ describe('the shop designer on saved layouts', () => {
 
     // A corner picked, then the arrow key: the corner next to it keeps the right angle.
     await plan(page).getByTestId('plan-corner-1').click()
-    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('Shift+ArrowRight')
     await expect.poll(() => plan(page).getByTestId('plan-edge-length-0').textContent()).toBe('625 cm')
     await expect.poll(() => plan(page).getByTestId('plan-edge-length-1').textContent()).toBe('400 cm')
     await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
@@ -646,6 +654,78 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => saveButton(page).isDisabled()).toBe(true)
   })
 
+  it('works like Figma (D278): keys without focusing the plan, wheel and zoom keys, tool keys, hover, a piece against a wall', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    const l1 = plan(page).getByTestId('plan-table-L1')
+    await l1.waitFor()
+
+    // Hovering shows what a click would pick.
+    await l1.hover()
+    await plan(page).getByTestId('plan-hover').waitFor()
+
+    // Keys act on the selection after a click elsewhere (a panel button has the focus): 5 cm, Shift 25 cm.
+    await l1.click()
+    const start = await positionOf(page, 'L1')
+    await showPanel(page, 'Floors')
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: start.x + 5, y: start.y })
+    await page.keyboard.press('Shift+ArrowDown')
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: start.x + 5, y: start.y + 25 })
+    await page.keyboard.press('Shift+R')
+    await expect.poll(() => l1.getAttribute('transform')).toMatch(/rotate\((90|180|270|0)\)/)
+
+    // The wheel pans and keeps the zoom; Ctrl+wheel zooms; Shift+0 is 100 %, Shift+1 fits.
+    const zoom = page.getByTestId('zoom-level')
+    const viewBox = () => plan(page).getAttribute('viewBox')
+    const box = (await plan(page).boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    const zoomBefore = await zoom.textContent()
+    const viewBefore = await viewBox()
+    await page.mouse.wheel(0, 200)
+    await expect.poll(viewBox).not.toBe(viewBefore)
+    expect(await zoom.textContent()).toBe(zoomBefore)
+    await page.keyboard.down('Control')
+    await page.mouse.wheel(0, -100)
+    await page.keyboard.up('Control')
+    await expect.poll(() => zoom.textContent()).not.toBe(zoomBefore)
+    await page.keyboard.press('Shift+0')
+    await expect.poll(() => zoom.textContent()).toBe('100%')
+    await page.keyboard.press('Shift+1')
+    await expect.poll(() => zoom.textContent()).not.toBe('100%')
+
+    // Tool keys: W opens Draw wall, Escape goes back to Select; V and H switch too.
+    await page.keyboard.press('w')
+    await page.getByTestId('tool-bar').getByText('Draw wall').waitFor()
+    await page.keyboard.press('Escape')
+    await page.getByTestId('tool-bar').waitFor({ state: 'detached' })
+    await page.keyboard.press('h')
+    await expect.poll(() => plan(page).getAttribute('data-mode')).toBe('hand')
+    await page.keyboard.press('v')
+    await expect.poll(() => plan(page).getAttribute('data-mode')).toBe('select')
+
+    // A plant against the outside wall is picked, not the wall behind it.
+    const ground = (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!
+    const outline = ground.outline
+    const index = outline.findIndex((point, at) => point.x === outline[(at + 1) % outline.length]!.x && point.x === Math.max(...outline.map(corner => corner.x)))
+    const wallX = outline[index]!.x
+    const wallY = Math.round((outline[index]!.y + outline[(index + 1) % outline.length]!.y) / 2)
+    await showPanel(page, 'Assets')
+    await page.getByTestId('catalog-plant').click()
+    await page.getByRole('button', { name: 'Place at center' }).click()
+    const panel = page.getByRole('complementary', { name: 'Properties' })
+    for (const [label, value] of [['X (cm)', wallX - 15], ['Y (cm)', wallY]] as const) {
+      await panel.getByLabel(label).fill(String(value))
+      await panel.getByLabel(label).press('Enter')
+    }
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    await page.keyboard.press('Escape')
+    await expect.poll(() => panel.getByLabel('X (cm)').count()).toBe(0)
+    await clickPlan(page, { x: wallX - 15, y: wallY })
+    await expect.poll(() => panel.getByLabel('X (cm)').inputValue()).toBe(String(wallX - 15))
+    expect(await plan(page).getByTestId('plan-edge-selected').count()).toBe(0)
+  })
+
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {
     const page = await signedIn(390, 844)
     await openDesign(page)
@@ -819,15 +899,15 @@ describe('the shop designer on saved layouts', () => {
     expect((await savedLayout(page)).placements.find(placement => placement.tableId === l1.id)).toMatchObject({ lookId: 'round-cafe' })
   })
 
-  it('quick actions beside the selection: a corner handle resizes, Rotate 90°, Duplicate look asks which table, Remove from map', { timeout: 60_000 }, async () => {
+  it('the right-click menu (D278): a corner handle resizes, Rotate 90°, Duplicate look asks which table, Remove from map', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page)
     const panel = page.getByRole('complementary', { name: 'Properties' })
-    const quick = page.getByTestId('quick-actions')
     const l1 = plan(page).getByTestId('plan-table-L1')
     await l1.click()
-    await quick.waitFor()
-    await shot(page, 'quick-actions')
+    // A mouse on a wide screen gets no quick bar over the plan: Properties and the menu instead.
+    await panel.getByLabel('Width (cm)').waitFor()
+    expect(await page.getByTestId('quick-actions').count()).toBe(0)
     expect(await l1.getAttribute('transform')).toContain('rotate(0)')
     const width = () => panel.getByLabel('Width (cm)').inputValue()
     const before = Number(await width())
@@ -847,17 +927,17 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Redo' }).click()
     await expect.poll(width).toBe(String(before + 40))
 
-    await quick.getByRole('button', { name: 'Rotate 90°' }).click()
+    await fromMenu(l1, 'Rotate 90°')
     await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(90)')
 
     // Duplicate look: which table? A new one, saved at once, goes beside L1 with L1's look, size and turn.
-    await quick.getByRole('button', { name: 'Duplicate look' }).click()
+    await fromMenu(l1, 'Duplicate look')
     await page.getByRole('dialog').filter({ hasText: 'Which table is this?' }).getByRole('button', { name: 'New table' }).click()
     const form = page.getByRole('dialog', { name: 'New table' })
     await form.getByLabel('Name').fill('L4')
     await form.getByRole('button', { name: 'Add table' }).click()
     await plan(page).getByTestId('plan-table-L4').waitFor()
-    await expect.poll(() => quick.getAttribute('aria-label')).toBe('L4 quick actions')
+    await expect.poll(() => page.getByTestId('selected-table').textContent()).toContain('L4')
     await save(page)
     const ids = Object.fromEntries((await branchTables(page)).map(table => [table.label, table.id]))
     const saved = await savedLayout(page)
@@ -868,17 +948,17 @@ describe('the shop designer on saved layouts', () => {
     expect(copy.x).toBeGreaterThan(original.x)
 
     // Remove from map: L4 goes back to Unplaced tables.
-    await quick.getByRole('button', { name: 'Remove from map' }).click()
+    await fromMenu(plan(page).getByTestId('plan-table-L4'), 'Remove from map')
     await showPanel(page, 'Tables')
     await unplaced(page, 'L4').waitFor()
-    await expect.poll(() => quick.count()).toBe(0)
 
     // Furniture: Duplicate copies it beside itself.
     const plants = await plan(page).getByTestId('plan-item-plant').count()
     await showPanel(page, 'Assets')
     await page.getByTestId('catalog-plant').click()
     await page.getByRole('button', { name: 'Place at center' }).click()
-    await quick.getByRole('button', { name: 'Duplicate', exact: true }).click()
+    // Ctrl/⌘+D duplicates the selection, without focusing the plan first (D278).
+    await page.keyboard.press('ControlOrMeta+d')
     await expect.poll(() => plan(page).getByTestId('plan-item-plant').count()).toBe(plants + 2)
     await save(page)
     const items = (await savedLayout(page)).floors.find(floor => floor.id === original.floorId)!.items.filter(item => item.kind === 'plant')
@@ -989,16 +1069,15 @@ describe('the shop designer on saved layouts', () => {
     await shot(page, 'phone-looks-page')
   })
 
-  it('types a length on the plan\'s label, and walls and edges have quick actions too', { timeout: 60_000 }, async () => {
+  it('types a length on the plan\'s label; Delete removes an inside wall, and an edge has its menu (D278)', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').waitFor()
-    const quick = page.getByTestId('quick-actions')
     const ground = (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!
     const right = Math.max(...ground.outline.map(point => point.x))
     const top = Math.min(...ground.outline.map(point => point.y))
 
-    // An inside wall's quick action: Delete wall (drawn just outside the building, where nothing covers it).
+    // An inside wall goes with Delete (drawn just outside the building, where nothing covers it).
     const walls = () => plan(page).locator('[data-testid^="plan-wall-"]').count()
     const before = await walls()
     await drawWith(page, 'Draw wall')
@@ -1008,7 +1087,7 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
     await expect.poll(walls).toBe(before + 1)
     await clickPlan(page, { x: right + 80, y: top + 100 })
-    await quick.getByRole('button', { name: 'Delete wall' }).click()
+    await page.keyboard.press('Delete')
     await expect.poll(walls).toBe(before)
 
     // Draw outline (3A): a click on a length label makes it a field; Escape leaves it, Enter sets it.
@@ -1029,18 +1108,35 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => label.textContent()).toBe(`${length + 100} cm`)
     await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
 
-    // An edge's quick actions: its type and a gate, a quarter of the way along it.
+    // An edge's menu: its type and a gate, a quarter of the way along it.
     const edge = await plan(page).getByTestId('plan-edge-2').evaluate(line => ['x1', 'y1', 'x2', 'y2'].map(name => Number(line.getAttribute(name))))
-    await clickPlan(page, { x: edge[0]! + (edge[2]! - edge[0]!) / 4, y: edge[1]! + (edge[3]! - edge[1]!) / 4 })
-    await quick.getByRole('group', { name: 'Edge type' }).waitFor()
-    await quick.getByRole('button', { name: 'Railing' }).click()
-    await expect.poll(() => quick.getByRole('button', { name: 'Railing' }).getAttribute('aria-pressed')).toBe('true')
-    expect(await quick.getByRole('button', { name: 'Add a window' }).count()).toBe(0)
-    const gates = () => page.getByRole('complementary', { name: 'Properties' }).getByTestId('opening-door').count()
+    const quarter = { x: edge[0]! + (edge[2]! - edge[0]!) / 4, y: edge[1]! + (edge[3]! - edge[1]!) / 4 }
+    const rightClickEdge = async () => {
+      const at = await plan(page).evaluate((svg, target) => {
+        const screen = new DOMPoint(target.x, target.y).matrixTransform((svg as SVGSVGElement).getScreenCTM()!)
+        return { x: screen.x, y: screen.y }
+      }, quarter)
+      await page.mouse.click(at.x, at.y, { button: 'right' })
+      return page.getByRole('menu')
+    }
+    const properties = page.getByRole('complementary', { name: 'Properties' })
+    let menu = await rightClickEdge()
+    await menu.getByRole('menuitemcheckbox', { name: 'Railing' }).click()
+    await expect.poll(() => properties.getByRole('button', { name: 'Railing', exact: true }).getAttribute('aria-pressed')).toBe('true')
+    menu = await rightClickEdge()
+    await menu.getByRole('menuitem', { name: 'Remove railing' }).waitFor()
+    expect(await menu.getByRole('menuitem', { name: 'Add a window' }).count()).toBe(0)
+    const gates = () => properties.getByTestId('opening-door').count()
     const gatesBefore = await gates()
-    await quick.getByRole('button', { name: 'Add a gate' }).click()
+    await shot(page, 'edge-menu')
+    await menu.getByRole('menuitem', { name: 'Add a gate' }).click()
     await expect.poll(gates).toBe(gatesBefore + 1)
-    await shot(page, 'edge-quick-actions')
+
+    // Delete on an edge makes it Open (its gate goes with it); Undo puts the railing back.
+    await page.keyboard.press('Delete')
+    await expect.poll(() => properties.getByRole('button', { name: 'Open', exact: true }).getAttribute('aria-pressed')).toBe('true')
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(gates).toBe(gatesBefore + 1)
 
     await save(page)
     const saved = (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!

@@ -3192,3 +3192,16 @@ The owner reviewed an editor reference for Studio (D276) and approved Claude's r
 - **Assets is a catalog.** Search, a create menu and the built-in and custom pieces. Finishes, which depend on the selection, move to the inspector. **Manage looks** opens the furniture looks list inside Studio without leaving the draft. It uses the same queries and mutations as the admin page.
 - **Floors** gets Find and Add floor. A new floor is selected with its name ready to edit.
 - **Resizable sidebar** comes last, and only if resizing keeps the canvas mounted. Built with `USplitter`: the sidebar panel is 232–430 px (default 288). Hide sidebar and screens narrower than 1024 px collapse that panel instead of removing it, so the plan is never mounted again. 3D shows its sidebar at the width last set in 2D. The width is not kept across reloads.
+
+## D278 Studio canvas follows Figma (2026-11-12)
+
+The owner found the 2D plan hard to use and asked for Figma's flow, tools and shortcuts. Claude reviewed the canvas code and the owner agreed to every recommendation. [Plan](plans/shop-designer.md#studio-canvas-like-figma-d278-planned-2026-11-12).
+
+- **Clicking:** furniture and tables are above outline edges for the pointer; a hover outline shows what a click would pick. Delete on an outline edge makes it Open.
+- **Navigation like Figma:** the wheel pans; Ctrl/⌘+wheel and a pinch zoom; Space or the middle button pans; Shift+1, Shift+2 and Shift+0 zoom.
+- **Shortcuts belong to Studio,** not the focused plan: V, H, P, W, Esc, Ctrl/⌘+D, Delete, arrows (5 cm, Shift 25 cm, reversing D273's 25/5), Shift+R to turn (R becomes Room), Shift+? for the list. They are skipped while typing and while a dialog or menu is open.
+- **The quick bar is for touch;** a mouse gets a right-click menu. Alt+drag copies, Shift+drag keeps a straight line, Ctrl/⌘ while dragging snaps to 5 cm (Shift did before).
+- **Drawing (PR 2):** Room (merge and cut rectangles with `polygon-clipping`), Edit points instead of Draw outline, inside walls with kinds and openings, Shape pieces. Curved walls deferred.
+- **Multi-select (PR 3).**
+- **Alternatives:** keep the wheel zooming (rejected: trackpads, Figma users); keep the quick bar for every pointer (rejected: it covers the plan and repeats Properties); only right-angled rooms with our own code (rejected: no diagonal shops).
+- **Consequences:** mouse-wheel users zoom with Ctrl; D273's arrow and Shift steps change; the e2e tests that relied on focused-plan keys and the 25 cm arrow change with them.

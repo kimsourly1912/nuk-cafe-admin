@@ -7,8 +7,8 @@
  * from the library or with Place on map, then move by drag, the arrow keys or typed X and Y in
  * Properties, so the editor works without dragging on touch, with a keyboard and in the e2e tests.
  */
-import { createReusableTemplate, useElementSize } from '@vueuse/core'
-import type { DropdownMenuItem } from '@nuxt/ui'
+import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
+import type { ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
 import { edgeLength, heightRangeMessage, ITEM_HEIGHTS, isFigureKind, isItemLookKind, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
@@ -32,7 +32,8 @@ import LookFormModal from './LookFormModal.vue'
 import PickTableModal from './PickTableModal.vue'
 import StudioLooksPanel from './StudioLooksPanel.vue'
 import StudioToolbar from './StudioToolbar.vue'
-import { STUDIO_SIDEBAR } from './studio'
+import { ShortcutsHelp } from '#components'
+import { STUDIO_DRAG_KEYS, STUDIO_SHORTCUTS, STUDIO_SIDEBAR } from './studio'
 import TableFormModal from './TableFormModal.vue'
 import TableQrModal from './TableQrModal.vue'
 
@@ -346,9 +347,18 @@ function resize(target: PlanSelection, size: Omit<Sized, 'rotation'>) {
   else if (target.kind === 'item') updateItem(target.id, size)
 }
 
-/** A table leaves the map (back to Unplaced, its QR untouched); furniture and walls are deleted. */
+/**
+ * A table leaves the map (back to Unplaced, its QR untouched); furniture and walls are deleted. An
+ * outline edge becomes Open (D278): its wall or railing goes, with its doors and windows, and the
+ * floor keeps its shape. It stays selected, so Wall or Railing puts one back.
+ */
 function remove(target: PlanSelection) {
-  if (target.kind === 'edge') return
+  if (target.kind === 'edge') {
+    const current = floor.value
+    const index = Number(target.id)
+    if (current && current.edges[index] && current.edges[index].kind !== 'open') updateShape(setEdgeKind(shapeOf(current), index, 'open'))
+    return
+  }
   draft.change((next) => {
     if (target.kind === 'table') next.placements = next.placements.filter(placement => placement.tableId !== target.id)
     for (const candidate of next.floors) {
@@ -555,7 +565,7 @@ async function placeLook(lookId: string, at: Point) {
  * Duplicate look (2B): the same look, size and turn for another real table, beside this one. It
  * asks which table, as a look from the library does; it never copies this table or its QR code.
  */
-async function duplicateLook(tableId: string) {
+async function duplicateLook(tableId: string, to?: Point) {
   const source = layout.value.placements.find(placement => placement.tableId === tableId)
   if (!source) return
   const choice = await pickModal.open({ lookName: findLook(props.looks, source.lookId).name, tables: unplaced.value }).result
@@ -565,19 +575,19 @@ async function duplicateLook(tableId: string) {
   const original = layout.value.placements.find(placement => placement.tableId === tableId)
   if (!copyId || !original || placedIds.value.has(copyId)) return
   const extent = placementExtent(original, findLook(props.looks, original.lookId))
-  const at = besideOf(original, extent.width, extent.depth)
+  const at = to ?? besideOf(original, extent.width, extent.depth)
   const { floorId, rotation, width, depth, lookId } = original
   draft.change(next => next.placements.push({ tableId: copyId, floorId, ...at, rotation, width, depth, lookId }))
   props.editor.showFloor(floorId)
   selection.value = { kind: 'table', id: copyId }
 }
 
-/** Duplicate (furniture): a copy with the same size, turn and finishes, beside it. */
-function duplicateItem(itemId: string) {
+/** Duplicate (furniture): a copy with the same size, turn and finishes, beside it or at `to` (Alt+drag). */
+function duplicateItem(itemId: string, to?: Point) {
   const item = floor.value?.items.find(candidate => candidate.id === itemId)
   if (!item) return
   const id = newLayoutId('item')
-  const at = besideOf(item, item.width, item.depth)
+  const at = to ?? besideOf(item, item.width, item.depth)
   changeFloor(target => target.items.push({ ...structuredClone(toRaw(item)), id, ...at }))
   selection.value = { kind: 'item', id }
 }
@@ -733,7 +743,7 @@ function onLibraryMove(event: PointerEvent) {
   if (!libraryDrag.dragging && Math.hypot(event.clientX - libraryDrag.start.x, event.clientY - libraryDrag.start.y) < 6) return
   libraryDrag.dragging = true
   const at = canvas.value?.toPlan(event.clientX, event.clientY, true)
-  const fine = event.shiftKey ? FINE_GRID_CM : GRID_CM
+  const fine = event.ctrlKey || event.metaKey ? FINE_GRID_CM : GRID_CM
   ghost.value = at ? ghostOf(libraryDrag.piece, { x: snap(at.x, fine), y: snap(at.y, fine) }) : null
 }
 
@@ -766,7 +776,156 @@ function onLibraryUp(event: PointerEvent) {
 
 onBeforeUnmount(clearLibraryDrag)
 
+// --- Studio's keys (D278) ---
+
+const shortcutsHelp = overlay.create(ShortcutsHelp)
+
+/**
+ * A dialog, menu or open select is on screen: Studio's keys must not act behind it. One that is
+ * closing (its 100 ms animation, `data-state="closed"`) no longer counts: Delete right after a
+ * menu choice acts on the plan.
+ */
+const somethingOnTop = () => !!document.querySelector(['dialog', 'alertdialog', 'menu', 'listbox'].map(role => `[role="${role}"]:not([data-state="closed"])`).join(', '))
+
+/**
+ * Whether the focused element uses this key itself: typing in a field, or the arrows of the
+ * sidebar's resize handle, a tab list or a radio group. Anything else (the page, the plan, a
+ * button just clicked in a panel) leaves the key to Studio, as Figma does.
+ */
+function focusTakes(event: KeyboardEvent): boolean {
+  const active = document.activeElement as HTMLElement | null
+  if (!active || active === document.body) return false
+  if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable) return true
+  if (event.key.startsWith('Arrow')) return !!active.closest('[role="separator"], [role="tablist"], [role="radiogroup"], [role="slider"], [role="menubar"], [role="listbox"]')
+  // Space and Enter press a focused button; Escape and the letters don't.
+  if (event.key === 'Enter' || event.key === ' ') return active.tagName === 'BUTTON' || active.tagName === 'A' || active.getAttribute('role') === 'button'
+  return false
+}
+
+/** Alt+drag (D278): a copy where the drag ended; a table's copy asks which table it is, as Duplicate look does. */
+function copyTo(target: PlanSelection, at: Point) {
+  if (target.kind === 'item') duplicateItem(target.id, at)
+  else if (target.kind === 'table') void duplicateLook(target.id, at)
+}
+
+/** Ctrl/⌘+D: a piece's copy beside it; a table asks which table the copy is (its QR stays its own). */
+function duplicateSelection() {
+  const target = selection.value
+  if (target?.kind === 'item') duplicateItem(target.id)
+  else if (target?.kind === 'table') void duplicateLook(target.id)
+}
+
+/** Every key pressed in 2D, outside a field: the plan's own keys first, then the tools and zoom. */
+function onStudioKey(event: KeyboardEvent) {
+  if (!props.active || view.value !== 'design' || event.defaultPrevented || event.isComposing || somethingOnTop() || focusTakes(event)) return
+  if (lengthEdit.value) return
+  const plan = canvas.value
+  const command = event.ctrlKey || event.metaKey
+  if (!command && !event.altKey && plan?.keydown(event)) return
+  const run = (action: () => void) => {
+    event.preventDefault()
+    action()
+  }
+  if (command && !event.altKey) {
+    const key = event.key.toLowerCase()
+    if (key === 'd' && !event.shiftKey) return run(duplicateSelection)
+    if (key === '=' || key === '+') return run(() => plan?.zoom(1))
+    if (key === '-') return run(() => plan?.zoom(-1))
+    return
+  }
+  if (event.altKey) return
+  // Shift with a digit: the code, since Shift+1 types "!" (Figma's zoom keys).
+  if (event.shiftKey && event.code === 'Digit1') return run(() => plan?.fit())
+  if (event.shiftKey && event.code === 'Digit2') return run(() => plan?.zoomToSelection())
+  if (event.shiftKey && event.code === 'Digit0') return run(() => plan?.zoomTo(100))
+  if (event.key === '?') return run(() => void shortcutsHelp.open({ shortcuts: [...STUDIO_SHORTCUTS, ...STUDIO_DRAG_KEYS] }))
+  if (event.key === 'Escape') {
+    if (pending.value) return run(() => pending.value = null)
+    if (mode.value !== 'select') return run(finishTool)
+    return
+  }
+  if (event.shiftKey) return
+  const tools: Record<string, PlanMode> = { v: 'select', h: 'hand', p: 'outline', w: 'wall' }
+  const tool = tools[event.key.toLowerCase()]
+  if (tool && floor.value) return run(() => (tool === mode.value ? undefined : startTool(tool)))
+}
+useEventListener('keydown', onStudioKey)
+
+// --- The right-click menu (D278) ---
+
+/**
+ * What a right-click offers for the selection (the plan picks what's under the pointer first): the
+ * quick bar's actions with their keys, so a mouse needs no bar over the plan. Empty plan: zoom and
+ * the drawing tools.
+ */
+const contextItems = computed((): ContextMenuItem[][] => {
+  const target = selection.value
+  const plan = canvas.value
+  const zoomItems: ContextMenuItem[] = [
+    { label: 'Zoom to selection', icon: 'i-lucide-scan-search', kbds: ['shift', '2'], onSelect: () => plan?.zoomToSelection() },
+  ]
+  if (selectedPlacement.value) {
+    const tableId = selectedPlacement.value.tableId
+    return [[
+      { label: 'Rotate 90°', icon: 'i-lucide-rotate-cw', kbds: ['shift', 'r'], onSelect: () => turn(90) },
+      { label: 'Duplicate look', icon: 'i-lucide-copy', kbds: ['meta', 'd'], onSelect: () => void duplicateLook(tableId) },
+    ], [
+      { label: 'Edit table', icon: 'i-lucide-pencil', onSelect: editTable },
+      { label: 'View QR', icon: 'i-lucide-qr-code', onSelect: viewQr },
+    ], zoomItems, [
+      { label: 'Remove from map', icon: 'i-lucide-map-pin-off', kbds: ['delete'], onSelect: () => remove({ kind: 'table', id: tableId }) },
+    ]]
+  }
+  if (selectedItem.value) {
+    const itemId = selectedItem.value.id
+    return [[
+      { label: 'Rotate 90°', icon: 'i-lucide-rotate-cw', kbds: ['shift', 'r'], onSelect: () => turn(90) },
+      { label: 'Duplicate', icon: 'i-lucide-copy', kbds: ['meta', 'd'], onSelect: () => duplicateItem(itemId) },
+    ], zoomItems, [
+      { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', kbds: ['delete'], onSelect: () => remove({ kind: 'item', id: itemId }) },
+    ]]
+  }
+  if (selectedWall.value && target) {
+    return [zoomItems, [{ label: 'Delete wall', icon: 'i-lucide-trash-2', color: 'error', kbds: ['delete'], onSelect: () => remove(target) }]]
+  }
+  const current = floor.value
+  const index = selectedEdge.value
+  if (current && index !== undefined && target) {
+    const kind = current.edges[index]?.kind
+    const shape = shapeOf(current)
+    return [
+      EDGE_KINDS.map(option => ({
+        label: option.label,
+        type: 'checkbox' as const,
+        checked: kind === option.value,
+        onSelect: () => updateShape(setEdgeKind(shapeOf(current), index, option.value)),
+      })),
+      kind === 'open'
+        ? []
+        : [
+            { label: kind === 'railing' ? 'Add a gate' : 'Add a door', icon: 'i-lucide-door-open', disabled: !openingFits(shape, index, 'door'), onSelect: () => updateShape(addOpening(shapeOf(current), index, 'door', newLayoutId('door'))) },
+            ...(kind === 'wall' ? [{ label: 'Add a window', icon: 'i-lucide-app-window', disabled: !openingFits(shape, index, 'window'), onSelect: () => updateShape(addOpening(shapeOf(current), index, 'window', newLayoutId('window'))) }] : []),
+          ],
+      kind === 'open' ? [] : [{ label: kind === 'railing' ? 'Remove railing' : 'Remove wall', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => remove(target) }],
+    ].filter(group => group.length)
+  }
+  return [[
+    { label: 'Fit to screen', icon: 'i-lucide-scan', kbds: ['shift', '1'], onSelect: () => plan?.fit() },
+    { label: 'Zoom to 100%', icon: 'i-lucide-search', kbds: ['shift', '0'], onSelect: () => plan?.zoomTo(100) },
+  ], [
+    { label: 'Draw outline', icon: 'i-lucide-pen-tool', kbds: ['p'], onSelect: () => startTool('outline') },
+    { label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'], onSelect: () => startTool('wall') },
+  ]]
+})
+
 // --- Quick actions beside the selection (2B) ---
+
+/**
+ * The quick bar is for fingers (D278): on a touch screen, or where Properties is a sheet. A mouse
+ * gets the right-click menu and Properties instead, so nothing covers the plan.
+ */
+const coarsePointer = useMediaQuery('(pointer: coarse)')
+const showQuickBar = computed(() => coarsePointer.value || !isExpanded.value)
 
 const planArea = useTemplateRef<HTMLElement>('planArea')
 const quickBar = useTemplateRef<HTMLElement>('quickBar')
@@ -836,10 +995,13 @@ function chooseStarter(starter: Starter) {
   props.editor.begin(starter.layout())
 }
 
-const drawTools = [
-  { label: 'Draw outline', icon: 'i-lucide-pen-tool', onSelect: () => startTool('outline') },
-  { label: 'Draw wall', icon: 'i-lucide-brick-wall', onSelect: () => startTool('wall') },
-]
+/** The toolbar's tools with their keys (D278: Draw outline and Draw wall are tools of their own). */
+const planTools = [
+  { mode: 'select', label: 'Select', icon: 'i-lucide-mouse-pointer-2', kbds: ['v'] },
+  { mode: 'hand', label: 'Hand', icon: 'i-lucide-hand', kbds: ['h'] },
+  { mode: 'outline', label: 'Draw outline', icon: 'i-lucide-pen-tool', kbds: ['p'] },
+  { mode: 'wall', label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'] },
+] as const satisfies readonly { mode: PlanMode, label: string, icon: string, kbds: readonly string[] }[]
 const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall')
 const pendingLabel = computed(() => {
   const piece = pending.value
@@ -1951,28 +2113,38 @@ const pendingLabel = computed(() => {
           aria-label="Floor plan"
           class="relative h-full min-w-0 flex-1 bg-muted"
         >
-          <FloorPlanCanvas
-            ref="canvas"
-            :layout="layout"
-            :floor-id="floor.id"
-            :tables="tables"
-            :looks="looks"
-            :selection="selection"
-            :ghost="ghost"
-            :show-below="showBelow"
-            :mode="mode"
-            :placing="!!pending"
-            @place="placePending"
-            @cancel-place="pending = null"
-            @select="selection = $event"
-            @move="move"
-            @rotate="rotate"
-            @resize="resize"
-            @remove="remove"
-            @shape="updateShape"
-            @add-wall="addWall"
-            @edit-length="editLength"
-          />
+          <UContextMenu
+            :items="contextItems"
+            :disabled="mode !== 'select' || !!pending"
+            :modal="false"
+          >
+            <!-- One element for the menu's trigger: the canvas has several roots (its live regions). -->
+            <div class="size-full">
+              <FloorPlanCanvas
+                ref="canvas"
+                :layout="layout"
+                :floor-id="floor.id"
+                :tables="tables"
+                :looks="looks"
+                :selection="selection"
+                :ghost="ghost"
+                :show-below="showBelow"
+                :mode="mode"
+                :placing="!!pending"
+                @place="placePending"
+                @cancel-place="pending = null"
+                @select="selection = $event"
+                @move="move"
+                @copy="copyTo"
+                @rotate="rotate"
+                @resize="resize"
+                @remove="remove"
+                @shape="updateShape"
+                @add-wall="addWall"
+                @edit-length="editLength"
+              />
+            </div>
+          </UContextMenu>
 
           <!-- Draw outline: the clicked length label becomes a field (3A). -->
           <form
@@ -2004,7 +2176,7 @@ const pendingLabel = computed(() => {
 
           <!-- Quick actions next to the selection (2B): the common moves without the panel. -->
           <div
-            v-if="mode === 'select' && quickBarStyle && (selectedPlacement || selectedItem)"
+            v-if="showQuickBar && mode === 'select' && quickBarStyle && (selectedPlacement || selectedItem)"
             ref="quickBar"
             role="toolbar"
             :aria-label="selectedPlacement ? `${tableLabel(selectedPlacement.tableId) ?? 'Table'} quick actions` : 'Furniture quick actions'"
@@ -2060,7 +2232,7 @@ const pendingLabel = computed(() => {
             </UButton>
           </div>
           <div
-            v-else-if="mode === 'select' && quickBarStyle && selectedWall"
+            v-else-if="showQuickBar && mode === 'select' && quickBarStyle && selectedWall"
             ref="quickBar"
             role="toolbar"
             aria-label="Wall quick actions"
@@ -2079,7 +2251,7 @@ const pendingLabel = computed(() => {
             </UButton>
           </div>
           <div
-            v-else-if="mode === 'select' && quickBarStyle && floor && selectedEdge !== undefined"
+            v-else-if="showQuickBar && mode === 'select' && quickBarStyle && floor && selectedEdge !== undefined"
             ref="quickBar"
             role="toolbar"
             :aria-label="`${names[selectedEdge] ?? 'Edge'} quick actions`"
@@ -2246,48 +2418,31 @@ const pendingLabel = computed(() => {
               :can-undo="draft.canUndo.value"
               :can-redo="draft.canRedo.value"
               @zoom="direction => canvas?.zoom(direction)"
+              @zoom-to="percent => canvas?.zoomTo(percent)"
+              @zoom-to-selection="canvas?.zoomToSelection()"
               @fit="canvas?.fit()"
               @undo="draft.undo()"
               @redo="draft.redo()"
             >
-              <UTooltip text="Select">
-                <UButton
-                  icon="i-lucide-mouse-pointer-2"
-                  :label="isCompact ? undefined : 'Select'"
-                  aria-label="Select"
-                  :variant="mode === 'select' ? 'soft' : 'ghost'"
-                  :color="mode === 'select' ? 'primary' : 'neutral'"
-                  :aria-pressed="mode === 'select'"
-                  :ui="{ label: 'max-xl:sr-only' }"
-                  @click="startTool('select')"
-                />
-              </UTooltip>
-              <UTooltip text="Hand">
-                <UButton
-                  icon="i-lucide-hand"
-                  :label="isCompact ? undefined : 'Hand'"
-                  aria-label="Hand"
-                  :variant="mode === 'hand' ? 'soft' : 'ghost'"
-                  :color="mode === 'hand' ? 'primary' : 'neutral'"
-                  :aria-pressed="mode === 'hand'"
-                  :ui="{ label: 'max-xl:sr-only' }"
-                  @click="startTool('hand')"
-                />
-              </UTooltip>
-              <UDropdownMenu
-                :items="drawTools"
-                :modal="false"
-                :content="{ side: 'top' }"
+              <UTooltip
+                v-for="tool in planTools"
+                :key="tool.mode"
+                :text="tool.label"
+                :kbds="[...tool.kbds]"
               >
                 <UButton
-                  icon="i-lucide-pen-tool"
-                  :label="isCompact ? undefined : 'Draw'"
-                  aria-label="Draw"
-                  :color="drawing ? 'primary' : 'neutral'"
-                  :variant="drawing ? 'soft' : 'ghost'"
+                  :icon="tool.icon"
+                  :label="isCompact ? undefined : tool.label"
+                  :aria-label="tool.label"
+                  :aria-keyshortcuts="tool.kbds[0]!.toUpperCase()"
+                  :variant="mode === tool.mode ? 'soft' : 'ghost'"
+                  :color="mode === tool.mode ? 'primary' : 'neutral'"
+                  :aria-pressed="mode === tool.mode"
+                  :disabled="tool.mode !== 'select' && tool.mode !== 'hand' && !floor"
                   :ui="{ label: 'max-xl:sr-only' }"
+                  @click="tool.mode === mode ? undefined : startTool(tool.mode)"
                 />
-              </UDropdownMenu>
+              </UTooltip>
             </StudioToolbar>
           </div>
           <div
