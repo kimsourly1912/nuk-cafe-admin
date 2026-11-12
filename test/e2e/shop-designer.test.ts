@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Page } from 'playwright-core'
+import type { Locator, Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { afterEach, describe, expect, inject, it } from 'vitest'
 import type { DiningTable } from '#shared/contracts/branches'
@@ -58,7 +58,7 @@ const unplaced = (page: Page, label: string) => page.getByTestId(`unplaced-${lab
 const saveButton = (page: Page) => page.getByRole('button', { name: 'Save layout' })
 const studioPanels = (page: Page) => page.getByRole('navigation', { name: 'Studio panels' })
 /** Opens a panel of the sidebar; below 1024 px the sidebar opens over the plan first (D277). */
-async function showPanel(page: Page, name: 'Floors' | 'Tables' | 'Assets') {
+async function showPanel(page: Page, name: 'Floors' | 'Tables' | 'Assets' | 'Manage looks') {
   const open = page.getByRole('button', { name: 'Open Studio sidebar' })
   await studioPanels(page).or(open).first().waitFor()
   if (!(await studioPanels(page).isVisible())) await open.click()
@@ -69,6 +69,12 @@ async function placeTable(page: Page, label: string) {
   await showPanel(page, 'Tables')
   await unplaced(page, label).getByRole('button', { name: 'Place on map' }).click()
   await page.getByRole('button', { name: 'Place at center' }).click()
+}
+
+/** Assets' create menu (D277): New look, then New table look. */
+async function newTableLook(library: Locator) {
+  await library.getByRole('button', { name: 'New look' }).click()
+  await library.page().getByRole('menuitem', { name: 'New table look' }).click()
 }
 
 async function drawWith(page: Page, name: 'Draw wall' | 'Draw outline') {
@@ -198,13 +204,16 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('floor-tab-Ground').waitFor()
 
     await page.getByRole('button', { name: 'Add floor' }).click()
-    await expect.poll(() => page.getByTestId('floor-tab-Second').getAttribute('aria-pressed')).toBe('true')
-    // The floor menu (9B): rename, roof.
+    // Add floor (D277): the new floor is shown with its name ready to type; Enter keeps it.
+    const floorName = page.getByRole('textbox', { name: 'Floor name' })
+    await expect.poll(() => floorName.evaluate(input => input === document.activeElement)).toBe(true)
+    expect(await floorName.inputValue()).toBe('Second')
+    await floorName.fill('Loft')
+    await floorName.press('Enter')
+    await expect.poll(() => page.getByTestId('floor-tab-Loft').getAttribute('aria-pressed')).toBe('true')
+    // The floor menu (9B): roof.
     await page.getByTestId('floor-menu').click()
     const menu = page.getByTestId('floor-menu-panel')
-    await menu.getByLabel('Rename floor').fill('Loft')
-    await menu.getByLabel('Rename floor').press('Enter')
-    await page.getByTestId('floor-tab-Loft').waitFor()
     await menu.getByRole('switch', { name: 'Roof over this floor' }).click()
     await page.keyboard.press('Escape')
     await expect.poll(() => menu.count()).toBe(0)
@@ -527,6 +536,48 @@ describe('the shop designer on saved layouts', () => {
     await shot(page, 'studio-2d')
   })
 
+  it('Studio panels (D277): Find, a new floor named in place, and Manage looks without losing the draft', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').click()
+    await plan(page).press('ArrowRight')
+    await page.getByTestId('layout-unsaved').waitFor()
+
+    // Find: the floors and the named pieces on the floor shown.
+    await showPanel(page, 'Floors')
+    const floorsPanel = page.getByRole('complementary', { name: 'Floors' })
+    const find = floorsPanel.getByRole('textbox', { name: 'Find floors and pieces' })
+    await floorsPanel.getByRole('button', { name: 'Find' }).click()
+    await find.fill('nothing like this')
+    await floorsPanel.getByText('No floors or pieces match.').waitFor()
+    await floorsPanel.getByRole('button', { name: 'Close Find' }).click()
+    await page.getByTestId('floor-tab-Ground').waitFor()
+    // Choosing a result selects it and closes Find.
+    await floorsPanel.getByRole('button', { name: 'Find' }).click()
+    await find.fill('stair')
+    await floorsPanel.getByRole('button', { name: 'Stairs' }).click()
+    await page.getByRole('complementary', { name: 'Properties' }).getByText('Stairs', { exact: true }).first().waitFor()
+    await page.getByTestId('floor-tab-Ground').waitFor()
+
+    // Escape keeps the new floor's default name.
+    await floorsPanel.getByRole('button', { name: 'Add floor' }).click()
+    const floorName = floorsPanel.getByRole('textbox', { name: 'Floor name' })
+    const defaultName = await floorName.inputValue()
+    await floorName.press('Escape')
+    await page.getByTestId(`floor-tab-${defaultName}`).waitFor()
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => page.getByTestId(`floor-tab-${defaultName}`).count()).toBe(0)
+
+    // Manage looks opens inside Studio; the unsaved move is still there.
+    await showPanel(page, 'Manage looks')
+    const looksPanel = page.getByRole('complementary', { name: 'Manage looks' })
+    await looksPanel.getByTestId('looks-tables').waitFor()
+    await looksPanel.getByRole('button', { name: 'New look' }).waitFor()
+    await shot(page, 'studio-manage-looks')
+    await page.getByTestId('layout-unsaved').waitFor()
+    expect(new URL(page.url()).pathname).toContain('/admin/studio/')
+  })
+
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {
     const page = await signedIn(390, 844)
     await openDesign(page)
@@ -552,7 +603,7 @@ describe('the shop designer on saved layouts', () => {
     const form = () => page.getByRole('dialog', { name: /look$/i })
 
     // New look: a name is required; a rectangle on four legs in walnut.
-    await library.getByRole('button', { name: 'New look' }).click()
+    await newTableLook(library)
     await form().getByRole('button', { name: 'Save look' }).click()
     await form().getByText('Name is required').waitFor()
     await form().getByLabel('Name').fill('Walnut window')
@@ -566,7 +617,7 @@ describe('the shop designer on saved layouts', () => {
     await library.getByTestId('look-custom-Walnut window').waitFor()
 
     // The same name again is refused on its field.
-    await library.getByRole('button', { name: 'New look' }).click()
+    await newTableLook(library)
     await form().getByLabel('Name').fill('walnut WINDOW')
     await form().getByRole('button', { name: 'Save look' }).click()
     await form().getByText('Already used by another look').waitFor()
@@ -615,7 +666,7 @@ describe('the shop designer on saved layouts', () => {
     const looks = () => page.evaluate(path => fetch(path).then(response => response.json()), `/api/c/${lab.slug}/admin/furniture-looks`) as Promise<CustomLook[]>
 
     // New look with a photo: framed 4:3 in the crop dialog, uploaded before the look is saved.
-    await library.getByRole('button', { name: 'New look' }).click()
+    await newTableLook(library)
     await form().getByLabel('Name').fill('Corner sofa')
     const uploaded = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/admin/media'))
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), form().getByRole('button', { name: 'Upload photo' }).click()])
@@ -1016,7 +1067,10 @@ describe('the shop designer on saved layouts', () => {
     for (const heading of ['Lounge seating', 'Bar and service', 'Decor and lighting', 'Outdoor']) {
       await library.getByRole('heading', { name: heading }).waitFor()
     }
-    await library.getByRole('button', { name: 'New lounge look' }).waitFor()
+    // One create menu beside the search (D277) offers every kind of look.
+    await library.getByRole('button', { name: 'New look' }).click()
+    await page.getByRole('menuitem', { name: 'New lounge look' }).waitFor()
+    await page.keyboard.press('Escape')
     const kinds = ['armchair', 'coffee-station', 'pendant-lamp', 'parasol'] as const
     for (const kind of kinds) {
       await page.getByTestId(`catalog-${kind}`).scrollIntoViewIfNeeded()

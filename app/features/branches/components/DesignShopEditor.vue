@@ -8,6 +8,7 @@
  * on touch, with a keyboard and in the e2e tests.
  */
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
 import { edgeLength, heightRangeMessage, ITEM_HEIGHTS, isFigureKind, isItemLookKind, LAYOUT_MAX_EXTENT_CM } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
@@ -29,6 +30,7 @@ import FloorPlanCanvas from './FloorPlanCanvas.vue'
 import LayoutStarterPicker from './LayoutStarterPicker.vue'
 import LookFormModal from './LookFormModal.vue'
 import PickTableModal from './PickTableModal.vue'
+import StudioLooksPanel from './StudioLooksPanel.vue'
 import StudioToolbar from './StudioToolbar.vue'
 import TableFormModal from './TableFormModal.vue'
 import TableQrModal from './TableQrModal.vue'
@@ -70,6 +72,7 @@ const panels = [
   { value: 'floors', label: 'Floors', icon: 'i-lucide-layers' },
   { value: 'tables', label: 'Tables', icon: 'i-lucide-table-2' },
   { value: 'assets', label: 'Assets', icon: 'i-lucide-box' },
+  { value: 'looks', label: 'Manage looks', icon: 'i-lucide-swatch-book' },
 ] as const
 type Panel = typeof panels[number]['value']
 const panel = ref<Panel>('floors')
@@ -80,7 +83,6 @@ const detailsOpen = computed({
   set: open => sheet.value = open ? 'properties' : null,
 })
 const search = ref('')
-const assetTab = ref<'objects' | 'finishes'>('objects')
 const panelTitle = computed(() => panels.find(option => option.value === panel.value)?.label ?? 'Floors')
 const matches = (label: string) => label.toLowerCase().includes(search.value.trim().toLowerCase())
 
@@ -88,7 +90,41 @@ function showPanel(next: Panel) {
   if (next === panel.value) return
   panel.value = next
   search.value = ''
+  stopFind()
 }
+
+// --- Find in Floors (D277): the floors, and the named pieces on the floor shown ---
+
+const finding = ref(false)
+const findQuery = ref('')
+const findMatches = (label: string) => label.toLowerCase().includes(findQuery.value.trim().toLowerCase())
+const pieceLabel = (item: LayoutItem) => findItemLook(itemLooks.value, item.lookId)?.name ?? ITEM_SPECS[item.kind].label
+const foundFloors = computed(() => floors.value.filter(candidate => findMatches(candidate.name)))
+const foundPieces = computed(() => {
+  const current = floor.value
+  if (!current || !findQuery.value.trim()) return []
+  return [
+    ...tablesOn(current.id).map(placement => ({ selection: { kind: 'table' as const, id: placement.tableId }, label: tableLabel(placement.tableId) ?? 'Unavailable table', icon: 'i-lucide-table-2' })),
+    ...current.items.map(item => ({ selection: { kind: 'item' as const, id: item.id }, label: pieceLabel(item), icon: ITEM_ICONS[item.kind] })),
+    ...current.walls.map((wall, index) => ({ selection: { kind: 'wall' as const, id: wall.id }, label: `Interior wall ${index + 1}`, icon: 'i-lucide-brick-wall' })),
+  ].filter(piece => findMatches(piece.label))
+})
+
+function startFind() {
+  finding.value = true
+  findQuery.value = ''
+}
+
+function stopFind() {
+  finding.value = false
+  findQuery.value = ''
+}
+
+/** The create menu beside the asset search (D277): one entry per kind of look. */
+const createItems = computed<DropdownMenuItem[]>(() => [
+  { label: 'New table look', icon: 'i-lucide-table-2', onSelect: () => void newLook() },
+  ...LOOK_CATEGORIES.map(category => ({ label: `New ${category.noun} look`, icon: 'i-lucide-armchair', onSelect: () => void newItemLook({ category: category.key }) })),
+])
 
 watch(() => props.active, (active) => {
   if (!active) {
@@ -99,12 +135,12 @@ watch(() => props.active, (active) => {
   }
 })
 const confirm = useConfirm()
-const tenantPath = useTenantPath()
 
 const [DefineLibrary, ReuseLibrary] = createReusableTemplate()
 const [DefineDetails, ReuseDetails] = createReusableTemplate()
 const [DefineMovePad, ReuseMovePad] = createReusableTemplate()
 const [DefineRail, ReuseRail] = createReusableTemplate<{ vertical: boolean }>()
+const [DefinePanelActions, ReusePanelActions] = createReusableTemplate()
 
 function selectPlaced(target: PlanSelection, floorId: string) {
   if (floor.value?.id !== floorId) selectFloor(floorId)
@@ -158,7 +194,6 @@ const ITEM_ICONS: Record<ItemKind, string> = {
 }
 const LOOK_ICONS = { round: 'i-lucide-circle', rect: 'i-lucide-rectangle-horizontal', booth: 'i-lucide-sofa' } as const
 const catalog = CATEGORIES.map(category => ({ ...category, specs: Object.values(ITEM_SPECS).filter(spec => spec.category === category.key) }))
-const isLookCategory = (key: ItemCategory): key is LookCategory => LOOK_CATEGORIES.some(category => category.key === key)
 /** The cafe's own chair and fixture looks (step 3d), by category: shown after the built-in pieces. */
 const itemLooks = computed(() => props.editor.itemLooks.value)
 const itemLooksIn = (category: ItemCategory) => itemLooks.value.filter(look => ITEM_SPECS[look.kind].category === category)
@@ -359,9 +394,27 @@ function turn(degrees: number) {
 
 function addFloor() {
   if (!canAddFloor(layout.value)) return
+  stopFind()
   const created = newFloor(layout.value)
   draft.change(next => void next.floors.push(created))
   selectFloor(created.id)
+  renaming.value = { id: created.id, name: created.name }
+}
+
+/** A new floor's name, typed in its row: Enter or leaving the field keeps it, Escape the default. */
+const renaming = ref<{ id: string, name: string } | null>(null)
+
+function commitRename(id: string) {
+  const edit = renaming.value
+  if (edit?.id !== id) return
+  renaming.value = null
+  const name = edit.name.trim()
+  const target = floors.value.find(candidate => candidate.id === id)
+  if (!name || !target || name === target.name) return
+  draft.change((next) => {
+    const renamed = next.floors.find(candidate => candidate.id === id)
+    if (renamed) renamed.name = name
+  })
 }
 
 const floorName = ref('')
@@ -510,7 +563,6 @@ function duplicateItem(itemId: string) {
 const itemLookModal = overlay.create(ItemLookFormModal)
 const isCustomItem = (look: ItemLook): look is CustomItemLook => 'version' in look
 const selectedItemLook = computed(() => (selectedItem.value ? findItemLook(itemLooks.value, selectedItem.value.lookId) : undefined))
-const finishSlots = computed(() => selectedItem.value && !selectedItemLook.value ? ITEM_SPECS[selectedItem.value.kind].slots : [])
 /** The piece's look choices: its own finishes, or one of the cafe's looks of its kind. */
 const OWN_FINISHES = 'own'
 const itemLookItems = computed(() => {
@@ -763,15 +815,85 @@ const pendingLabel = computed(() => {
   />
   <!-- The library (lg and up beside the plan; below, in a slide-over). -->
   <DefineLibrary>
+    <!-- Find (D277): the floors and the named pieces on the floor shown, in place of the list. -->
     <div
-      v-if="panel === 'floors'"
+      v-if="panel === 'floors' && finding"
+      class="flex flex-col gap-3"
+    >
+      <div class="flex items-center gap-2">
+        <UInput
+          v-model="findQuery"
+          icon="i-lucide-search"
+          placeholder="Find floors and pieces…"
+          aria-label="Find floors and pieces"
+          autofocus
+          class="min-w-0 flex-1"
+          @keydown.esc.stop.prevent="stopFind()"
+        />
+        <UTooltip text="Close Find">
+          <UButton
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            aria-label="Close Find"
+            @click="stopFind()"
+          />
+        </UTooltip>
+      </div>
+      <p
+        v-if="!foundFloors.length && !foundPieces.length"
+        class="text-sm text-muted"
+      >
+        No floors or pieces match.
+      </p>
+      <UButton
+        v-for="candidate in foundFloors"
+        :key="candidate.id"
+        :label="candidate.name"
+        icon="i-lucide-layers"
+        :color="candidate.id === floor?.id ? 'primary' : 'neutral'"
+        variant="ghost"
+        class="justify-start"
+        @click="selectFloor(candidate.id); stopFind(); sheet = null"
+      />
+      <template v-if="foundPieces.length">
+        <h3 class="text-xs font-semibold tracking-wide text-muted uppercase">
+          On {{ floor?.name }}
+        </h3>
+        <UButton
+          v-for="piece in foundPieces"
+          :key="piece.selection.id"
+          :label="piece.label"
+          :icon="piece.icon"
+          color="neutral"
+          variant="ghost"
+          class="justify-start"
+          @click="floor && selectPlaced(piece.selection, floor.id); stopFind()"
+        />
+      </template>
+    </div>
+    <div
+      v-else-if="panel === 'floors'"
       class="flex flex-col gap-2"
     >
       <div
         v-for="candidate in floors"
         :key="candidate.id"
       >
+        <UInput
+          v-if="renaming?.id === candidate.id"
+          v-model="renaming.name"
+          :maxlength="30"
+          aria-label="Floor name"
+          autofocus
+          class="w-full"
+          :data-testid="`floor-name-${candidate.name}`"
+          @keydown.enter.prevent="commitRename(candidate.id)"
+          @keydown.esc.stop.prevent="renaming = null"
+          @blur="commitRename(candidate.id)"
+        />
         <UButton
+          v-else
           :label="candidate.name"
           :color="candidate.id === floor?.id ? 'primary' : 'neutral'"
           :variant="candidate.id === floor?.id ? 'soft' : 'ghost'"
@@ -783,7 +905,7 @@ const pendingLabel = computed(() => {
           @click="selectFloor(candidate.id); sheet = null"
         >
           <template #trailing>
-            <span class="ml-auto text-xs text-muted">{{ tablesOn(candidate.id).length }} tables</span>
+            <span class="ml-auto text-xs text-muted">{{ tablesOn(candidate.id).length }} {{ tablesOn(candidate.id).length === 1 ? 'table' : 'tables' }}</span>
           </template>
         </UButton>
         <div
@@ -802,7 +924,7 @@ const pendingLabel = computed(() => {
           <UButton
             v-for="item in candidate.items"
             :key="item.id"
-            :label="ITEM_SPECS[item.kind].label"
+            :label="pieceLabel(item)"
             :icon="ITEM_ICONS[item.kind]"
             :color="selection?.kind === 'item' && selection.id === item.id ? 'primary' : 'neutral'"
             variant="ghost"
@@ -819,40 +941,33 @@ const pendingLabel = computed(() => {
           />
         </div>
       </div>
-      <UButton
-        label="Add floor"
-        icon="i-lucide-plus"
-        color="neutral"
-        variant="ghost"
-        :disabled="!canAddFloor(layout)"
-        @click="addFloor(); sheet = null"
-      />
     </div>
+    <StudioLooksPanel v-else-if="panel === 'looks'" />
     <div
       v-else
       class="flex flex-col gap-4"
     >
-      <SearchInput
-        v-model="search"
-        :placeholder="panel === 'tables' ? 'Search tables…' : 'Search assets…'"
-      />
-      <UFieldGroup
-        v-if="panel === 'assets'"
-        aria-label="Asset types"
-      >
-        <UButton
-          label="Objects"
-          :variant="assetTab === 'objects' ? 'soft' : 'ghost'"
-          :aria-pressed="assetTab === 'objects'"
-          @click="assetTab = 'objects'; search = ''"
+      <div class="flex items-center gap-2">
+        <SearchInput
+          v-model="search"
+          :placeholder="panel === 'tables' ? 'Search tables…' : 'Search assets…'"
+          class="min-w-0 flex-1"
         />
-        <UButton
-          label="Finishes"
-          :variant="assetTab === 'finishes' ? 'soft' : 'ghost'"
-          :aria-pressed="assetTab === 'finishes'"
-          @click="assetTab = 'finishes'; search = ''"
-        />
-      </UFieldGroup>
+        <UDropdownMenu
+          v-if="panel === 'assets'"
+          :items="createItems"
+          :content="{ align: 'end' }"
+        >
+          <UTooltip text="New look">
+            <UButton
+              icon="i-lucide-plus"
+              color="neutral"
+              variant="outline"
+              aria-label="New look"
+            />
+          </UTooltip>
+        </UDropdownMenu>
+      </div>
       <section
         v-if="panel === 'tables'"
         class="flex flex-col gap-2"
@@ -942,44 +1057,7 @@ const pendingLabel = computed(() => {
       </section>
 
       <section
-        v-if="panel === 'assets' && assetTab === 'finishes'"
-        class="flex flex-col gap-3"
-      >
-        <p
-          v-if="!finishSlots.length"
-          class="text-sm text-muted"
-        >
-          Select a piece with editable finishes to apply one here.
-        </p>
-        <div
-          v-for="slot in finishSlots"
-          :key="slot.key"
-          class="flex flex-col gap-2"
-        >
-          <h2 class="text-sm font-semibold text-highlighted">
-            {{ slot.label }}
-          </h2>
-          <UButton
-            v-for="finish in slot.options.filter(option => matches(swatch(option).label))"
-            :key="finish"
-            :label="swatch(finish).label"
-            color="neutral"
-            variant="outline"
-            :aria-pressed="itemFinish(selectedItem!.kind, selectedItem!.finishes, slot.key) === finish"
-            @click="updateItem(selectedItem!.id, { finishes: { ...selectedItem!.finishes, [slot.key]: finish } })"
-          >
-            <template #leading>
-              <span
-                class="size-4 rounded-full border border-default"
-                :style="{ background: swatch(finish).color }"
-              />
-            </template>
-          </UButton>
-        </div>
-      </section>
-
-      <section
-        v-if="panel === 'assets' && assetTab === 'objects' && (!search || looks.some(look => matches(look.name)))"
+        v-if="panel === 'assets' && (!search || looks.some(look => matches(look.name)))"
         class="flex flex-col gap-2"
       >
         <h2 class="text-xs font-semibold tracking-wide text-muted uppercase">
@@ -1028,19 +1106,10 @@ const pendingLabel = computed(() => {
             />
           </div>
         </div>
-        <UButton
-          label="New look"
-          icon="i-lucide-plus"
-          color="neutral"
-          variant="outline"
-          size="sm"
-          class="self-start"
-          @click="newLook()"
-        />
       </section>
 
       <section
-        v-for="category in (panel === 'assets' && assetTab === 'objects' ? catalog.filter(category => category.specs.some(spec => matches(spec.label)) || itemLooksIn(category.key).some(look => matches(look.name))) : [])"
+        v-for="category in (panel === 'assets' ? catalog.filter(category => category.specs.some(spec => matches(spec.label)) || itemLooksIn(category.key).some(look => matches(look.name))) : [])"
         :key="category.key"
         class="flex flex-col gap-2"
       >
@@ -1117,27 +1186,13 @@ const pendingLabel = computed(() => {
             />
           </div>
         </div>
-        <UButton
-          v-if="isLookCategory(category.key)"
-          :label="`New ${category.noun} look`"
-          icon="i-lucide-plus"
-          color="neutral"
-          variant="outline"
-          size="sm"
-          class="self-start"
-          @click="newItemLook({ category: category.key })"
-        />
       </section>
-      <UButton
-        v-if="panel === 'assets'"
-        label="Manage looks"
-        icon="i-lucide-swatch-book"
-        color="neutral"
-        variant="link"
-        size="sm"
-        class="self-start px-0"
-        :to="tenantPath('/admin/branches/looks')"
-      />
+      <p
+        v-if="panel === 'assets' && search && !looks.some(look => matches(look.name)) && !catalog.some(category => category.specs.some(spec => matches(spec.label)) || itemLooksIn(category.key).some(look => matches(look.name)))"
+        class="text-sm text-muted"
+      >
+        No assets match “{{ search.trim() }}”.
+      </p>
     </div>
   </DefineLibrary>
 
@@ -1666,11 +1721,38 @@ const pendingLabel = computed(() => {
     />
   </DefineDetails>
 
+  <!-- The open panel's own actions, beside its title (Floors: Find and Add floor). -->
+  <DefinePanelActions>
+    <template v-if="panel === 'floors' && !finding">
+      <UTooltip text="Find">
+        <UButton
+          icon="i-lucide-search"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          aria-label="Find"
+          @click="startFind()"
+        />
+      </UTooltip>
+      <UTooltip :text="canAddFloor(layout) ? 'Add floor' : 'This layout has the most floors it can have'">
+        <UButton
+          icon="i-lucide-plus"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          aria-label="Add floor"
+          :disabled="!canAddFloor(layout)"
+          @click="addFloor()"
+        />
+      </UTooltip>
+    </template>
+  </DefinePanelActions>
+
   <!-- The panel rail: down the sidebar on a wide screen, across the top of the sheet below it. -->
   <DefineRail v-slot="{ vertical }">
     <nav
       aria-label="Studio panels"
-      :class="vertical ? 'flex w-16 shrink-0 flex-col gap-1 border-r border-default p-1' : 'grid grid-cols-3 gap-1'"
+      :class="vertical ? 'flex w-16 shrink-0 flex-col gap-1 border-r border-default p-1' : 'grid grid-cols-4 gap-1'"
     >
       <UButton
         v-for="option in panels"
@@ -1682,7 +1764,7 @@ const pendingLabel = computed(() => {
         :aria-pressed="option.value === panel"
         size="sm"
         class="flex-col gap-1"
-        :ui="{ label: 'text-xs', leadingIcon: 'size-4' }"
+        :ui="{ label: 'text-xs text-center whitespace-normal', leadingIcon: 'size-4' }"
         @click="showPanel(option.value)"
       />
     </nav>
@@ -1746,9 +1828,12 @@ const pendingLabel = computed(() => {
           :aria-label="panelTitle"
           class="min-w-0 flex-1 overflow-y-auto p-3"
         >
-          <h2 class="mb-3 border-b border-default pb-3 text-sm font-semibold text-highlighted">
-            {{ panelTitle }}
-          </h2>
+          <div class="mb-3 flex min-h-8 items-center gap-1 border-b border-default pb-3">
+            <h2 class="min-w-0 flex-1 text-sm font-semibold text-highlighted">
+              {{ panelTitle }}
+            </h2>
+            <ReusePanelActions />
+          </div>
           <ReuseLibrary />
         </aside>
       </div>
@@ -1770,6 +1855,9 @@ const pendingLabel = computed(() => {
             :collapsible="false"
           />
           <ReuseRail :vertical="false" />
+          <div class="flex justify-end gap-1 empty:hidden">
+            <ReusePanelActions />
+          </div>
           <ReuseLibrary />
         </div>
       </template>
@@ -1792,6 +1880,9 @@ const pendingLabel = computed(() => {
             :collapsible="false"
           />
           <ReuseRail :vertical="false" />
+          <div class="flex justify-end gap-1 empty:hidden">
+            <ReusePanelActions />
+          </div>
           <ReuseLibrary />
         </div>
       </template>
