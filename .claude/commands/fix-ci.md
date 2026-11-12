@@ -60,7 +60,7 @@ Call the `ci-triage` agent with the path `D`. It returns JSON. If the JSON is in
 
 | Label | Action |
 |---|---|
-| `workflow`, `deploy`, `dependency` | Stop report. `deploy`: a failed staging deploy is fixed before new work (AGENTS.md). `dependency`: an audit or lockfile change goes to the `/upgrade-*` workflow. |
+| `workflow`, `deploy`, `dependency` | Stop report. `deploy`: a failed staging deploy is fixed before new work (AGENTS.md). `dependency`: an audit or lockfile change goes to `/upgrade`. |
 | `flaky` | If not rerun yet: `gh run rerun <id> --failed`, then go to step 9 with that run. Already rerun: treat as `logic`. |
 | `mechanical`, confidence `high` | `ci-fixer-fast` |
 | `mechanical` with lower confidence, or `logic` | `ci-fixer-deep` |

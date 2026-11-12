@@ -20,7 +20,9 @@
       "Bash(pnpm lint:fix)",
       "Bash(pnpm typecheck)",
       "Bash(pnpm test:unit *)",
-      "Bash(pnpm test:e2e *)"
+      "Bash(pnpm test:e2e *)",
+      "Bash(pnpm view *)",
+      "Bash(scripts/upgrade-verify.sh *)"
     ],
     "deny": [
       "Bash(git push *--force*)",
@@ -32,8 +34,10 @@
       "Bash(pnpm deploy:staging *)",
       "Bash(pnpm db:migrate:staging *)",
       "Bash(pnpm db:migrate:production *)",
-      "Bash(wrangler d1 migrations apply *)",
-      "Bash(pnpm exec wrangler d1 migrations apply *)"
+      "Bash(wrangler d1 migrations apply *--remote*)",
+      "Bash(pnpm exec wrangler d1 migrations apply *--remote*)",
+      "Bash(wrangler deploy)",
+      "Bash(pnpm exec wrangler deploy --config *)"
     ]
   }
 }

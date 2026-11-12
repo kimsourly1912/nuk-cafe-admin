@@ -127,7 +127,7 @@ A failed PR check is fixed with `/fix-ci` in Claude Code, on the PR's branch wit
 
 It stops, with the diagnosis and a prepared diff under `node_modules/.cache/ci-fix/<run>/` but nothing applied, when a fix would change a guard (permission, tenant filter, version, idempotency, a `db.batch` guard) or a sensitive path, when the failure is a deploy, an audit or lockfile problem, or the workflow itself, and when its attempts are used up. What a fix may touch, the sensitive paths and the test rules are in `.claude/ci-fix/RULES.md`. It never merges, deploys, migrates, force pushes or pushes to `main`; `.claude/settings.json` also denies those commands, though a deny rule is not a security boundary: branch protection on `main` is.
 
-Needs `gh` signed in (`gh auth status`) and `node_modules` installed. Agent edits may prompt unless the session accepts edits (Shift+Tab, or `claude --permission-mode acceptEdits`).
+Needs `gh` signed in (`gh auth status`) and `node_modules` installed. For a run without prompts, start the session in auto mode (`claude --permission-mode auto`): a classifier reviews each action instead of the owner, and the deny rules still apply. Accept-edits mode still asks before commands.
 
 ## Conventions
 

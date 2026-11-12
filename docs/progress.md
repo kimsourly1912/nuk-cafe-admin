@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### `/upgrade`: one-session automatic upgrades (D277, 2026-11-12)
+
+Branch `claude/upgrade-auto`, based on PR #299 (`/fix-ci`). [Upgrade README](../.claude/upgrade/README.md).
+
+- **Built:** the `/upgrade` command (replaces `/upgrade-0…6` and `/upgrade-resume`), five new agents (`upgrade-researcher`, `upgrade-planner`, `upgrade-executor`, `upgrade-executor-deep`, `upgrade-reviewer`), the hard stops in `.claude/upgrade/RULES.md`, and `scripts/upgrade-smoke.sh`.
+- **Evidence:** `scripts/upgrade-smoke.sh` ran against this branch's `pnpm build:staging` under `wrangler dev --local`: 10/10 checks passed, and with the auth secret left out it failed 4 checks (exit 1); the Worker stops afterwards. `pnpm build:staging`, `wrangler deploy --dry-run` (Total Upload 12,192.81 KiB) and `wrangler check startup` ran with no Cloudflare credentials. Node 22 in the session (the project asks for 24). No app code changed. `/upgrade` itself has not run on a real upgrade yet.
+- **How to verify:** start `claude --permission-mode auto` on `main` and run `/upgrade` on a small patch upgrade; it should end with an open PR and green CI without a question.
+- **Owner follow-up:** read the first run's `decided by Claude` lines in the PR and the `docs/upgrades/` record.
+
 ### `/fix-ci`: automatic PR check fixes (D276, 2026-11-12)
 
 Branch `claude/fix-ci`. [Development guide](guides/development.md#ci-failures-fix-ci-d276).
