@@ -3,6 +3,17 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio canvas like Figma, PR 1 (D278, 2026-11-12)
+
+Branch `claude/practical-heisenberg-lixhue`, after PR #302 (D277). The owner asked for Figma's flow, tools and shortcuts and agreed to the whole plan; small and medium steps share this PR, the drawing tools (PR 2) and multi-select (PR 3) get their own. [Plan](plans/shop-designer.md#studio-canvas-like-figma-d278-planned-2026-11-12).
+
+- **Built:**
+  - **Clicking.** Outline edges' hit lines sit under furniture, inside walls and tables: a piece against a wall is picked, not the wall. Pointing at a table, piece, wall or edge outlines it (mouse and pen; not touch). **Delete** on a selected outline edge makes it **Open** (its doors or gates go with it); it stays selected, so Wall or Railing, or Undo, puts it back.
+  - **Navigation.** The wheel pans (Shift: sideways); Ctrl/⌘+wheel and a trackpad pinch zoom at the pointer; Space+drag and the middle button pan from any tool, without picking or placing. The zoom percentage is absolute (100 % draws 1 cm as 1 px) and opens a menu: zoom in and out, Fit to screen, Zoom to selection, 50/100/200 %.
+  - **Keys.** One keydown listener in `DesignShopEditor` (`onStudioKey`) hands each key to the plan's `keydown` first, so keys work after a click anywhere in Studio: V, H, P (Draw outline), W (Draw wall), arrows 5 cm and Shift+arrows 25 cm, Shift+R 90°, Delete, Ctrl/⌘+D, Shift+1/2/0, Ctrl/⌘ +/−, Esc as a ladder (placement, last corner, wall in progress, picked corner, selection, then the tool), `?` for Studio's list. Skipped while typing, with a dialog or menu open, and for arrows on the resize handle, tabs and radio groups. Draw outline and Draw wall are toolbar buttons with their keys in the tooltips.
+  - **On the canvas.** A right-click picks what's under the pointer and opens its menu (table: Rotate 90°, Duplicate look, Edit table, View QR, Zoom to selection, Remove from map; piece: Rotate, Duplicate, Delete; wall: Delete wall; edge: Wall/Railing/Open, Add a door or gate, Add a window, Remove wall; empty plan: zoom and the drawing tools). The quick bar shows only on a coarse pointer or below 1024 px. Alt+drag leaves a copy (a table's copy asks which table, as Duplicate look does); Shift+drag keeps a straight line; Ctrl/⌘ snaps to 5 cm while dragging and drawing (Shift did before).
+- **Decided while building:** the Shape tool moved to PR 2 (it needs the same contract, server and 3D work as the inside-wall kinds); smart guides and Alt distances wait for multi-select. R does nothing until the Room tool (PR 2) rather than turn now and change later. A plain keydown listener, not `defineShortcuts`: the plan's keys depend on its tool, and Esc must stay a ladder (the app's rule for Esc).
+
 ### Studio editor revision (D277, 2026-11-12)
 
 Branch `ccr-9ecc4383-28ktu8`, after PR #298 (D276). The owner's editor reference, with Claude's recommendations approved: explicit save kept, inspector fields kept, finishes in Properties. Four medium steps in one PR, one commit each.
