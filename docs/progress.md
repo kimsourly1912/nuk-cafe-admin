@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio canvas like Figma, PR 2: drawing (D278, 2026-11-12)
+
+Branch `claude/practical-heisenberg-lixhue`, after PR #303 (PR 1). A large step, its own PR. [Plan → PR 2](plans/shop-designer.md#pr-2-drawing-built-2026-11-12).
+
+- **Built:** inside walls with a kind (wall, railing, half wall, glass), doors and windows, dragged whole or by their ends (joined ends follow), in the contract, plan, 3D, Explore and warnings; **Room** (R) merges or (Alt) cuts a rectangle with `polygon-clipping` 0.15.7, refusing splits and holes with the reason; **Edit points** (P, Enter, double-click) replaces Draw outline, with side drag and double-click to add a corner; **Shape** (S, O) draws a named block or round block with its own height and finish.
+- **How to verify:** on staging, Studio 2D: R and drag beside the building (it grows), Alt and drag inside (refused: a hole), Alt across a corner (a notch); Shift+1; Enter, drag a side, double-click a side, Escape; W, draw a wall, click it, make it Glass and add an Opening, drag its end handle; S and O, draw a block and a circle, name one Stage, set 40 cm; save, reload, and open 3D (glass, the gap, the stage). Undo each step once.
+- **Evidence (local):** `pnpm lint` and `pnpm typecheck` clean. `pnpm test:unit`: 192 files, 2,941 passed, 1 skipped (17 new: walls, rooms, sides, shapes, the server's save and read back). `test/e2e/shop-designer.test.ts` (Playwright's Chromium): 28 passed, one new. Two contract guards removed one at a time (a window in glass, a name on a non-shape), each failing its test, then restored. The full `pnpm test:e2e` was not run (the changes stay in Studio and Explore's district builder); CI runs it.
+- **Not verified:** how the new 3D walls and shapes look on a real phone; Explore walking through an inside door in the browser (unit level only).
+
 ### Studio canvas like Figma, PR 1 (D278, 2026-11-12)
 
 Branch `claude/practical-heisenberg-lixhue`, after PR #302 (D277). The owner asked for Figma's flow, tools and shortcuts and agreed to the whole plan; small and medium steps share this PR, the drawing tools (PR 2) and multi-select (PR 3) get their own. [Plan](plans/shop-designer.md#studio-canvas-like-figma-d278-planned-2026-11-12).

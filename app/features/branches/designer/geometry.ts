@@ -1,4 +1,4 @@
-import type { Edge, Floor, Opening, Placement, Point, TableLook } from '#shared/contracts/shop-layout'
+import type { Edge, Floor, InnerWallKind, Opening, Placement, Point, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, signedArea } from '#shared/contracts/shop-layout'
 
 /**
@@ -15,6 +15,17 @@ export const DOOR_HEIGHT_CM = 210
 export const WINDOW_SILL_CM = 90
 export const WINDOW_TOP_CM = 220
 export const RAILING_HEIGHT_CM = 105
+/** An inside wall's thickness, a glass partition's, and a half wall's height (D278). */
+export const INNER_WALL_THICKNESS_CM = 12
+export const GLASS_THICKNESS_CM = 4
+export const HALF_WALL_HEIGHT_CM = 110
+
+/** How tall an inside wall of this kind stands on a floor this high. */
+export function innerWallHeight(kind: InnerWallKind, floorHeight: number): number {
+  if (kind === 'half') return Math.min(HALF_WALL_HEIGHT_CM, floorHeight)
+  if (kind === 'railing') return Math.min(RAILING_HEIGHT_CM, floorHeight)
+  return floorHeight
+}
 /** How far a chair's centre sits outside its table's edge. */
 const CHAIR_GAP_CM = 26
 /** The room one chair takes along a table's side. */

@@ -1,6 +1,6 @@
 import type { Edge, EdgeKind, Floor, Opening, OpeningKind, Point } from '#shared/contracts/shop-layout'
 import { edgeLength, signedArea } from '#shared/contracts/shop-layout'
-import { snap } from './geometry'
+import { outwardNormal, snap } from './geometry'
 
 /**
  * Editing a floor's outline (D273, frames 3A, 3B): corners, the kind of each edge, and the doors
@@ -53,14 +53,19 @@ export function moveCorner(shape: FloorShape, index: number, to: Point, square =
 }
 
 /**
- * A new corner in the middle of edge `index` (the edge's round handle, frame 3A), snapped to the
- * grid. Both halves keep the edge's kind; each opening goes to the half holding its middle.
+ * A new corner on edge `index`: in its middle (the edge's round handle, frame 3A), or at the point
+ * on the edge nearest `at` (a double-click in Edit points, D278), snapped to the grid. Both halves
+ * keep the edge's kind; each opening goes to the half holding its middle.
  */
-export function insertCorner(shape: FloorShape, index: number): FloorShape {
+export function insertCorner(shape: FloorShape, index: number, at?: Point): FloorShape {
   const count = shape.outline.length
   const from = shape.outline[index]!
   const to = shape.outline[(index + 1) % count]!
-  const middle = { x: snap((from.x + to.x) / 2), y: snap((from.y + to.y) / 2) }
+  const span = Math.hypot(to.x - from.x, to.y - from.y)
+  const share = at && span ? clamp(((at.x - from.x) * (to.x - from.x) + (at.y - from.y) * (to.y - from.y)) / (span * span), 0, 1) : 0.5
+  const middle = { x: snap(from.x + (to.x - from.x) * share), y: snap(from.y + (to.y - from.y) * share) }
+  // On a corner already: nothing to add.
+  if ((middle.x === from.x && middle.y === from.y) || (middle.x === to.x && middle.y === to.y)) return shape
   const outline = [...shape.outline.slice(0, index + 1), middle, ...shape.outline.slice(index + 1)].map(point => ({ ...point }))
   const split = Math.hypot(middle.x - from.x, middle.y - from.y)
   const edge = shape.edges[index]!
@@ -77,6 +82,21 @@ export function insertCorner(shape: FloorShape, index: number): FloorShape {
     ...shape.edges.slice(index + 1).map(cloneEdge),
   ]
   return { outline, edges: fitEdges(outline, edges) }
+}
+
+/**
+ * Moves edge `index` sideways by `distance` (outwards when positive), both its corners together:
+ * Figma's dragging of a shape's side (D278). The edges next to it stretch; right angles stay right.
+ */
+export function moveSide(shape: FloorShape, index: number, distance: number): FloorShape {
+  if (!distance) return shape
+  const count = shape.outline.length
+  const normal = outwardNormal(shape.outline, index)
+  const outline = shape.outline.map(point => ({ ...point }))
+  for (const corner of [index, (index + 1) % count]) {
+    outline[corner] = { x: Math.round(outline[corner]!.x + normal.x * distance), y: Math.round(outline[corner]!.y + normal.y * distance) }
+  }
+  return { outline, edges: fitEdges(outline, shape.edges.map(cloneEdge)) }
 }
 
 /**

@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { Box3, ExtrudeGeometry, Raycaster, Vector3 } from 'three'
 import type { Object3D } from 'three'
 import { describe, expect, it } from 'vitest'
-import { FIGURE_KINDS, FIGURE_SIZES, isFigureKind, ITEM_HEIGHTS, ITEM_KINDS, ITEM_LOOK_KINDS } from '#shared/contracts/shop-layout'
+import * as v from 'valibot'
+import { FIGURE_KINDS, FIGURE_SIZES, isFigureKind, ITEM_HEIGHTS, ITEM_KINDS, ITEM_LOOK_KINDS, SHAPE_HEIGHT, SHAPE_KINDS, itemSchema } from '#shared/contracts/shop-layout'
 import type { FigureKind, ItemLook, LayoutItem } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, BUILT_IN_PHOTO, findLook, ITEM_SPECS, pieceFinishes } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
@@ -177,10 +178,11 @@ describe('chair and fixture looks (step 3d)', () => {
 })
 
 describe('built-in pictures (step 3d)', () => {
-  it('every built-in look, piece (but stairs), person and pet ships its picture, and nothing else is in the folder', () => {
+  it('every built-in look, piece (but stairs and shapes), person and pet ships its picture, and nothing else is in the folder', () => {
     const folder = fileURLToPath(new URL('../../../../public/shop-designer/looks/', import.meta.url))
     const expected = [...BUILT_IN_LOOKS.map(builtIn => builtIn.photo!.url), ...ITEM_KINDS.flatMap(kind => ITEM_SPECS[kind].photo ?? [])]
-    expect(expected).toHaveLength(BUILT_IN_LOOKS.length + ITEM_KINDS.length - 1)
+    // Stairs and the two shapes (D278: drawn, any size and finish) have no picture.
+    expect(expected).toHaveLength(BUILT_IN_LOOKS.length + ITEM_KINDS.length - 1 - SHAPE_KINDS.length)
     expect(readdirSync(folder).map(file => BUILT_IN_PHOTO(file.replace(/\.webp$/, ''))).sort()).toEqual([...expected].sort())
     for (const url of expected) expect(statSync(`${folder}${url.split('/').at(-1)}`).size).toBeLessThan(60_000)
   })
@@ -248,5 +250,26 @@ describe('people and pets (step 3g)', () => {
     expect(pose()).not.toEqual(start)
     idle(0)
     expect(pose()).toEqual(start)
+  })
+})
+
+describe('shapes (D278)', () => {
+  it.each(SHAPE_KINDS)('a %s stands as tall as asked across its range, on its drawn footprint', (kind) => {
+    for (const height of [SHAPE_HEIGHT.min, SHAPE_HEIGHT.default, SHAPE_HEIGHT.max]) {
+      const object = buildItem(context(), { kind, width: 300, depth: kind === 'block-round' ? 300 : 120, height, finishes: { body: 'walnut' } })
+      const box = new Box3().setFromObject(object)
+      expect(Math.abs(box.max.y * 100 - height)).toBeLessThanOrEqual(1)
+      expect(box.min.y).toBeGreaterThanOrEqual(-0.001)
+      expect(Math.abs(sizeOf(object).z * 100 - (kind === 'block-round' ? 300 : 120))).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('takes a name and a height in its range; other pieces take neither name nor a shape\'s height', () => {
+    const issues = (item: Partial<LayoutItem>) => (v.safeParse(itemSchema, { id: 'i', kind: 'block', x: 0, y: 0, rotation: 0, width: 300, depth: 120, finishes: {}, ...item }).issues ?? []).map(issue => issue.message)
+    expect(issues({ name: 'Stage', height: 40 })).toEqual([])
+    expect(issues({ height: 10 })).toContain('Out of this kind\'s height range')
+    expect(issues({ name: '  ' })).toContain('Required')
+    expect(issues({ kind: 'planter', name: 'Box' })).toContain('Only a shape has a name')
+    expect(issues({ kind: 'stairs', height: 40 })).toContain('Stairs, people and pets keep their own height')
   })
 })

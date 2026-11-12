@@ -21,11 +21,12 @@
  */
 import { useElementSize, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength, isFigureKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
-import { findLook, ITEM_SPECS } from '../designer/catalog'
-import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
-import type { Sized } from '../designer/geometry'
-import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, removeCorner } from '../designer/outline'
+import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
+import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
+import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import type { Bounds, Sized } from '../designer/geometry'
+import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
+import { moveWall, moveWallEnd } from '../designer/walls'
 import type { FloorShape } from '../designer/outline'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
@@ -40,6 +41,8 @@ const props = defineProps<{
   showBelow: boolean
   mode: PlanMode
   placing?: boolean
+  /** The Shape tool draws a circle (a round block) rather than a rectangle (D278). */
+  roundShape?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +59,14 @@ const emit = defineEmits<{
   /** The outline changed (Draw outline): corners and edges together. */
   shape: [shape: FloorShape]
   addWall: [wall: Omit<InnerWall, 'id'>]
+  /** An inside wall's end or the whole wall was dragged (D278): the floor's walls after it. */
+  walls: [walls: InnerWall[]]
+  /** The Room tool's rectangle (D278), and whether Alt cuts it out. */
+  room: [bounds: Bounds, cut: boolean]
+  /** The Shape tool's rectangle or circle (D278): a new shape piece there. */
+  block: [bounds: Bounds]
+  /** A double-click on the floor or its edge in Select: open Edit points (D278). */
+  editPoints: []
   /** Draw outline: an edge's length label was clicked, to type its length there (3A). */
   editLength: [index: number, at: Point]
 }>()
@@ -116,6 +127,38 @@ watch(() => props.floorId, fit, { immediate: true })
 
 /** A gesture's live result, drawn instead of the stored position until the gesture ends. */
 const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number } | null>(null)
+/** The Room tool's rectangle while it's dragged, and whether it will cut (Alt) (D278). */
+const roomPreview = shallowRef<{ bounds: Bounds, cut: boolean } | null>(null)
+
+/** The inside walls while an end or a whole wall is dragged (D278). */
+const liveWalls = shallowRef<InnerWall[] | null>(null)
+const walls = computed(() => liveWalls.value ?? floor.value.walls)
+/** Each inside wall as drawn: its solid spans, its doors (gaps with a swing) and windows. */
+const innerWalls = computed(() => walls.value.map((wall) => {
+  const length = innerWallLength(wall)
+  const along = (offset: number) => ({ x: wall.from.x + (wall.to.x - wall.from.x) * offset / Math.max(length, 1), y: wall.from.y + (wall.to.y - wall.from.y) * offset / Math.max(length, 1) })
+  // A door swings to the wall's right as drawn (start to end), one width long.
+  const side = { x: -(wall.to.y - wall.from.y) / Math.max(length, 1), y: (wall.to.x - wall.from.x) / Math.max(length, 1) }
+  const openings = [...(wall.openings ?? [])].sort((a, b) => a.offset - b.offset)
+  const spans: { from: Point, to: Point }[] = []
+  let cursor = 0
+  for (const opening of openings) {
+    if (opening.kind === 'door' && opening.offset > cursor) spans.push({ from: along(cursor), to: along(opening.offset) })
+    if (opening.kind === 'door') cursor = opening.offset + opening.width
+  }
+  if (cursor < length) spans.push({ from: along(cursor), to: wall.to })
+  return {
+    ...wall,
+    kind: innerWallKind(wall),
+    spans,
+    windows: openings.filter(opening => opening.kind === 'window').map(opening => ({ id: opening.id, from: along(opening.offset), to: along(opening.offset + opening.width) })),
+    doors: openings.filter(opening => opening.kind === 'door').map((opening) => {
+      const hinge = along(opening.offset)
+      return { id: opening.id, hinge, swing: { x: hinge.x + side.x * opening.width, y: hinge.y + side.y * opening.width } }
+    }),
+  }
+}))
+
 /** The outline while a corner is dragged. */
 const liveShape = shallowRef<FloorShape | null>(null)
 const shape = computed<FloorShape>(() => liveShape.value ?? { outline: floor.value.outline, edges: floor.value.edges })
@@ -252,7 +295,7 @@ const hoverOutline = computed(() => {
     return item ? { kind: 'frame' as const, pose: item, width: item.width + 16, depth: item.depth + 16 } : null
   }
   if (target.kind === 'wall') {
-    const wall = floor.value.walls.find(candidate => candidate.id === target.id)
+    const wall = walls.value.find(candidate => candidate.id === target.id)
     return wall ? { kind: 'line' as const, from: wall.from, to: wall.to } : null
   }
   const edge = edges.value[Number(target.id)]
@@ -272,7 +315,7 @@ const selectionPoints = computed((): Point[] | null => {
   const reach = WALL_THICKNESS_CM
   const ends = (from: Point, to: Point) => [from, to].flatMap(point => [{ x: point.x - reach, y: point.y - reach }, { x: point.x + reach, y: point.y + reach }])
   if (selection.kind === 'wall') {
-    const wall = floor.value.walls.find(candidate => candidate.id === selection.id)
+    const wall = walls.value.find(candidate => candidate.id === selection.id)
     return wall ? ends(wall.from, wall.to) : null
   }
   const edge = selection.kind === 'edge' ? edges.value[Number(selection.id)] : undefined
@@ -343,6 +386,10 @@ type Gesture
     | { type: 'rotate', selection: PlanSelection, center: Point, rotation: number }
     | { type: 'resize', selection: PlanSelection, corner: number, startPlan: Point, origin: Sized, round: boolean, min: number, max: number }
     | { type: 'corner', index: number, startPlan: Point, origin: Point, startClient: Point, moved: boolean }
+    | { type: 'wall-end', id: string, end: 'from' | 'to', startClient: Point, moved: boolean }
+    | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean }
+    | { type: 'room', start: Point }
+    | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'pan', startClient: Point, startView: typeof view.value, moved: boolean, plan: Point | null, event: { altKey: boolean, fine: boolean }, navigateOnly?: boolean }
     | { type: 'pinch', distance: number, startView: typeof view.value, middle: Point }
 
@@ -437,6 +484,8 @@ function onPointerDown(event: PointerEvent) {
     const [a, b] = [...pointers.values()] as [Point, Point]
     preview.value = null
     liveShape.value = null
+    liveWalls.value = null
+    roomPreview.value = null
     gesture = { type: 'pinch', distance: Math.hypot(a.x - b.x, a.y - b.y), startView: { ...view.value }, middle: toPlan((a.x + b.x) / 2, (a.y + b.y) / 2) ?? { x: 0, y: 0 } }
     return
   }
@@ -444,6 +493,11 @@ function onPointerDown(event: PointerEvent) {
   const plan = toPlan(event.clientX, event.clientY)
   const startPan = () => {
     gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startView: { ...view.value }, moved: false, plan, event: { altKey: event.altKey, fine: fineSnap(event) } }
+  }
+  if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
+    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) } }
+    return
   }
   if (props.placing || props.mode === 'hand' || props.mode === 'wall' || !target || !plan) return startPan()
   const kind = target.dataset.kind!
@@ -471,7 +525,23 @@ function onPointerDown(event: PointerEvent) {
     if (edge) emit('editLength', edge.index, toScreen(edge.label))
     return
   }
-  if (kind === 'edge' || kind === 'wall') {
+  if (kind === 'wall-end') {
+    const end = target.dataset.end === 'from' ? 'from' : 'to'
+    gesture = { type: 'wall-end', id, end, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+    return
+  }
+  if (kind === 'wall') {
+    // Pressed and dragged, a wall moves at once (Figma); its joined neighbours stretch to follow.
+    if (!isSelected('wall', id)) emit('select', { kind, id })
+    gesture = { type: 'wall', id, startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+    return
+  }
+  if (kind === 'edge' && props.mode === 'outline') {
+    // Edit points (D278): a side drags sideways, both its corners together; a tap selects it.
+    gesture = { type: 'side', index: Number(id), startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+    return
+  }
+  if (kind === 'edge') {
     emit('select', { kind, id })
     return
   }
@@ -523,6 +593,19 @@ function onPointerMove(event: PointerEvent) {
   }
   const plan = toPlan(event.clientX, event.clientY)
   if (!plan) return
+  if (gesture.type === 'room') {
+    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
+    const { start } = gesture
+    // A circle (or Shift, like Figma) keeps both sides equal.
+    if (props.mode === 'shape' && (props.roundShape || event.shiftKey)) {
+      const side = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y))
+      end.x = start.x + Math.sign(end.x - start.x || 1) * side
+      end.y = start.y + Math.sign(end.y - start.y || 1) * side
+    }
+    roomPreview.value = { bounds: { minX: Math.min(start.x, end.x), minY: Math.min(start.y, end.y), maxX: Math.max(start.x, end.x), maxY: Math.max(start.y, end.y) }, cut: props.mode === 'room' && event.altKey }
+    return
+  }
   if (gesture.type === 'rotate') {
     const angle = (Math.atan2(plan.y - gesture.center.y, plan.x - gesture.center.x) * 180) / Math.PI + 90
     const rotation = normalizeRotation(event.shiftKey ? angle : Math.round(angle / 15) * 15)
@@ -537,6 +620,32 @@ function onPointerMove(event: PointerEvent) {
   }
   if (!gesture.moved && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
   gesture.moved = true
+  if (gesture.type === 'side') {
+    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const base = { outline: floor.value.outline, edges: floor.value.edges }
+    const normal = outwardNormal(base.outline, gesture.index)
+    const distance = snap((plan.x - gesture.startPlan.x) * normal.x + (plan.y - gesture.startPlan.y) * normal.y, step)
+    liveShape.value = moveSide(base, gesture.index, distance)
+    return
+  }
+  if (gesture.type === 'wall-end') {
+    const { id, end } = gesture
+    const wall = floor.value.walls.find(candidate => candidate.id === id)
+    if (!wall) return
+    const other = end === 'from' ? wall.to : wall.from
+    liveWalls.value = moveWallEnd(floor.value.walls, id, end, drawPoint(plan, other, event.altKey, fineSnap(event)))
+    return
+  }
+  if (gesture.type === 'wall') {
+    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const delta = { x: snap(plan.x - gesture.startPlan.x, step), y: snap(plan.y - gesture.startPlan.y, step) }
+    if (event.shiftKey) {
+      if (Math.abs(delta.x) >= Math.abs(delta.y)) delta.y = 0
+      else delta.x = 0
+    }
+    liveWalls.value = moveWall(floor.value.walls, gesture.id, delta)
+    return
+  }
   const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
   const to = { x: snap(gesture.origin.x + plan.x - gesture.startPlan.x, step), y: snap(gesture.origin.y + plan.y - gesture.startPlan.y, step) }
   // Shift keeps a piece's move straight across or down, like Figma (D278).
@@ -572,8 +681,12 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   gesture = null
   const live = preview.value
   const liveOutline = liveShape.value
+  const movedWalls = liveWalls.value
+  const room = roomPreview.value
+  roomPreview.value = null
   preview.value = null
   liveShape.value = null
+  liveWalls.value = null
   if (!finished || cancelled) return
   if (finished.type === 'pan' && !finished.moved && !finished.navigateOnly) return tap(finished.plan, finished.event)
   if (finished.type === 'drag' && finished.moved && live) {
@@ -585,6 +698,15 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     emit('resize', finished.selection, { x: live.x, y: live.y, width: live.width, depth: live.depth })
   }
   if (finished.type === 'corner' && finished.moved && liveOutline) emit('shape', liveOutline)
+  if (finished.type === 'side') {
+    if (finished.moved && liveOutline) emit('shape', liveOutline)
+    else if (!finished.moved) emit('select', { kind: 'edge', id: String(finished.index) })
+  }
+  if ((finished.type === 'wall' || finished.type === 'wall-end') && finished.moved && movedWalls) emit('walls', movedWalls)
+  if (finished.type === 'room' && room) {
+    if (props.mode === 'shape') emit('block', room.bounds)
+    else emit('room', room.bounds, event.altKey)
+  }
 }
 
 /** A tap on empty plan: clears the selection, or adds a corner or a wall end while drawing. */
@@ -632,9 +754,25 @@ function closeDrawing() {
   hover.value = null
 }
 
-function onDoubleClick() {
-  if (drawing.value) closeDrawing()
-  else if (props.mode === 'wall') wallStart.value = null
+/**
+ * Closes a drawn outline or stops a wall chain. In Edit points a double-click on a side adds a
+ * corner there; in Select a double-click on the floor or its edge opens Edit points (Figma's
+ * double-click into a shape's points, D278).
+ */
+function onDoubleClick(event: MouseEvent) {
+  if (drawing.value) return closeDrawing()
+  if (props.mode === 'wall') {
+    wallStart.value = null
+    return
+  }
+  const target = (event.target as Element).closest<SVGElement>('[data-kind]')
+  const plan = toPlan(event.clientX, event.clientY)
+  if (props.mode === 'outline' && target?.dataset.kind === 'edge' && plan) {
+    emit('shape', insertCorner(shape.value, Number(target.dataset.id), plan))
+    return
+  }
+  const onFloor = !target && plan && shape.value.outline.length >= 3 && pointInPolygon(plan, shape.value.outline)
+  if (props.mode === 'select' && !props.placing && (target?.dataset.kind === 'edge' || onFloor)) emit('editPoints')
 }
 
 function zoomAround(point: Point, scale: number, from = view.value) {
@@ -763,7 +901,9 @@ const wallPreview = computed(() => (wallStart.value && hover.value ? { from: wal
 
 const ariaLabel = computed(() => {
   if (drawing.value) return `Draw outline, ${floor.value.name} floor. Click on the grid to add corners; Enter closes the shape, Backspace removes the last corner.`
-  if (props.mode === 'outline') return `Edit outline, ${floor.value.name} floor. Drag a corner to move it; with a corner picked, arrow keys move it and Delete removes it.`
+  if (props.mode === 'outline') return `Edit points, ${floor.value.name} floor. Drag a corner or a side to move it; double-click a side to add a corner; with a corner picked, arrow keys move it and Delete removes it.`
+  if (props.mode === 'shape') return `Shape, ${floor.value.name} floor. Drag to draw a ${props.roundShape ? 'round block' : 'block'} for anything the library doesn't have.`
+  if (props.mode === 'room') return `Room, ${floor.value.name} floor. Drag a rectangle to add a room to the floor; hold Alt to cut it out.`
   if (props.mode === 'wall') return `Draw wall, ${floor.value.name} floor. Click where the wall starts and where it ends; Escape stops.`
   return `Floor plan, ${floor.value.name}. Arrow keys move the selected piece 5 cm (Shift: 25 cm), Shift+R turns it, Delete removes it, Escape clears the selection. Question mark lists every shortcut.`
 })
@@ -903,13 +1043,15 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       :opacity="mode === 'outline' ? 0.35 : 1"
       :pointer-events="piecesActive ? undefined : 'none'"
     >
+      <!-- Inside walls (D278): a wall, railing, half wall or glass, with doors (gaps) and windows. -->
       <g
-        v-for="wall in floor.walls"
+        v-for="wall in innerWalls"
         :key="wall.id"
         data-kind="wall"
         :data-id="wall.id"
         :data-testid="`plan-wall-${wall.id}`"
-        class="cursor-pointer"
+        :data-wall-kind="wall.kind"
+        class="cursor-move"
       >
         <line
           v-if="isSelected('wall', wall.id)"
@@ -922,13 +1064,34 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           stroke-linecap="round"
         />
         <line
-          :x1="wall.from.x"
-          :y1="wall.from.y"
-          :x2="wall.to.x"
-          :y2="wall.to.y"
-          stroke="var(--ui-text-toned)"
-          stroke-width="12"
+          v-for="(span, index) in wall.spans"
+          :key="index"
+          :x1="span.from.x"
+          :y1="span.from.y"
+          :x2="span.to.x"
+          :y2="span.to.y"
+          :stroke="wall.kind === 'glass' ? 'var(--ui-info)' : wall.kind === 'wall' ? 'var(--ui-text-toned)' : 'var(--ui-text-muted)'"
+          :stroke-width="wall.kind === 'glass' ? 5 : wall.kind === 'railing' ? 6 : wall.kind === 'half' ? 9 : 12"
+          :stroke-dasharray="wall.kind === 'railing' ? '14 8' : wall.kind === 'half' ? '24 6' : undefined"
           stroke-linecap="square"
+        />
+        <line
+          v-for="pane in wall.windows"
+          :key="pane.id"
+          :x1="pane.from.x"
+          :y1="pane.from.y"
+          :x2="pane.to.x"
+          :y2="pane.to.y"
+          stroke="var(--ui-info)"
+          stroke-width="5"
+        />
+        <path
+          v-for="door in wall.doors"
+          :key="door.id"
+          :d="`M${door.hinge.x} ${door.hinge.y} L${door.swing.x} ${door.swing.y}`"
+          stroke="var(--ui-text-muted)"
+          stroke-width="3"
+          stroke-dasharray="6 6"
         />
         <line
           :x1="wall.from.x"
@@ -936,9 +1099,33 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :x2="wall.to.x"
           :y2="wall.to.y"
           stroke="transparent"
-          stroke-width="36"
+          :stroke-width="Math.max(36, perPixel * 14)"
         />
       </g>
+      <!-- A selected inside wall's ends: drag one to stretch or turn the wall (D278). -->
+      <template
+        v-for="wall in innerWalls"
+        :key="`ends-${wall.id}`"
+      >
+        <template v-if="mode === 'select' && isSelected('wall', wall.id)">
+          <circle
+            v-for="end in (['from', 'to'] as const)"
+            :key="end"
+            :cx="wall[end].x"
+            :cy="wall[end].y"
+            :r="9 * perPixel"
+            fill="var(--ui-bg)"
+            stroke="var(--ui-primary)"
+            stroke-width="2"
+            vector-effect="non-scaling-stroke"
+            data-kind="wall-end"
+            :data-id="wall.id"
+            :data-end="end"
+            :data-testid="`wall-end-${end}`"
+            class="cursor-crosshair"
+          />
+        </template>
+      </template>
 
       <!-- Furniture and fixtures (grey: no QR). -->
       <g
@@ -1034,6 +1221,34 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             stroke="var(--ui-border-accented)"
             stroke-width="3"
           />
+        </g>
+        <!-- A shape (D278): its finish's colour and its name. -->
+        <g v-else-if="isShapeKind(item.kind)">
+          <circle
+            v-if="item.kind === 'block-round'"
+            :r="item.width / 2"
+            :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+            stroke="var(--ui-text-muted)"
+            stroke-width="3"
+          />
+          <rect
+            v-else
+            :x="-item.width / 2"
+            :y="-item.depth / 2"
+            :width="item.width"
+            :height="item.depth"
+            rx="4"
+            :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+            stroke="var(--ui-text-muted)"
+            stroke-width="3"
+          />
+          <text
+            text-anchor="middle"
+            dominant-baseline="central"
+            :font-size="Math.min(22, Math.max(10, Math.min(item.width, item.depth) / 4))"
+            fill="var(--ui-text-highlighted)"
+            :transform="`rotate(${-item.rotation})`"
+          >{{ item.name ?? ITEM_SPECS[item.kind].label }}</text>
         </g>
         <circle
           v-else-if="ITEM_SPECS[item.kind].footprint === 'round'"
@@ -1307,6 +1522,46 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :points="warningCorners(item, item.width, item.depth)"
         />
       </template>
+    </g>
+
+    <!-- The Room tool's rectangle (D278): primary to add, error to cut out. -->
+    <g
+      v-if="roomPreview"
+      pointer-events="none"
+      data-testid="room-preview"
+    >
+      <ellipse
+        v-if="mode === 'shape' && roundShape"
+        :cx="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2"
+        :cy="(roomPreview.bounds.minY + roomPreview.bounds.maxY) / 2"
+        :rx="(roomPreview.bounds.maxX - roomPreview.bounds.minX) / 2"
+        :ry="(roomPreview.bounds.maxY - roomPreview.bounds.minY) / 2"
+        fill="color-mix(in oklab, var(--ui-primary) 12%, transparent)"
+        stroke="var(--ui-primary)"
+        stroke-width="2"
+        stroke-dasharray="8 6"
+        vector-effect="non-scaling-stroke"
+      />
+      <rect
+        v-else
+        :x="roomPreview.bounds.minX"
+        :y="roomPreview.bounds.minY"
+        :width="roomPreview.bounds.maxX - roomPreview.bounds.minX"
+        :height="roomPreview.bounds.maxY - roomPreview.bounds.minY"
+        :fill="roomPreview.cut ? 'color-mix(in oklab, var(--ui-error) 12%, transparent)' : 'color-mix(in oklab, var(--ui-primary) 12%, transparent)'"
+        :stroke="roomPreview.cut ? 'var(--ui-error)' : 'var(--ui-primary)'"
+        stroke-width="2"
+        stroke-dasharray="8 6"
+        vector-effect="non-scaling-stroke"
+      />
+      <text
+        :x="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2"
+        :y="(roomPreview.bounds.minY + roomPreview.bounds.maxY) / 2"
+        text-anchor="middle"
+        dominant-baseline="central"
+        :font-size="12 * perPixel"
+        fill="var(--ui-text-highlighted)"
+      >{{ roomPreview.bounds.maxX - roomPreview.bounds.minX }} × {{ roomPreview.bounds.maxY - roomPreview.bounds.minY }} cm</text>
     </g>
 
     <!-- What a click would pick (D278). -->

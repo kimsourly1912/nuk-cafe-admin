@@ -1,6 +1,7 @@
 import type { ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { innerWallKind, innerWallLength } from '#shared/contracts/shop-layout'
 import type { SurroundingsPlan } from '~/features/branches'
-import { BUILT_IN_LOOKS, chairPoses, DOOR_HEIGHT_CM, findLook, ITEM_SPECS, outwardNormal, pieceHeight, placementExtent, planLane, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, toPlan } from '~/features/branches'
+import { BUILT_IN_LOOKS, chairPoses, DOOR_HEIGHT_CM, findLook, innerWallHeight, ITEM_SPECS, outwardNormal, pieceHeight, placementExtent, planLane, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, toPlan } from '~/features/branches'
 import type { GatewaySide } from './network'
 import type { MotoStreet } from './moto'
 import type { RideCourse } from './ride'
@@ -195,7 +196,20 @@ export function buildDistrict(input: DistrictInput): District {
       }
       if (cursor < length) walls.push({ a: m(along(cursor)), b: m(next), bottom: y, top })
     })
-    for (const wall of floor.walls) walls.push({ a: m(wall.from), b: m(wall.to), bottom: y, top: y + floor.height / 100 })
+    // Inside walls (D278): as tall as their kind, open where a door is (no leaf to swing indoors).
+    for (const wall of floor.walls) {
+      const length = innerWallLength(wall)
+      if (length < 1) continue
+      const top = y + innerWallHeight(innerWallKind(wall), floor.height) / 100
+      const along = (offset: number): Point => ({ x: wall.from.x + ((wall.to.x - wall.from.x) * offset) / length, y: wall.from.y + ((wall.to.y - wall.from.y) * offset) / length })
+      let cursor = 0
+      for (const opening of [...(wall.openings ?? [])].sort((left, right) => left.offset - right.offset)) {
+        if (opening.kind !== 'door') continue
+        if (opening.offset > cursor) walls.push({ a: m(along(cursor)), b: m(along(opening.offset)), bottom: y, top })
+        cursor = opening.offset + opening.width
+      }
+      if (cursor < length) walls.push({ a: m(along(cursor)), b: m(wall.to), bottom: y, top })
+    }
 
     for (const item of floor.items) {
       const spec = ITEM_SPECS[item.kind]

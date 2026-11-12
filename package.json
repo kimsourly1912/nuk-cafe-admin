@@ -52,6 +52,7 @@
     "libphonenumber-js": "^1.13.14",
     "nuxt": "^4.6.2",
     "ofetch": "^1.5.1",
+    "polygon-clipping": "0.15.7",
     "sortablejs": "^1.15.7",
     "tailwindcss": "^4.3.3",
     "three": "0.187.0",
