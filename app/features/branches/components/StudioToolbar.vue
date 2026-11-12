@@ -9,7 +9,7 @@
  */
 type StudioView = 'design' | '3d'
 
-const { zoomLevel, canFit = true } = defineProps<{
+const { zoomLevel, fitLabel, canFit = true } = defineProps<{
   /** The zoom as a percentage. Leave it out when the view has no zoom level to show (3D). */
   zoomLevel?: number
   /** The fit button's name: "Fit to screen" in 2D, "Fit building" or "Fit scene" in 3D. */
@@ -22,10 +22,26 @@ const { zoomLevel, canFit = true } = defineProps<{
 const view = defineModel<StudioView>('view', { required: true })
 const emit = defineEmits<{
   zoom: [direction: 1 | -1]
+  /** A zoom percentage from the zoom menu (2D only). */
+  zoomTo: [percent: number]
+  zoomToSelection: []
   fit: []
   undo: []
   redo: []
 }>()
+
+/** The zoom menu on the percentage (2D), with Figma's keys (D278). */
+const zoomMenu = computed(() => [[
+  { label: 'Zoom in', kbds: ['meta', '+'], onSelect: () => emit('zoom', 1) },
+  { label: 'Zoom out', kbds: ['meta', '-'], onSelect: () => emit('zoom', -1) },
+], [
+  { label: fitLabel, kbds: ['shift', '1'], onSelect: () => emit('fit') },
+  { label: 'Zoom to selection', kbds: ['shift', '2'], onSelect: () => emit('zoomToSelection') },
+], [
+  { label: 'Zoom to 50%', onSelect: () => emit('zoomTo', 50) },
+  { label: 'Zoom to 100%', kbds: ['shift', '0'], onSelect: () => emit('zoomTo', 100) },
+  { label: 'Zoom to 200%', onSelect: () => emit('zoomTo', 200) },
+]])
 
 const views = [
   { value: 'design', label: '2D' },
@@ -85,11 +101,22 @@ const views = [
           @click="emit('zoom', -1)"
         />
       </UTooltip>
-      <span
+      <UDropdownMenu
         v-if="zoomLevel !== undefined"
-        class="min-w-10 text-center text-xs text-muted tabular-nums max-sm:hidden"
-        data-testid="zoom-level"
-      >{{ zoomLevel }}%</span>
+        :items="zoomMenu"
+        :modal="false"
+        :content="{ side: 'top' }"
+      >
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          :label="`${zoomLevel}%`"
+          aria-label="Zoom options"
+          class="min-w-12 justify-center text-xs text-muted tabular-nums max-sm:hidden"
+          data-testid="zoom-level"
+        />
+      </UDropdownMenu>
       <UTooltip text="Zoom in">
         <UButton
           icon="i-lucide-zoom-in"
