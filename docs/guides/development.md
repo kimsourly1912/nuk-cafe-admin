@@ -121,6 +121,14 @@ pnpm exec wrangler check startup --config .output/server/wrangler.json --outfile
 ```
 It runs the Worker locally and prints the active time; a local CPU differs from Cloudflare's, so compare it with the last baseline on a similar machine, not with the limit alone. The profile opens in Chrome DevTools' Performance panel. Neither command deploys or needs Cloudflare credentials.
 
+### CI failures: `/fix-ci` (D276)
+
+A failed PR check is fixed with `/fix-ci` in Claude Code, on the PR's branch with a clean tree. It runs from start to end without questions: `ci-triage` (Haiku) labels the failed log, `ci-fixer-fast` (Sonnet) fixes `mechanical` failures and `ci-fixer-deep` (Opus) `logic` ones, `ci-reviewer` (Opus, read-only, not the fixer) approves the diff, then the command commits, pushes to the PR's own branch and watches CI. A `flaky` failure is rerun once. At most two fix attempts per run. The command sets its own model, so the session's model doesn't matter.
+
+It stops, with the diagnosis and a prepared diff under `node_modules/.cache/ci-fix/<run>/` but nothing applied, when a fix would change a guard (permission, tenant filter, version, idempotency, a `db.batch` guard) or a sensitive path, when the failure is a deploy, an audit or lockfile problem, or the workflow itself, and when its attempts are used up. What a fix may touch, the sensitive paths and the test rules are in `.claude/ci-fix/RULES.md`. It never merges, deploys, migrates, force pushes or pushes to `main`; `.claude/settings.json` also denies those commands, though a deny rule is not a security boundary: branch protection on `main` is.
+
+Needs `gh` signed in (`gh auth status`) and `node_modules` installed. Agent edits may prompt unless the session accepts edits (Shift+Tab, or `claude --permission-mode acceptEdits`).
+
 ## Conventions
 
 - Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware), then `@vueuse/core` (import it explicitly: it isn't auto-imported), before adding a library or hand-rolling a utility. There is no Pinia: shared state is `useState` inside a composable.

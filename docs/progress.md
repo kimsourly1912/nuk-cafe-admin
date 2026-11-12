@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### `/fix-ci`: automatic PR check fixes (D276, 2026-11-12)
+
+Branch `claude/fix-ci`. [Development guide](guides/development.md#ci-failures-fix-ci-d276).
+
+- **Built:** the `/fix-ci` command, four agents (`ci-triage`, `ci-fixer-fast`, `ci-fixer-deep`, `ci-reviewer`), the shared rules `.claude/ci-fix/RULES.md` and `.claude/settings.json` (read-only and check commands allowed; force push, merge, deploy and remote migrations denied).
+- **Evidence:** documentation and Claude Code configuration only; no app code changed. The command has not run against a real failed PR yet.
+- **How to verify:** on a PR branch with a failing lint or type check, run `/fix-ci`; it should commit, push and report green without asking. A rerun of a flaky e2e shard and a stop on a guard change are the other two paths to watch on the first real failures.
+- **Owner follow-up:** turn on branch protection for `main` (no force push, PR required): permission rules are not a security boundary. Check the first labels `ci-triage` gives and tune it.
+
 ### Explore E5: moto (D275, 2026-11-12)
 
 Branch `codex/explore-e5-moto`, based on PR #296 (E4). [Plan → Moto](plans/explore.md#moto-e5).
