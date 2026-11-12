@@ -2114,29 +2114,32 @@ const pendingLabel = computed(() => {
             :disabled="mode !== 'select' || !!pending"
             :modal="false"
           >
-            <FloorPlanCanvas
-              ref="canvas"
-              :layout="layout"
-              :floor-id="floor.id"
-              :tables="tables"
-              :looks="looks"
-              :selection="selection"
-              :ghost="ghost"
-              :show-below="showBelow"
-              :mode="mode"
-              :placing="!!pending"
-              @place="placePending"
-              @cancel-place="pending = null"
-              @select="selection = $event"
-              @move="move"
-              @copy="copyTo"
-              @rotate="rotate"
-              @resize="resize"
-              @remove="remove"
-              @shape="updateShape"
-              @add-wall="addWall"
-              @edit-length="editLength"
-            />
+            <!-- One element for the menu's trigger: the canvas has several roots (its live regions). -->
+            <div class="size-full">
+              <FloorPlanCanvas
+                ref="canvas"
+                :layout="layout"
+                :floor-id="floor.id"
+                :tables="tables"
+                :looks="looks"
+                :selection="selection"
+                :ghost="ghost"
+                :show-below="showBelow"
+                :mode="mode"
+                :placing="!!pending"
+                @place="placePending"
+                @cancel-place="pending = null"
+                @select="selection = $event"
+                @move="move"
+                @copy="copyTo"
+                @rotate="rotate"
+                @resize="resize"
+                @remove="remove"
+                @shape="updateShape"
+                @add-wall="addWall"
+                @edit-length="editLength"
+              />
+            </div>
           </UContextMenu>
 
           <!-- Draw outline: the clicked length label becomes a field (3A). -->
