@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Edge, ShopLayout } from '#shared/contracts/shop-layout'
 import { edgeLength, floorSchema, layoutSchema, LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
 import { describeIssue } from '../composables/useLayoutEditor'
-import { addOpening, areaM2, canClose, closedShape, edgeNames, edgeTakes, fitOpenings, freeSpot, insertCorner, moveCorner, openingFits, removeCorner, setEdgeKind, setEdgeLength, updateOpening } from '../designer/outline'
+import { addOpening, areaM2, canClose, closedShape, edgeNames, edgeTakes, fitOpenings, freeSpot, insertCorner, moveCorner, moveSide, openingFits, removeCorner, setEdgeKind, setEdgeLength, updateOpening } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import { canAddFloor, floorName, newFloor, STARTERS } from '../designer/starters'
 import { demoLayout } from './demo-layout'
@@ -187,5 +187,30 @@ describe('starters and new floors', () => {
     while (canAddFloor(layout)) layout.floors.push(newFloor(layout))
     expect(layout.floors).toHaveLength(LAYOUT_MAX_FLOORS)
     expect(v.safeParse(layoutSchema, layout).success).toBe(true)
+  })
+})
+
+describe('Edit points (D278)', () => {
+  it('drags a whole side sideways: both corners move, the sides next to it stretch, right angles stay', () => {
+    const moved = moveSide(square(), 1, 100)
+    expect(moved.outline).toEqual([{ x: 0, y: 0 }, { x: 500, y: 0 }, { x: 500, y: 400 }, { x: 0, y: 400 }])
+    expect(moveSide(square(), 1, -100).outline[1]).toEqual({ x: 300, y: 0 })
+    expect(moveSide(square(), 1, 0)).toEqual(square())
+    expect(valid(moved)).toEqual([])
+  })
+
+  it('keeps a door on a side that shrinks under it inside the side', () => {
+    const shape = moveSide(square(400, [{ id: 'd', kind: 'door', offset: 300, width: 90 }]), 1, -150)
+    const door = shape.edges[0]!.openings[0]!
+    expect(door.offset + door.width).toBeLessThanOrEqual(edgeLength(shape.outline, 0))
+    expect(valid(shape)).toEqual([])
+  })
+
+  it('adds a corner where a side is double-clicked, snapped; none on an existing corner', () => {
+    const shape = insertCorner(square(), 0, { x: 110, y: 12 })
+    expect(shape.outline).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 400 }, { x: 0, y: 400 }])
+    expect(shape.edges).toHaveLength(5)
+    expect(insertCorner(square(), 0, { x: 3, y: 0 })).toEqual(square())
+    expect(insertCorner(square(), 0).outline[1]).toEqual({ x: 200, y: 0 })
   })
 })

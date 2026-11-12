@@ -12,7 +12,7 @@ export const STUDIO_SHORTCUTS = [
   { kbds: ['v'], label: 'Select' },
   { kbds: ['h'], label: 'Hand (or hold Space and drag)' },
   { kbds: ['r'], label: 'Room: drag a rectangle (Alt cuts it out)' },
-  { kbds: ['p'], label: 'Draw outline' },
+  { kbds: ['p'], label: 'Edit points: corners and sides of the floor (Enter or a double-click on the floor too)' },
   { kbds: ['w'], label: 'Draw wall' },
   { kbds: ['escape'], label: 'Cancel, leave the tool, then clear the selection' },
   { kbds: ['delete'], label: 'Delete the selection (an outline wall or railing becomes Open)' },

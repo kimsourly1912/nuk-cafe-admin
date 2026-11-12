@@ -23,9 +23,9 @@ import { useElementSize, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, innerWallKind, innerWallLength, isFigureKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, ITEM_SPECS } from '../designer/catalog'
-import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
-import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, removeCorner } from '../designer/outline'
+import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
 import { moveWall, moveWallEnd } from '../designer/walls'
 import type { FloorShape } from '../designer/outline'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
@@ -61,6 +61,8 @@ const emit = defineEmits<{
   walls: [walls: InnerWall[]]
   /** The Room tool's rectangle (D278), and whether Alt cuts it out. */
   room: [bounds: Bounds, cut: boolean]
+  /** A double-click on the floor or its edge in Select: open Edit points (D278). */
+  editPoints: []
   /** Draw outline: an edge's length label was clicked, to type its length there (3A). */
   editLength: [index: number, at: Point]
 }>()
@@ -383,6 +385,7 @@ type Gesture
     | { type: 'wall-end', id: string, end: 'from' | 'to', startClient: Point, moved: boolean }
     | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'room', start: Point }
+    | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'pan', startClient: Point, startView: typeof view.value, moved: boolean, plan: Point | null, event: { altKey: boolean, fine: boolean }, navigateOnly?: boolean }
     | { type: 'pinch', distance: number, startView: typeof view.value, middle: Point }
 
@@ -529,6 +532,11 @@ function onPointerDown(event: PointerEvent) {
     gesture = { type: 'wall', id, startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
     return
   }
+  if (kind === 'edge' && props.mode === 'outline') {
+    // Edit points (D278): a side drags sideways, both its corners together; a tap selects it.
+    gesture = { type: 'side', index: Number(id), startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+    return
+  }
   if (kind === 'edge') {
     emit('select', { kind, id })
     return
@@ -602,6 +610,14 @@ function onPointerMove(event: PointerEvent) {
   }
   if (!gesture.moved && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
   gesture.moved = true
+  if (gesture.type === 'side') {
+    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const base = { outline: floor.value.outline, edges: floor.value.edges }
+    const normal = outwardNormal(base.outline, gesture.index)
+    const distance = snap((plan.x - gesture.startPlan.x) * normal.x + (plan.y - gesture.startPlan.y) * normal.y, step)
+    liveShape.value = moveSide(base, gesture.index, distance)
+    return
+  }
   if (gesture.type === 'wall-end') {
     const { id, end } = gesture
     const wall = floor.value.walls.find(candidate => candidate.id === id)
@@ -672,6 +688,10 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     emit('resize', finished.selection, { x: live.x, y: live.y, width: live.width, depth: live.depth })
   }
   if (finished.type === 'corner' && finished.moved && liveOutline) emit('shape', liveOutline)
+  if (finished.type === 'side') {
+    if (finished.moved && liveOutline) emit('shape', liveOutline)
+    else if (!finished.moved) emit('select', { kind: 'edge', id: String(finished.index) })
+  }
   if ((finished.type === 'wall' || finished.type === 'wall-end') && finished.moved && movedWalls) emit('walls', movedWalls)
   if (finished.type === 'room' && room) emit('room', room.bounds, event.altKey)
 }
@@ -721,9 +741,25 @@ function closeDrawing() {
   hover.value = null
 }
 
-function onDoubleClick() {
-  if (drawing.value) closeDrawing()
-  else if (props.mode === 'wall') wallStart.value = null
+/**
+ * Closes a drawn outline or stops a wall chain. In Edit points a double-click on a side adds a
+ * corner there; in Select a double-click on the floor or its edge opens Edit points (Figma's
+ * double-click into a shape's points, D278).
+ */
+function onDoubleClick(event: MouseEvent) {
+  if (drawing.value) return closeDrawing()
+  if (props.mode === 'wall') {
+    wallStart.value = null
+    return
+  }
+  const target = (event.target as Element).closest<SVGElement>('[data-kind]')
+  const plan = toPlan(event.clientX, event.clientY)
+  if (props.mode === 'outline' && target?.dataset.kind === 'edge' && plan) {
+    emit('shape', insertCorner(shape.value, Number(target.dataset.id), plan))
+    return
+  }
+  const onFloor = !target && plan && shape.value.outline.length >= 3 && pointInPolygon(plan, shape.value.outline)
+  if (props.mode === 'select' && !props.placing && (target?.dataset.kind === 'edge' || onFloor)) emit('editPoints')
 }
 
 function zoomAround(point: Point, scale: number, from = view.value) {
@@ -852,7 +888,7 @@ const wallPreview = computed(() => (wallStart.value && hover.value ? { from: wal
 
 const ariaLabel = computed(() => {
   if (drawing.value) return `Draw outline, ${floor.value.name} floor. Click on the grid to add corners; Enter closes the shape, Backspace removes the last corner.`
-  if (props.mode === 'outline') return `Edit outline, ${floor.value.name} floor. Drag a corner to move it; with a corner picked, arrow keys move it and Delete removes it.`
+  if (props.mode === 'outline') return `Edit points, ${floor.value.name} floor. Drag a corner or a side to move it; double-click a side to add a corner; with a corner picked, arrow keys move it and Delete removes it.`
   if (props.mode === 'room') return `Room, ${floor.value.name} floor. Drag a rectangle to add a room to the floor; hold Alt to cut it out.`
   if (props.mode === 'wall') return `Draw wall, ${floor.value.name} floor. Click where the wall starts and where it ends; Escape stops.`
   return `Floor plan, ${floor.value.name}. Arrow keys move the selected piece 5 cm (Shift: 25 cm), Shift+R turns it, Delete removes it, Escape clears the selection. Question mark lists every shortcut.`

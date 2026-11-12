@@ -878,6 +878,11 @@ function onStudioKey(event: KeyboardEvent) {
     if (mode.value !== 'select') return run(finishTool)
     return
   }
+  // Enter opens Edit points on the floor (Figma's Enter into a shape's points), and closes it again.
+  if (event.key === 'Enter' && !event.shiftKey && floor.value && floor.value.outline.length >= 3) {
+    if (mode.value === 'select' && (!selection.value || selection.value.kind === 'edge')) return run(() => startTool('outline'))
+    if (mode.value === 'outline') return run(finishTool)
+  }
   if (event.shiftKey) return
   const tools: Record<string, PlanMode> = { v: 'select', h: 'hand', r: 'room', p: 'outline', w: 'wall' }
   const tool = tools[event.key.toLowerCase()]
@@ -958,7 +963,8 @@ const contextItems = computed((): ContextMenuItem[][] => {
     { label: 'Fit to screen', icon: 'i-lucide-scan', kbds: ['shift', '1'], onSelect: () => plan?.fit() },
     { label: 'Zoom to 100%', icon: 'i-lucide-search', kbds: ['shift', '0'], onSelect: () => plan?.zoomTo(100) },
   ], [
-    { label: 'Draw outline', icon: 'i-lucide-pen-tool', kbds: ['p'], onSelect: () => startTool('outline') },
+    { label: 'Room', icon: 'i-lucide-square-plus', kbds: ['r'], onSelect: () => startTool('room') },
+    { label: 'Edit points', icon: 'i-lucide-pen-tool', kbds: ['p'], onSelect: () => startTool('outline') },
     { label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'], onSelect: () => startTool('wall') },
   ]]
 })
@@ -1044,7 +1050,7 @@ const planTools = [
   { mode: 'select', label: 'Select', icon: 'i-lucide-mouse-pointer-2', kbds: ['v'] },
   { mode: 'hand', label: 'Hand', icon: 'i-lucide-hand', kbds: ['h'] },
   { mode: 'room', label: 'Room', icon: 'i-lucide-square-plus', kbds: ['r'] },
-  { mode: 'outline', label: 'Draw outline', icon: 'i-lucide-pen-tool', kbds: ['p'] },
+  { mode: 'outline', label: 'Edit points', icon: 'i-lucide-pen-tool', kbds: ['p'] },
   { mode: 'wall', label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'] },
 ] as const satisfies readonly { mode: PlanMode, label: string, icon: string, kbds: readonly string[] }[]
 const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall' || mode.value === 'room')
@@ -2156,6 +2162,7 @@ const pendingLabel = computed(() => {
                 @add-wall="addWall"
                 @walls="setWalls"
                 @room="applyRoom"
+                @edit-points="startTool('outline')"
                 @edit-length="editLength"
               />
             </div>
@@ -2340,7 +2347,7 @@ const pendingLabel = computed(() => {
                   data-testid="tool-bar"
                 >
                   <span class="rounded-lg border border-default bg-default px-3 py-2 text-sm font-semibold text-highlighted shadow-sm">
-                    {{ mode === 'outline' ? 'Draw outline' : mode === 'room' ? 'Room' : 'Draw wall' }}
+                    {{ mode === 'outline' ? 'Edit points' : mode === 'room' ? 'Room' : 'Draw wall' }}
                     <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && floor.outline.length >= 3"> · {{ areaM2(floor.outline) }} m²</template></span>
                   </span>
                   <span class="pointer-events-auto flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
@@ -2415,9 +2422,9 @@ const pendingLabel = computed(() => {
               <span>Click the first corner, double-click or press Enter to close the shape.</span>
             </template>
             <template v-else-if="mode === 'outline'">
-              <span>Drag a corner to move it; it keeps right angles unless you hold Alt.</span>
-              <span>Click a round handle to add a corner. Click a corner, then Delete to remove it.</span>
-              <span>Click an edge to make it a wall, railing or open, or to add doors and windows.</span>
+              <span>Drag a corner to move it (right angles kept unless you hold Alt), or drag a side to move it.</span>
+              <span>Double-click a side or click its round handle to add a corner. Click a corner, then Delete to remove it.</span>
+              <span>Click an edge to make it a wall, railing or open, or to add doors and windows. Escape or Enter when done.</span>
             </template>
             <template v-else-if="mode === 'room'">
               <span>Drag a rectangle: the floor, or a room added to it.</span>
