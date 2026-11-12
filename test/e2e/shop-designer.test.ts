@@ -500,7 +500,7 @@ describe('the shop designer on saved layouts', () => {
     await page.waitForURL(address => address.pathname.endsWith(`/admin/branches/${lab.branchId}`) && address.searchParams.get('tab') === 'tables')
   })
 
-  it('Studio shell (D277): Hide sidebar keeps the plan as it was, and the toolbar and Save layout work in both views', { timeout: 60_000 }, async () => {
+  it('Studio shell (D277): the sidebar hides and resizes without mounting the plan again, and the toolbar and Save layout work in both views', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').click()
@@ -518,6 +518,20 @@ describe('the shop designer on saved layouts', () => {
     expect(await plan(page).getAttribute('data-kept')).toBe('yes')
     await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
 
+    // The sidebar resizes from its handle, also by keyboard; hiding it keeps the width, 3D uses it too.
+    const sidebarWidth = () => sidebar.evaluate(element => Math.round(element.getBoundingClientRect().width))
+    const initial = await sidebarWidth()
+    await page.getByRole('separator', { name: 'Resize sidebar' }).focus()
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('ArrowRight')
+    await expect.poll(sidebarWidth).toBeGreaterThan(initial)
+    const widened = await sidebarWidth()
+    await page.getByRole('button', { name: 'Hide sidebar' }).click()
+    await sidebar.waitFor({ state: 'detached' })
+    await page.getByRole('button', { name: 'Show sidebar' }).click()
+    await expect.poll(sidebarWidth).toBe(widened)
+    expect(await plan(page).getAttribute('data-kept')).toBe('yes')
+
     // One toolbar, the same groups in 3D; Save layout stays on the canvas.
     const toolbar = page.getByRole('toolbar', { name: 'Canvas tools' })
     expect(await toolbar.getByRole('group').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')))).toEqual(['Tools', 'Layout view', 'Zoom', 'History'])
@@ -525,6 +539,7 @@ describe('the shop designer on saved layouts', () => {
     await drawn(page)
     expect(await toolbar.getByRole('group').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')))).toEqual(['Layout view', 'Zoom', 'History'])
     await toolbar.getByRole('button', { name: 'Fit building' }).waitFor()
+    expect(await page.getByRole('complementary', { name: 'Navigate the building' }).evaluate(element => Math.round(element.getBoundingClientRect().width))).toBe(widened)
     await saveButton(page).waitFor()
     await page.getByRole('button', { name: 'Back to admin' }).waitFor()
     await shot(page, 'studio-3d')

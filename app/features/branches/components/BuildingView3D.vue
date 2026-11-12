@@ -16,6 +16,7 @@ import type { BuildingNavigation, BuildingViewer } from '../designer/scene/build
 import type { StageStats } from '../designer/scene/stage'
 import BuildingNavigator from './BuildingNavigator.vue'
 import TableQrModal from './TableQrModal.vue'
+import { STUDIO_SIDEBAR } from './studio'
 
 const props = defineProps<{
   layout: ShopLayout
@@ -29,6 +30,8 @@ const props = defineProps<{
   unsaved?: boolean
   /** Seeds the surroundings, so everyone who opens this branch sees the same street (step 3h). */
   branchId: string
+  /** The sidebar's width in px, as last resized in 2D (D277). */
+  sidebarWidth?: number
 }>()
 
 const emit = defineEmits<{
@@ -471,7 +474,8 @@ function selectFromList(tableId: string) {
     <aside
       v-if="sidebarOpen"
       aria-label="Navigate the building"
-      class="hidden w-72 shrink-0 flex-col border-r border-default bg-default lg:flex xl:w-80"
+      class="hidden shrink-0 flex-col border-r border-default bg-default lg:flex"
+      :style="{ width: `${sidebarWidth ?? STUDIO_SIDEBAR.initial}px` }"
     >
       <slot
         name="sidebar-header"

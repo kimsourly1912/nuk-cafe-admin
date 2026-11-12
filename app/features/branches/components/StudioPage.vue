@@ -9,6 +9,7 @@ import BuildingView3D from './BuildingView3D.vue'
 import DesignShopEditor from './DesignShopEditor.vue'
 import LayoutSaveAlerts from './LayoutSaveAlerts.vue'
 import StudioToolbar from './StudioToolbar.vue'
+import { STUDIO_SIDEBAR } from './studio'
 
 const props = defineProps<{ id: string }>()
 const route = useRoute()
@@ -21,6 +22,14 @@ const hasPin = computed(() => settings.value?.latitude != null && settings.value
 const editor = useLayoutEditor(props.id)
 const { ready, isDirty, saving } = editor
 const view = useUrlTab(['design', '3d'] as const, 'view')
+/**
+ * 2D mounts the first time it is shown, then stays mounted (`v-show`) so its pan, zoom and tools
+ * survive 3D. Its sidebar splitter needs a real width to start: mounted hidden, it had none (D277).
+ */
+const designMounted = ref(view.value === 'design')
+watch(view, (current) => {
+  if (current === 'design') designMounted.value = true
+})
 editor.load()
 const layout = editor.draft.layout
 const hasOutline = computed(() => layout.value.floors.some(floor => floor.outline.length >= 3))
@@ -30,6 +39,7 @@ const exitOpen = ref(false)
 const title = computed(() => cafe.name.value ? `${cafe.name.value} Studio` : 'Studio')
 /** The left sidebar on a wide screen (D277). Kept across 2D and 3D. Hiding it keeps the canvas as it is. */
 const sidebarOpen = ref(true)
+const sidebarWidth = ref<number>(STUDIO_SIDEBAR.initial)
 const saveStatus = computed(() => saving.value ? 'Saving…' : isDirty.value ? 'Unsaved changes' : ready.value ? 'Saved' : '')
 const [DefineHeader, ReuseHeader] = createReusableTemplate<{ collapsible?: boolean }>()
 const [DefineSave, ReuseSave] = createReusableTemplate()
@@ -186,12 +196,14 @@ function showItemOnPlan(itemId: string) {
         Saving can update the customer-facing Explore layout.
       </p>
       <div
+        v-if="designMounted"
         v-show="view === 'design'"
         class="min-h-0 flex-1"
       >
         <DesignShopEditor
           v-model:view="view"
           v-model:sidebar="sidebarOpen"
+          v-model:sidebar-width="sidebarWidth"
           :editor="editor"
           :branch-id="id"
           :has-pin="hasPin"
@@ -255,6 +267,7 @@ function showItemOnPlan(itemId: string) {
           v-model:selected-item="selectedItem"
           v-model:scene="scene"
           v-model:sidebar="sidebarOpen"
+          :sidebar-width="sidebarWidth"
           :layout="layout"
           :tables="editor.tables.value"
           :looks="editor.looks.value"

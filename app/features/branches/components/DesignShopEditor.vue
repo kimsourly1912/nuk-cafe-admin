@@ -32,6 +32,7 @@ import LookFormModal from './LookFormModal.vue'
 import PickTableModal from './PickTableModal.vue'
 import StudioLooksPanel from './StudioLooksPanel.vue'
 import StudioToolbar from './StudioToolbar.vue'
+import { STUDIO_SIDEBAR } from './studio'
 import TableFormModal from './TableFormModal.vue'
 import TableQrModal from './TableQrModal.vue'
 
@@ -48,6 +49,8 @@ const props = defineProps<{
 const view = defineModel<'design' | '3d'>('view', { required: true })
 /** The left sidebar on a wide screen (Studio owns it, so 3D keeps the same choice). */
 const sidebarOpen = defineModel<boolean>('sidebar', { default: true })
+/** The sidebar's width in px as resized here: 3D shows its sidebar at the same width. */
+const sidebarWidth = defineModel<number>('sidebarWidth', { default: STUDIO_SIDEBAR.initial })
 defineSlots<{
   /** Studio's header at the top of the sidebar. `collapsible`: it may offer Hide sidebar. */
   'sidebar-header'?: (props: { collapsible: boolean }) => unknown
@@ -68,6 +71,34 @@ const showBelow = ref(true)
 const mode = ref<PlanMode>('select')
 const canvas = useTemplateRef<InstanceType<typeof FloorPlanCanvas>>('canvas')
 const { isCompact, isExpanded } = useLayoutContext()
+
+// --- The resizable sidebar (D277) ---
+
+const splitter = useTemplateRef<{ $el?: HTMLElement, panelsRef: { collapse: () => void, expand: () => void, isCollapsed: boolean }[] }>('splitter')
+const sidebarElement = useTemplateRef<HTMLElement>('sidebarElement')
+const sidebarShown = computed(() => isExpanded.value && sidebarOpen.value)
+const splitItems = [
+  { id: 'studio-sidebar', slot: 'sidebar', sizeUnit: 'px' as const, defaultSize: STUDIO_SIDEBAR.initial, minSize: STUDIO_SIDEBAR.min, maxSize: STUDIO_SIDEBAR.max, collapsible: true, collapsedSize: 0, class: 'overflow-hidden' },
+  { id: 'studio-canvas', slot: 'canvas', class: 'min-w-0' },
+]
+
+// Hide sidebar and narrow screens collapse the panel; the plan's panel is never rendered again.
+watch([sidebarShown, splitter], ([shown, group]) => {
+  const panel = group?.panelsRef[0]
+  if (!panel || panel.isCollapsed === !shown) return
+  if (shown) panel.expand()
+  else panel.collapse()
+}, { flush: 'post', immediate: true })
+
+// Nuxt UI's splitter gives its handle no name: a focusable separator needs one.
+watch(splitter, (group) => {
+  group?.$el?.querySelector('[data-slot="handle"]')?.setAttribute('aria-label', 'Resize sidebar')
+}, { flush: 'post' })
+
+const { width: measuredSidebar } = useElementSize(sidebarElement, undefined, { box: 'border-box' })
+watch(measuredSidebar, (width) => {
+  if (width >= STUDIO_SIDEBAR.min) sidebarWidth.value = Math.round(width)
+})
 const panels = [
   { value: 'floors', label: 'Floors', icon: 'i-lucide-layers' },
   { value: 'tables', label: 'Tables', icon: 'i-lucide-table-2' },
@@ -1083,7 +1114,7 @@ const pendingLabel = computed(() => {
         <h2 class="text-xs font-semibold tracking-wide text-muted uppercase">
           Table looks · chairs follow the table’s seats
         </h2>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-2 gap-2 @xs:grid-cols-3">
           <div
             v-for="look in looks.filter(look => matches(look.name))"
             :key="look.id"
@@ -1136,7 +1167,7 @@ const pendingLabel = computed(() => {
         <h2 class="text-xs font-semibold tracking-wide text-muted uppercase">
           {{ category.library }}
         </h2>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-2 gap-2 @xs:grid-cols-3">
           <button
             v-for="spec in category.specs.filter(spec => matches(spec.label))"
             :key="spec.kind"
@@ -1820,32 +1851,6 @@ const pendingLabel = computed(() => {
     v-else
     class="relative flex h-full min-h-0"
   >
-    <!-- The sidebar (D277): Studio's header, the panel rail and the open panel. -->
-    <div
-      v-if="sidebarOpen"
-      data-testid="studio-sidebar"
-      class="hidden w-72 shrink-0 flex-col border-r border-default bg-default lg:flex xl:w-80"
-    >
-      <slot
-        name="sidebar-header"
-        :collapsible="true"
-      />
-      <div class="flex min-h-0 flex-1">
-        <ReuseRail :vertical="true" />
-        <aside
-          :aria-label="panelTitle"
-          class="min-w-0 flex-1 overflow-y-auto p-3"
-        >
-          <div class="mb-3 flex min-h-8 items-center gap-1 border-b border-default pb-3">
-            <h2 class="min-w-0 flex-1 text-sm font-semibold text-highlighted">
-              {{ panelTitle }}
-            </h2>
-            <ReusePanelActions />
-          </div>
-          <ReuseLibrary />
-        </aside>
-      </div>
-    </div>
     <AppDrawer
       v-if="isCompact"
       :open="sheet !== null"
@@ -1896,373 +1901,417 @@ const pendingLabel = computed(() => {
       </template>
     </AppSlideover>
 
-    <!-- The plan -->
-    <main
-      ref="planArea"
-      aria-label="Floor plan"
-      class="relative min-w-0 flex-1 bg-muted"
+    <!-- The sidebar and the plan (D277): one splitter, so hiding or resizing the sidebar never mounts
+         the plan again. Below 1024 px the sidebar panel stays collapsed and the sheets take over. -->
+    <USplitter
+      id="studio-split"
+      ref="splitter"
+      :items="splitItems"
+      :keyboard-resize-by="2"
+      class="min-w-0 flex-1"
+      :ui="{ handle: 'z-10 -mx-1 max-lg:hidden' }"
+      @collapse="index => index === 0 && isExpanded && (sidebarOpen = false)"
+      @expand="index => index === 0 && (sidebarOpen = true)"
     >
-      <FloorPlanCanvas
-        ref="canvas"
-        :layout="layout"
-        :floor-id="floor.id"
-        :tables="tables"
-        :looks="looks"
-        :selection="selection"
-        :ghost="ghost"
-        :show-below="showBelow"
-        :mode="mode"
-        :placing="!!pending"
-        @place="placePending"
-        @cancel-place="pending = null"
-        @select="selection = $event"
-        @move="move"
-        @rotate="rotate"
-        @resize="resize"
-        @remove="remove"
-        @shape="updateShape"
-        @add-wall="addWall"
-        @edit-length="editLength"
-      />
-
-      <!-- Draw outline: the clicked length label becomes a field (3A). -->
-      <form
-        v-if="lengthEdit"
-        class="absolute -translate-x-1/2 -translate-y-1/2"
-        :style="{ left: `${lengthEdit.at.x}px`, top: `${lengthEdit.at.y}px` }"
-        data-testid="edge-length-edit"
-        @submit.prevent="applyLength()"
-      >
-        <UInput
-          ref="lengthInput"
-          v-model.number="lengthEdit.value"
-          type="number"
-          inputmode="numeric"
-          :min="EDGE_LENGTH_MIN_CM"
-          :max="EDGE_LENGTH_MAX_CM"
-          size="sm"
-          class="w-28 shadow-md"
-          :aria-label="`${names[lengthEdit.index] ?? 'Edge'} length (cm)`"
-          :ui="{ trailing: 'pointer-events-none text-xs text-muted' }"
-          @blur="applyLength()"
-          @keydown.esc.stop.prevent="lengthEdit = null"
+      <template #sidebar>
+        <!-- The sidebar (D277): Studio's header, the panel rail and the open panel. -->
+        <div
+          v-if="sidebarShown"
+          ref="sidebarElement"
+          data-testid="studio-sidebar"
+          class="flex w-full min-w-0 flex-col border-r border-default bg-default"
         >
-          <template #trailing>
-            cm
-          </template>
-        </UInput>
-      </form>
-
-      <!-- Quick actions next to the selection (2B): the common moves without the panel. -->
-      <div
-        v-if="mode === 'select' && quickBarStyle && (selectedPlacement || selectedItem)"
-        ref="quickBar"
-        role="toolbar"
-        :aria-label="selectedPlacement ? `${tableLabel(selectedPlacement.tableId) ?? 'Table'} quick actions` : 'Furniture quick actions'"
-        class="absolute flex items-center gap-0.5 rounded-lg border border-default bg-default p-1 shadow-md"
-        :style="quickBarStyle"
-        data-testid="quick-actions"
-      >
-        <UButton
-          icon="i-lucide-rotate-cw"
-          color="neutral"
-          variant="ghost"
-          aria-label="Rotate 90°"
-          @click="turn(90)"
-        >
-          <span class="hidden sm:inline">Rotate 90°</span>
-        </UButton>
-        <USeparator
-          orientation="vertical"
-          class="h-5"
-        />
-        <UButton
-          v-if="selectedPlacement"
-          icon="i-lucide-copy"
-          color="neutral"
-          variant="ghost"
-          aria-label="Duplicate look"
-          @click="duplicateLook(selectedPlacement.tableId)"
-        >
-          <span class="hidden sm:inline">Duplicate look</span>
-        </UButton>
-        <UButton
-          v-else-if="selectedItem"
-          icon="i-lucide-copy"
-          color="neutral"
-          variant="ghost"
-          aria-label="Duplicate"
-          @click="duplicateItem(selectedItem.id)"
-        >
-          <span class="hidden sm:inline">Duplicate</span>
-        </UButton>
-        <USeparator
-          orientation="vertical"
-          class="h-5"
-        />
-        <UButton
-          :icon="selectedPlacement ? 'i-lucide-map-pin-off' : 'i-lucide-trash-2'"
-          color="neutral"
-          variant="ghost"
-          :aria-label="selectedPlacement ? 'Remove from map' : 'Delete'"
-          @click="remove(selection!)"
-        >
-          <span class="hidden sm:inline">{{ selectedPlacement ? 'Remove from map' : 'Delete' }}</span>
-        </UButton>
-      </div>
-      <div
-        v-else-if="mode === 'select' && quickBarStyle && selectedWall"
-        ref="quickBar"
-        role="toolbar"
-        aria-label="Wall quick actions"
-        class="absolute flex items-center rounded-lg border border-default bg-default p-1 shadow-md"
-        :style="quickBarStyle"
-        data-testid="quick-actions"
-      >
-        <UButton
-          icon="i-lucide-trash-2"
-          color="neutral"
-          variant="ghost"
-          aria-label="Delete wall"
-          @click="remove(selection!)"
-        >
-          <span class="hidden sm:inline">Delete wall</span>
-        </UButton>
-      </div>
-      <div
-        v-else-if="mode === 'select' && quickBarStyle && floor && selectedEdge !== undefined"
-        ref="quickBar"
-        role="toolbar"
-        :aria-label="`${names[selectedEdge] ?? 'Edge'} quick actions`"
-        class="absolute flex items-center gap-0.5 rounded-lg border border-default bg-default p-1 shadow-md"
-        :style="quickBarStyle"
-        data-testid="quick-actions"
-      >
-        <UFieldGroup
-          role="group"
-          aria-label="Edge type"
-        >
-          <UButton
-            v-for="kind in EDGE_KINDS"
-            :key="kind.value"
-            :label="kind.label"
-            :color="floor.edges[selectedEdge]?.kind === kind.value ? 'primary' : 'neutral'"
-            :variant="floor.edges[selectedEdge]?.kind === kind.value ? 'soft' : 'ghost'"
-            :aria-pressed="floor.edges[selectedEdge]?.kind === kind.value"
-            @click="updateShape(setEdgeKind(shapeOf(floor), selectedEdge, kind.value))"
+          <slot
+            name="sidebar-header"
+            :collapsible="true"
           />
-        </UFieldGroup>
-        <template v-if="floor.edges[selectedEdge]?.kind !== 'open'">
-          <USeparator
-            orientation="vertical"
-            class="h-5"
-          />
-          <UButton
-            icon="i-lucide-door-open"
-            color="neutral"
-            variant="ghost"
-            :aria-label="`Add a ${floor.edges[selectedEdge]?.kind === 'railing' ? 'gate' : 'door'}`"
-            :disabled="!openingFits(shapeOf(floor), selectedEdge, 'door')"
-            @click="updateShape(addOpening(shapeOf(floor), selectedEdge, 'door', newLayoutId('door')))"
-          >
-            <span class="hidden sm:inline">{{ floor.edges[selectedEdge]?.kind === 'railing' ? 'Gate' : 'Door' }}</span>
-          </UButton>
-          <UButton
-            v-if="floor.edges[selectedEdge]?.kind === 'wall'"
-            icon="i-lucide-app-window"
-            color="neutral"
-            variant="ghost"
-            aria-label="Add a window"
-            :disabled="!openingFits(shapeOf(floor), selectedEdge, 'window')"
-            @click="updateShape(addOpening(shapeOf(floor), selectedEdge, 'window', newLayoutId('window')))"
-          >
-            <span class="hidden sm:inline">Window</span>
-          </UButton>
-        </template>
-      </div>
-
-      <div class="pointer-events-none absolute inset-x-3 top-3 flex flex-col gap-2">
-        <div class="flex flex-wrap items-start justify-between gap-2">
-          <div class="flex min-w-0 flex-wrap items-center gap-2">
-            <UTooltip
-              v-if="!isExpanded || !sidebarOpen"
-              :text="isExpanded ? 'Show sidebar' : 'Open Studio sidebar'"
+          <div class="flex min-h-0 flex-1">
+            <ReuseRail :vertical="true" />
+            <aside
+              :aria-label="panelTitle"
+              class="@container min-w-0 flex-1 overflow-y-auto p-3"
             >
-              <UButton
-                icon="i-lucide-panel-left-open"
-                color="neutral"
-                variant="outline"
-                class="pointer-events-auto bg-default"
-                :aria-label="isExpanded ? 'Show sidebar' : 'Open Studio sidebar'"
-                @click="isExpanded ? sidebarOpen = true : sheet = 'sidebar'"
-              />
-            </UTooltip>
-            <!-- A tool's bar replaces the floor bar while it's open (3A, 9A). -->
-            <div
-              v-if="drawing"
-              class="flex flex-wrap items-center gap-2"
-              data-testid="tool-bar"
-            >
-              <span class="rounded-lg border border-default bg-default px-3 py-2 text-sm font-semibold text-highlighted shadow-sm">
-                {{ mode === 'outline' ? 'Draw outline' : 'Draw wall' }}
-                <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && floor.outline.length >= 3"> · {{ areaM2(floor.outline) }} m²</template></span>
-              </span>
-              <span class="pointer-events-auto flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
-                <USwitch
-                  v-if="floorIndex > 0"
-                  v-model="showBelow"
-                  label="Show floor below"
-                  size="sm"
-                  class="px-1"
-                />
-                <UButton
-                  v-if="floor.outline.length >= 3"
-                  label="Cancel"
-                  color="neutral"
-                  variant="ghost"
-                  size="sm"
-                  @click="cancelTool()"
-                />
-                <UButton
-                  label="Done"
-                  size="sm"
-                  :disabled="floor.outline.length < 3"
-                  @click="finishTool()"
-                />
-              </span>
-            </div>
-            <template v-else>
-              <USelect
-                :model-value="floor.id"
-                :items="floorItems"
-                aria-label="Active floor"
-                class="pointer-events-auto"
-                @update:model-value="selectFloor"
-              />
-            </template>
-          </div>
-          <div class="flex flex-wrap items-center justify-end gap-2">
-            <slot name="actions" />
-            <UButton
-              v-if="!isExpanded"
-              label="Properties"
-              icon="i-lucide-sliders-horizontal"
-              color="neutral"
-              variant="outline"
-              class="pointer-events-auto bg-default"
-              :ui="{ label: 'max-sm:sr-only' }"
-              @click="detailsOpen = true"
-            />
+              <div class="mb-3 flex min-h-8 items-center gap-1 border-b border-default pb-3">
+                <h2 class="min-w-0 flex-1 text-sm font-semibold text-highlighted">
+                  {{ panelTitle }}
+                </h2>
+                <ReusePanelActions />
+              </div>
+              <ReuseLibrary />
+            </aside>
           </div>
         </div>
-
-        <UAlert
-          v-if="placementAlerts.length && mode === 'select'"
-          color="warning"
-          variant="subtle"
-          icon="i-lucide-triangle-alert"
-          class="pointer-events-auto max-w-xl"
-          :title="`Check placement on ${floor.name}`"
-          :description="`${listLabels(placementAlerts.slice(0, 3).map(entry => entry.label))}${placementAlerts.length > 3 ? ` (+${placementAlerts.length - 3} more)` : ''}. Highlighted pieces overlap or extend outside the floor. You can still save.`"
-          :actions="[{ label: 'Show', color: 'neutral', variant: 'outline', onClick: () => { selection = placementAlerts[0]!.selection } }]"
-          data-testid="placement-warning"
-        />
-      </div>
-
-      <!-- How the tool works (3A, 9A). -->
-      <div
-        v-if="mode === 'outline' || mode === 'wall'"
-        class="pointer-events-none absolute bottom-28 left-2 flex max-w-60 flex-col gap-1 rounded-lg border border-default bg-default px-3 py-2 text-xs text-toned shadow-sm"
-      >
-        <template v-if="mode === 'outline' && floor.outline.length === 0">
-          <span>Click on the grid to add corners.</span>
-          <span>Click the first corner, double-click or press Enter to close the shape.</span>
-        </template>
-        <template v-else-if="mode === 'outline'">
-          <span>Drag a corner to move it; it keeps right angles unless you hold Alt.</span>
-          <span>Click a round handle to add a corner. Click a corner, then Delete to remove it.</span>
-          <span>Click an edge to make it a wall, railing or open, or to add doors and windows.</span>
-        </template>
-        <template v-else>
-          <span>Click where the wall starts, then where it ends.</span>
-          <span>Walls carry on from the last end; Escape or a double-click stops.</span>
-        </template>
-      </div>
-
-      <div class="pointer-events-none absolute inset-x-2 bottom-2 flex justify-center sm:bottom-3">
-        <StudioToolbar
-          v-model:view="view"
-          :zoom-level="canvas?.zoomLevel ?? 100"
-          fit-label="Fit to screen"
-          :can-undo="draft.canUndo.value"
-          :can-redo="draft.canRedo.value"
-          @zoom="direction => canvas?.zoom(direction)"
-          @fit="canvas?.fit()"
-          @undo="draft.undo()"
-          @redo="draft.redo()"
+      </template>
+      <template #canvas>
+        <!-- The plan -->
+        <main
+          ref="planArea"
+          aria-label="Floor plan"
+          class="relative h-full min-w-0 flex-1 bg-muted"
         >
-          <UTooltip text="Select">
-            <UButton
-              icon="i-lucide-mouse-pointer-2"
-              :label="isCompact ? undefined : 'Select'"
-              aria-label="Select"
-              :variant="mode === 'select' ? 'soft' : 'ghost'"
-              :color="mode === 'select' ? 'primary' : 'neutral'"
-              :aria-pressed="mode === 'select'"
-              :ui="{ label: 'max-xl:sr-only' }"
-              @click="startTool('select')"
-            />
-          </UTooltip>
-          <UTooltip text="Hand">
-            <UButton
-              icon="i-lucide-hand"
-              :label="isCompact ? undefined : 'Hand'"
-              aria-label="Hand"
-              :variant="mode === 'hand' ? 'soft' : 'ghost'"
-              :color="mode === 'hand' ? 'primary' : 'neutral'"
-              :aria-pressed="mode === 'hand'"
-              :ui="{ label: 'max-xl:sr-only' }"
-              @click="startTool('hand')"
-            />
-          </UTooltip>
-          <UDropdownMenu
-            :items="drawTools"
-            :modal="false"
-            :content="{ side: 'top' }"
+          <FloorPlanCanvas
+            ref="canvas"
+            :layout="layout"
+            :floor-id="floor.id"
+            :tables="tables"
+            :looks="looks"
+            :selection="selection"
+            :ghost="ghost"
+            :show-below="showBelow"
+            :mode="mode"
+            :placing="!!pending"
+            @place="placePending"
+            @cancel-place="pending = null"
+            @select="selection = $event"
+            @move="move"
+            @rotate="rotate"
+            @resize="resize"
+            @remove="remove"
+            @shape="updateShape"
+            @add-wall="addWall"
+            @edit-length="editLength"
+          />
+
+          <!-- Draw outline: the clicked length label becomes a field (3A). -->
+          <form
+            v-if="lengthEdit"
+            class="absolute -translate-x-1/2 -translate-y-1/2"
+            :style="{ left: `${lengthEdit.at.x}px`, top: `${lengthEdit.at.y}px` }"
+            data-testid="edge-length-edit"
+            @submit.prevent="applyLength()"
+          >
+            <UInput
+              ref="lengthInput"
+              v-model.number="lengthEdit.value"
+              type="number"
+              inputmode="numeric"
+              :min="EDGE_LENGTH_MIN_CM"
+              :max="EDGE_LENGTH_MAX_CM"
+              size="sm"
+              class="w-28 shadow-md"
+              :aria-label="`${names[lengthEdit.index] ?? 'Edge'} length (cm)`"
+              :ui="{ trailing: 'pointer-events-none text-xs text-muted' }"
+              @blur="applyLength()"
+              @keydown.esc.stop.prevent="lengthEdit = null"
+            >
+              <template #trailing>
+                cm
+              </template>
+            </UInput>
+          </form>
+
+          <!-- Quick actions next to the selection (2B): the common moves without the panel. -->
+          <div
+            v-if="mode === 'select' && quickBarStyle && (selectedPlacement || selectedItem)"
+            ref="quickBar"
+            role="toolbar"
+            :aria-label="selectedPlacement ? `${tableLabel(selectedPlacement.tableId) ?? 'Table'} quick actions` : 'Furniture quick actions'"
+            class="absolute flex items-center gap-0.5 rounded-lg border border-default bg-default p-1 shadow-md"
+            :style="quickBarStyle"
+            data-testid="quick-actions"
           >
             <UButton
-              icon="i-lucide-pen-tool"
-              :label="isCompact ? undefined : 'Draw'"
-              aria-label="Draw"
-              :color="drawing ? 'primary' : 'neutral'"
-              :variant="drawing ? 'soft' : 'ghost'"
-              :ui="{ label: 'max-xl:sr-only' }"
+              icon="i-lucide-rotate-cw"
+              color="neutral"
+              variant="ghost"
+              aria-label="Rotate 90°"
+              @click="turn(90)"
+            >
+              <span class="hidden sm:inline">Rotate 90°</span>
+            </UButton>
+            <USeparator
+              orientation="vertical"
+              class="h-5"
             />
-          </UDropdownMenu>
-        </StudioToolbar>
-      </div>
-      <div
-        v-if="pending"
-        class="absolute inset-x-2 bottom-28 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-default bg-default p-2 shadow-sm"
-      >
-        <span
-          class="text-sm text-toned"
-          role="status"
-        >Click or tap the plan to place {{ pendingLabel }}.</span>
-        <UButton
-          label="Place at center"
-          color="neutral"
-          variant="outline"
-          @click="placePending()"
-        />
-        <UButton
-          label="Cancel"
-          color="neutral"
-          variant="ghost"
-          @click="pending = null"
-        />
-      </div>
-    </main>
+            <UButton
+              v-if="selectedPlacement"
+              icon="i-lucide-copy"
+              color="neutral"
+              variant="ghost"
+              aria-label="Duplicate look"
+              @click="duplicateLook(selectedPlacement.tableId)"
+            >
+              <span class="hidden sm:inline">Duplicate look</span>
+            </UButton>
+            <UButton
+              v-else-if="selectedItem"
+              icon="i-lucide-copy"
+              color="neutral"
+              variant="ghost"
+              aria-label="Duplicate"
+              @click="duplicateItem(selectedItem.id)"
+            >
+              <span class="hidden sm:inline">Duplicate</span>
+            </UButton>
+            <USeparator
+              orientation="vertical"
+              class="h-5"
+            />
+            <UButton
+              :icon="selectedPlacement ? 'i-lucide-map-pin-off' : 'i-lucide-trash-2'"
+              color="neutral"
+              variant="ghost"
+              :aria-label="selectedPlacement ? 'Remove from map' : 'Delete'"
+              @click="remove(selection!)"
+            >
+              <span class="hidden sm:inline">{{ selectedPlacement ? 'Remove from map' : 'Delete' }}</span>
+            </UButton>
+          </div>
+          <div
+            v-else-if="mode === 'select' && quickBarStyle && selectedWall"
+            ref="quickBar"
+            role="toolbar"
+            aria-label="Wall quick actions"
+            class="absolute flex items-center rounded-lg border border-default bg-default p-1 shadow-md"
+            :style="quickBarStyle"
+            data-testid="quick-actions"
+          >
+            <UButton
+              icon="i-lucide-trash-2"
+              color="neutral"
+              variant="ghost"
+              aria-label="Delete wall"
+              @click="remove(selection!)"
+            >
+              <span class="hidden sm:inline">Delete wall</span>
+            </UButton>
+          </div>
+          <div
+            v-else-if="mode === 'select' && quickBarStyle && floor && selectedEdge !== undefined"
+            ref="quickBar"
+            role="toolbar"
+            :aria-label="`${names[selectedEdge] ?? 'Edge'} quick actions`"
+            class="absolute flex items-center gap-0.5 rounded-lg border border-default bg-default p-1 shadow-md"
+            :style="quickBarStyle"
+            data-testid="quick-actions"
+          >
+            <UFieldGroup
+              role="group"
+              aria-label="Edge type"
+            >
+              <UButton
+                v-for="kind in EDGE_KINDS"
+                :key="kind.value"
+                :label="kind.label"
+                :color="floor.edges[selectedEdge]?.kind === kind.value ? 'primary' : 'neutral'"
+                :variant="floor.edges[selectedEdge]?.kind === kind.value ? 'soft' : 'ghost'"
+                :aria-pressed="floor.edges[selectedEdge]?.kind === kind.value"
+                @click="updateShape(setEdgeKind(shapeOf(floor), selectedEdge, kind.value))"
+              />
+            </UFieldGroup>
+            <template v-if="floor.edges[selectedEdge]?.kind !== 'open'">
+              <USeparator
+                orientation="vertical"
+                class="h-5"
+              />
+              <UButton
+                icon="i-lucide-door-open"
+                color="neutral"
+                variant="ghost"
+                :aria-label="`Add a ${floor.edges[selectedEdge]?.kind === 'railing' ? 'gate' : 'door'}`"
+                :disabled="!openingFits(shapeOf(floor), selectedEdge, 'door')"
+                @click="updateShape(addOpening(shapeOf(floor), selectedEdge, 'door', newLayoutId('door')))"
+              >
+                <span class="hidden sm:inline">{{ floor.edges[selectedEdge]?.kind === 'railing' ? 'Gate' : 'Door' }}</span>
+              </UButton>
+              <UButton
+                v-if="floor.edges[selectedEdge]?.kind === 'wall'"
+                icon="i-lucide-app-window"
+                color="neutral"
+                variant="ghost"
+                aria-label="Add a window"
+                :disabled="!openingFits(shapeOf(floor), selectedEdge, 'window')"
+                @click="updateShape(addOpening(shapeOf(floor), selectedEdge, 'window', newLayoutId('window')))"
+              >
+                <span class="hidden sm:inline">Window</span>
+              </UButton>
+            </template>
+          </div>
+
+          <div class="pointer-events-none absolute inset-x-3 top-3 flex flex-col gap-2">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div class="flex min-w-0 flex-wrap items-center gap-2">
+                <UTooltip
+                  v-if="!isExpanded || !sidebarOpen"
+                  :text="isExpanded ? 'Show sidebar' : 'Open Studio sidebar'"
+                >
+                  <UButton
+                    icon="i-lucide-panel-left-open"
+                    color="neutral"
+                    variant="outline"
+                    class="pointer-events-auto bg-default"
+                    :aria-label="isExpanded ? 'Show sidebar' : 'Open Studio sidebar'"
+                    @click="isExpanded ? sidebarOpen = true : sheet = 'sidebar'"
+                  />
+                </UTooltip>
+                <!-- A tool's bar replaces the floor bar while it's open (3A, 9A). -->
+                <div
+                  v-if="drawing"
+                  class="flex flex-wrap items-center gap-2"
+                  data-testid="tool-bar"
+                >
+                  <span class="rounded-lg border border-default bg-default px-3 py-2 text-sm font-semibold text-highlighted shadow-sm">
+                    {{ mode === 'outline' ? 'Draw outline' : 'Draw wall' }}
+                    <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && floor.outline.length >= 3"> · {{ areaM2(floor.outline) }} m²</template></span>
+                  </span>
+                  <span class="pointer-events-auto flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
+                    <USwitch
+                      v-if="floorIndex > 0"
+                      v-model="showBelow"
+                      label="Show floor below"
+                      size="sm"
+                      class="px-1"
+                    />
+                    <UButton
+                      v-if="floor.outline.length >= 3"
+                      label="Cancel"
+                      color="neutral"
+                      variant="ghost"
+                      size="sm"
+                      @click="cancelTool()"
+                    />
+                    <UButton
+                      label="Done"
+                      size="sm"
+                      :disabled="floor.outline.length < 3"
+                      @click="finishTool()"
+                    />
+                  </span>
+                </div>
+                <template v-else>
+                  <USelect
+                    :model-value="floor.id"
+                    :items="floorItems"
+                    aria-label="Active floor"
+                    class="pointer-events-auto"
+                    @update:model-value="selectFloor"
+                  />
+                </template>
+              </div>
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                <slot name="actions" />
+                <UButton
+                  v-if="!isExpanded"
+                  label="Properties"
+                  icon="i-lucide-sliders-horizontal"
+                  color="neutral"
+                  variant="outline"
+                  class="pointer-events-auto bg-default"
+                  :ui="{ label: 'max-sm:sr-only' }"
+                  @click="detailsOpen = true"
+                />
+              </div>
+            </div>
+
+            <UAlert
+              v-if="placementAlerts.length && mode === 'select'"
+              color="warning"
+              variant="subtle"
+              icon="i-lucide-triangle-alert"
+              class="pointer-events-auto max-w-xl"
+              :title="`Check placement on ${floor.name}`"
+              :description="`${listLabels(placementAlerts.slice(0, 3).map(entry => entry.label))}${placementAlerts.length > 3 ? ` (+${placementAlerts.length - 3} more)` : ''}. Highlighted pieces overlap or extend outside the floor. You can still save.`"
+              :actions="[{ label: 'Show', color: 'neutral', variant: 'outline', onClick: () => { selection = placementAlerts[0]!.selection } }]"
+              data-testid="placement-warning"
+            />
+          </div>
+
+          <!-- How the tool works (3A, 9A). -->
+          <div
+            v-if="mode === 'outline' || mode === 'wall'"
+            class="pointer-events-none absolute bottom-28 left-2 flex max-w-60 flex-col gap-1 rounded-lg border border-default bg-default px-3 py-2 text-xs text-toned shadow-sm"
+          >
+            <template v-if="mode === 'outline' && floor.outline.length === 0">
+              <span>Click on the grid to add corners.</span>
+              <span>Click the first corner, double-click or press Enter to close the shape.</span>
+            </template>
+            <template v-else-if="mode === 'outline'">
+              <span>Drag a corner to move it; it keeps right angles unless you hold Alt.</span>
+              <span>Click a round handle to add a corner. Click a corner, then Delete to remove it.</span>
+              <span>Click an edge to make it a wall, railing or open, or to add doors and windows.</span>
+            </template>
+            <template v-else>
+              <span>Click where the wall starts, then where it ends.</span>
+              <span>Walls carry on from the last end; Escape or a double-click stops.</span>
+            </template>
+          </div>
+
+          <div class="pointer-events-none absolute inset-x-2 bottom-2 flex justify-center sm:bottom-3">
+            <StudioToolbar
+              v-model:view="view"
+              :zoom-level="canvas?.zoomLevel ?? 100"
+              fit-label="Fit to screen"
+              :can-undo="draft.canUndo.value"
+              :can-redo="draft.canRedo.value"
+              @zoom="direction => canvas?.zoom(direction)"
+              @fit="canvas?.fit()"
+              @undo="draft.undo()"
+              @redo="draft.redo()"
+            >
+              <UTooltip text="Select">
+                <UButton
+                  icon="i-lucide-mouse-pointer-2"
+                  :label="isCompact ? undefined : 'Select'"
+                  aria-label="Select"
+                  :variant="mode === 'select' ? 'soft' : 'ghost'"
+                  :color="mode === 'select' ? 'primary' : 'neutral'"
+                  :aria-pressed="mode === 'select'"
+                  :ui="{ label: 'max-xl:sr-only' }"
+                  @click="startTool('select')"
+                />
+              </UTooltip>
+              <UTooltip text="Hand">
+                <UButton
+                  icon="i-lucide-hand"
+                  :label="isCompact ? undefined : 'Hand'"
+                  aria-label="Hand"
+                  :variant="mode === 'hand' ? 'soft' : 'ghost'"
+                  :color="mode === 'hand' ? 'primary' : 'neutral'"
+                  :aria-pressed="mode === 'hand'"
+                  :ui="{ label: 'max-xl:sr-only' }"
+                  @click="startTool('hand')"
+                />
+              </UTooltip>
+              <UDropdownMenu
+                :items="drawTools"
+                :modal="false"
+                :content="{ side: 'top' }"
+              >
+                <UButton
+                  icon="i-lucide-pen-tool"
+                  :label="isCompact ? undefined : 'Draw'"
+                  aria-label="Draw"
+                  :color="drawing ? 'primary' : 'neutral'"
+                  :variant="drawing ? 'soft' : 'ghost'"
+                  :ui="{ label: 'max-xl:sr-only' }"
+                />
+              </UDropdownMenu>
+            </StudioToolbar>
+          </div>
+          <div
+            v-if="pending"
+            class="absolute inset-x-2 bottom-28 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-default bg-default p-2 shadow-sm"
+          >
+            <span
+              class="text-sm text-toned"
+              role="status"
+            >Click or tap the plan to place {{ pendingLabel }}.</span>
+            <UButton
+              label="Place at center"
+              color="neutral"
+              variant="outline"
+              @click="placePending()"
+            />
+            <UButton
+              label="Cancel"
+              color="neutral"
+              variant="ghost"
+              @click="pending = null"
+            />
+          </div>
+        </main>
+      </template>
+    </USplitter>
 
     <aside
       aria-label="Properties"
