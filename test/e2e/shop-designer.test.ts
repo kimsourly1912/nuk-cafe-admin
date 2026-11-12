@@ -57,7 +57,13 @@ const plan = (page: Page) => page.getByTestId('floor-plan')
 const unplaced = (page: Page, label: string) => page.getByTestId(`unplaced-${label}`)
 const saveButton = (page: Page) => page.getByRole('button', { name: 'Save layout' })
 const studioPanels = (page: Page) => page.getByRole('navigation', { name: 'Studio panels' })
-const showPanel = (page: Page, name: 'Floors' | 'Tables' | 'Assets' | 'Properties') => studioPanels(page).getByRole('button', { name, exact: true }).click()
+/** Opens a panel of the sidebar; below 1024 px the sidebar opens over the plan first (D277). */
+async function showPanel(page: Page, name: 'Floors' | 'Tables' | 'Assets') {
+  const open = page.getByRole('button', { name: 'Open Studio sidebar' })
+  await studioPanels(page).or(open).first().waitFor()
+  if (!(await studioPanels(page).isVisible())) await open.click()
+  await studioPanels(page).getByRole('button', { name, exact: true }).click()
+}
 
 async function placeTable(page: Page, label: string) {
   await showPanel(page, 'Tables')
@@ -486,6 +492,39 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
     await page.getByRole('button', { name: 'Back to admin' }).click()
     await page.waitForURL(address => address.pathname.endsWith(`/admin/branches/${lab.branchId}`) && address.searchParams.get('tab') === 'tables')
+  })
+
+  it('Studio shell (D277): Hide sidebar keeps the plan as it was, and the toolbar and Save layout work in both views', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').click()
+    await page.getByRole('button', { name: 'Zoom in' }).click()
+    // A mark on the plan's element: it is still there only if the plan was never mounted again.
+    await plan(page).evaluate(svg => svg.setAttribute('data-kept', 'yes'))
+    const width = (await plan(page).boundingBox())!.width
+    const sidebar = page.getByTestId('studio-sidebar')
+    await page.getByRole('button', { name: 'Hide sidebar' }).click()
+    await sidebar.waitFor({ state: 'detached' })
+    await expect.poll(async () => (await plan(page).boundingBox())!.width).toBeGreaterThan(width)
+    await shot(page, 'sidebar-hidden')
+    await page.getByRole('button', { name: 'Show sidebar' }).click()
+    await sidebar.waitFor()
+    expect(await plan(page).getAttribute('data-kept')).toBe('yes')
+    await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+
+    // One toolbar, the same groups in 3D; Save layout stays on the canvas.
+    const toolbar = page.getByRole('toolbar', { name: 'Canvas tools' })
+    expect(await toolbar.getByRole('group').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')))).toEqual(['Tools', 'Layout view', 'Zoom', 'History'])
+    await toolbar.getByRole('button', { name: '3D', exact: true }).click()
+    await drawn(page)
+    expect(await toolbar.getByRole('group').evaluateAll(groups => groups.map(group => group.getAttribute('aria-label')))).toEqual(['Layout view', 'Zoom', 'History'])
+    await toolbar.getByRole('button', { name: 'Fit building' }).waitFor()
+    await saveButton(page).waitFor()
+    await page.getByRole('button', { name: 'Back to admin' }).waitFor()
+    await shot(page, 'studio-3d')
+    await toolbar.getByRole('button', { name: '2D', exact: true }).click()
+    await plan(page).waitFor()
+    await shot(page, 'studio-2d')
   })
 
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {

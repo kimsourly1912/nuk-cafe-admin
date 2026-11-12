@@ -3,7 +3,7 @@
  * Design shop (D273, frames 1–3, 6A–6C, 9A–9C): a branch's saved layout with its real tables. The
  * library (Unplaced tables, table looks, furniture), the floor plan with its floors, Draw outline
  * and Draw wall, and the panel for what's selected. Every change goes through the editor's draft
- * (one undo step each) and is saved with Save layout (the page's navbar). Pieces arrive by dragging
+ * (one undo step each) and is saved with Studio's Save layout (on the canvas, D277). Pieces arrive by dragging
  * from the library or with Place on map (then the move pad), so the editor works without dragging
  * on touch, with a keyboard and in the e2e tests.
  */
@@ -29,6 +29,7 @@ import FloorPlanCanvas from './FloorPlanCanvas.vue'
 import LayoutStarterPicker from './LayoutStarterPicker.vue'
 import LookFormModal from './LookFormModal.vue'
 import PickTableModal from './PickTableModal.vue'
+import StudioToolbar from './StudioToolbar.vue'
 import TableFormModal from './TableFormModal.vue'
 import TableQrModal from './TableQrModal.vue'
 
@@ -40,6 +41,16 @@ const props = defineProps<{
   /** Every table of the branch (the table list's query): for Edit table, View QR and names. */
   diningTables: readonly DiningTable[]
   looks: readonly TableLook[]
+}>()
+/** Studio's view (D277): the toolbar's 2D and 3D switch it. */
+const view = defineModel<'design' | '3d'>('view', { required: true })
+/** The left sidebar on a wide screen (Studio owns it, so 3D keeps the same choice). */
+const sidebarOpen = defineModel<boolean>('sidebar', { default: true })
+defineSlots<{
+  /** Studio's header at the top of the sidebar. `collapsible`: it may offer Hide sidebar. */
+  'sidebar-header'?: (props: { collapsible: boolean }) => unknown
+  /** Studio's actions at the canvas's top right (Save layout). */
+  'actions'?: () => unknown
 }>()
 
 const exploreEnabled = useRuntimeConfig().public.explore
@@ -59,34 +70,30 @@ const panels = [
   { value: 'floors', label: 'Floors', icon: 'i-lucide-layers' },
   { value: 'tables', label: 'Tables', icon: 'i-lucide-table-2' },
   { value: 'assets', label: 'Assets', icon: 'i-lucide-box' },
-  { value: 'properties', label: 'Properties', icon: 'i-lucide-sliders-horizontal' },
 ] as const
 type Panel = typeof panels[number]['value']
-const panel = ref<Exclude<Panel, 'properties'>>('floors')
-const panelOpen = ref<Panel | null>(null)
+const panel = ref<Panel>('floors')
+/** Below 1024 px the sidebar and Properties open over the plan, one at a time (D277). */
+const sheet = ref<'sidebar' | 'properties' | null>(null)
 const detailsOpen = computed({
-  get: () => panelOpen.value === 'properties',
-  set: open => panelOpen.value = open ? 'properties' : null,
+  get: () => sheet.value === 'properties',
+  set: open => sheet.value = open ? 'properties' : null,
 })
-const focusMode = ref(false)
 const search = ref('')
 const assetTab = ref<'objects' | 'finishes'>('objects')
-const panelTitle = computed(() => panels.find(option => option.value === (panelOpen.value ?? panel.value))?.label ?? 'Floors')
+const panelTitle = computed(() => panels.find(option => option.value === panel.value)?.label ?? 'Floors')
 const matches = (label: string) => label.toLowerCase().includes(search.value.trim().toLowerCase())
 
 function showPanel(next: Panel) {
-  if (next !== 'properties' && next !== panel.value) {
-    panel.value = next
-    search.value = ''
-  }
-  if (!isExpanded.value) panelOpen.value = panelOpen.value === next ? null : next
-  else focusMode.value = false
+  if (next === panel.value) return
+  panel.value = next
+  search.value = ''
 }
 
 watch(() => props.active, (active) => {
   if (!active) {
     exploreOpen.value = false
-    panelOpen.value = null
+    sheet.value = null
     pending.value = null
     if (mode.value === 'outline' || mode.value === 'wall') finishTool()
   }
@@ -97,11 +104,12 @@ const tenantPath = useTenantPath()
 const [DefineLibrary, ReuseLibrary] = createReusableTemplate()
 const [DefineDetails, ReuseDetails] = createReusableTemplate()
 const [DefineMovePad, ReuseMovePad] = createReusableTemplate()
+const [DefineRail, ReuseRail] = createReusableTemplate<{ vertical: boolean }>()
 
 function selectPlaced(target: PlanSelection, floorId: string) {
   if (floor.value?.id !== floorId) selectFloor(floorId)
   selection.value = target
-  panelOpen.value = null
+  sheet.value = null
 }
 
 function selectFloor(id: string) {
@@ -594,7 +602,7 @@ const pending = shallowRef<LibraryPiece | null>(null)
 function beginPlacement(piece: LibraryPiece) {
   // A drag that ended back on its card also clicks it.
   if (performance.now() < suppressClickUntil) return
-  panelOpen.value = null
+  sheet.value = null
   mode.value = 'select'
   pending.value = piece
   nextTick(() => canvas.value?.focus())
@@ -735,6 +743,7 @@ const drawTools = [
   { label: 'Draw outline', icon: 'i-lucide-pen-tool', onSelect: () => startTool('outline') },
   { label: 'Draw wall', icon: 'i-lucide-brick-wall', onSelect: () => startTool('wall') },
 ]
+const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall')
 const pendingLabel = computed(() => {
   const piece = pending.value
   if (!piece) return ''
@@ -771,7 +780,7 @@ const pendingLabel = computed(() => {
           icon="i-lucide-layers"
           block
           class="justify-start"
-          @click="selectFloor(candidate.id); panelOpen = null"
+          @click="selectFloor(candidate.id); sheet = null"
         >
           <template #trailing>
             <span class="ml-auto text-xs text-muted">{{ tablesOn(candidate.id).length }} tables</span>
@@ -816,7 +825,7 @@ const pendingLabel = computed(() => {
         color="neutral"
         variant="ghost"
         :disabled="!canAddFloor(layout)"
-        @click="addFloor(); panelOpen = null"
+        @click="addFloor(); sheet = null"
       />
     </div>
     <div
@@ -1197,21 +1206,12 @@ const pendingLabel = computed(() => {
           />
         </UFieldGroup>
         <span class="tabular-nums">{{ position }}</span>
-        <div class="flex gap-1">
-          <UButton
-            label="Details"
-            size="xs"
-            color="neutral"
-            variant="outline"
-            class="lg:hidden"
-            @click="detailsOpen = true"
-          />
-          <UButton
-            label="Done"
-            size="xs"
-            @click="selection = null"
-          />
-        </div>
+        <UButton
+          label="Done"
+          size="xs"
+          class="self-start"
+          @click="selection = null"
+        />
       </div>
     </div>
   </DefineMovePad>
@@ -1666,95 +1666,134 @@ const pendingLabel = computed(() => {
     />
   </DefineDetails>
 
-  <div
-    v-if="editor.error.value"
-    class="p-4"
-  >
-    <ApiErrorAlert
-      :error="editor.error.value"
-      title="Could not load the shop layout"
-      @retry="editor.retry()"
-    />
-  </div>
-  <div
-    v-else-if="!editor.ready.value"
-    class="p-4"
-  >
-    <ListSkeleton
-      label="Loading the shop layout…"
-      variant="card"
-    />
-  </div>
-  <LayoutStarterPicker
-    v-else-if="!floor"
-    :table-count="tables.length"
-    @choose="chooseStarter"
-  />
-
-  <div
-    v-else
-    class="relative flex h-full min-h-0 pb-12 sm:pb-0"
-  >
+  <!-- The panel rail: down the sidebar on a wide screen, across the top of the sheet below it. -->
+  <DefineRail v-slot="{ vertical }">
     <nav
       aria-label="Studio panels"
-      class="absolute inset-x-0 bottom-0 z-10 flex h-12 shrink-0 items-center justify-around border-t border-default bg-elevated sm:static sm:h-auto sm:w-16 sm:flex-col sm:justify-start sm:gap-1 sm:border-t-0 sm:border-r sm:p-1"
+      :class="vertical ? 'flex w-16 shrink-0 flex-col gap-1 border-r border-default p-1' : 'grid grid-cols-3 gap-1'"
     >
       <UButton
         v-for="option in panels"
         :key="option.value"
         :label="option.label"
         :icon="option.icon"
-        :color="(isExpanded ? !focusMode && (option.value === panel || option.value === 'properties') : panelOpen === option.value) ? 'primary' : 'neutral'"
-        :variant="(isExpanded ? !focusMode && (option.value === panel || option.value === 'properties') : panelOpen === option.value) ? 'soft' : 'ghost'"
-        :aria-pressed="isExpanded ? !focusMode && (option.value === panel || option.value === 'properties') : panelOpen === option.value"
+        :color="option.value === panel ? 'primary' : 'neutral'"
+        :variant="option.value === panel ? 'soft' : 'ghost'"
+        :aria-pressed="option.value === panel"
         size="sm"
-        class="flex-col gap-1 sm:w-full"
-        :class="option.value === 'properties' && 'sm:mt-auto'"
+        class="flex-col gap-1"
         :ui="{ label: 'text-xs', leadingIcon: 'size-4' }"
         @click="showPanel(option.value)"
       />
-      <UButton
-        :label="focusMode ? 'Show panels' : 'Hide panels'"
-        icon="i-lucide-panels-left-right"
-        color="neutral"
-        variant="ghost"
-        size="sm"
-        class="hidden flex-col gap-1 lg:flex"
-        :ui="{ label: 'text-xs whitespace-normal text-center', leadingIcon: 'size-4' }"
-        @click="focusMode = !focusMode"
-      />
     </nav>
-    <aside
-      v-if="!focusMode"
-      :aria-label="panelTitle"
-      class="hidden w-48 shrink-0 overflow-y-auto border-r border-default bg-default p-3 lg:block xl:w-60"
+  </DefineRail>
+
+  <div
+    v-if="editor.error.value || !editor.ready.value || !floor"
+    class="flex h-full min-h-0 flex-col"
+  >
+    <slot
+      name="sidebar-header"
+      :collapsible="false"
+    />
+    <div
+      v-if="editor.error.value"
+      class="p-4"
     >
-      <h2 class="mb-3 border-b border-default pb-3 text-sm font-semibold text-highlighted">
-        {{ panelTitle }}
-      </h2>
-      <ReuseLibrary />
-    </aside>
+      <ApiErrorAlert
+        :error="editor.error.value"
+        title="Could not load the shop layout"
+        @retry="editor.retry()"
+      />
+    </div>
+    <div
+      v-else-if="!editor.ready.value"
+      class="p-4"
+    >
+      <ListSkeleton
+        label="Loading the shop layout…"
+        variant="card"
+      />
+    </div>
+    <div
+      v-else
+      class="min-h-0 flex-1 overflow-y-auto"
+    >
+      <LayoutStarterPicker
+        :table-count="tables.length"
+        @choose="chooseStarter"
+      />
+    </div>
+  </div>
+
+  <div
+    v-else
+    class="relative flex h-full min-h-0"
+  >
+    <!-- The sidebar (D277): Studio's header, the panel rail and the open panel. -->
+    <div
+      v-if="sidebarOpen"
+      data-testid="studio-sidebar"
+      class="hidden w-72 shrink-0 flex-col border-r border-default bg-default lg:flex xl:w-80"
+    >
+      <slot
+        name="sidebar-header"
+        :collapsible="true"
+      />
+      <div class="flex min-h-0 flex-1">
+        <ReuseRail :vertical="true" />
+        <aside
+          :aria-label="panelTitle"
+          class="min-w-0 flex-1 overflow-y-auto p-3"
+        >
+          <h2 class="mb-3 border-b border-default pb-3 text-sm font-semibold text-highlighted">
+            {{ panelTitle }}
+          </h2>
+          <ReuseLibrary />
+        </aside>
+      </div>
+    </div>
     <AppDrawer
       v-if="isCompact"
-      :open="panelOpen !== null"
-      :title="panelTitle"
-      @update:open="open => !open && (panelOpen = null)"
+      :open="sheet !== null"
+      :title="detailsOpen ? 'Properties' : panelTitle"
+      @update:open="open => !open && (sheet = null)"
     >
       <template #body>
         <ReuseDetails v-if="detailsOpen" />
-        <ReuseLibrary v-else />
+        <div
+          v-else
+          class="flex flex-col gap-4"
+        >
+          <slot
+            name="sidebar-header"
+            :collapsible="false"
+          />
+          <ReuseRail :vertical="false" />
+          <ReuseLibrary />
+        </div>
       </template>
     </AppDrawer>
     <AppSlideover
       v-else-if="!isExpanded"
-      :open="panelOpen !== null"
-      :title="panelTitle"
+      :open="sheet !== null"
+      :title="detailsOpen ? 'Properties' : panelTitle"
       :side="detailsOpen ? 'right' : 'left'"
-      @update:open="open => !open && (panelOpen = null)"
+      @update:open="open => !open && (sheet = null)"
     >
       <template #body>
         <ReuseDetails v-if="detailsOpen" />
-        <ReuseLibrary v-else />
+        <div
+          v-else
+          class="flex flex-col gap-4"
+        >
+          <slot
+            name="sidebar-header"
+            :collapsible="false"
+          />
+          <ReuseRail :vertical="false" />
+          <ReuseLibrary />
+        </div>
       </template>
     </AppSlideover>
 
@@ -1944,126 +1983,151 @@ const pendingLabel = computed(() => {
       </div>
 
       <div class="pointer-events-none absolute inset-x-3 top-3 flex flex-col gap-2">
-        <!-- A tool's bar replaces the floor bar while it's open (3A, 9A). -->
-        <div
-          v-if="mode === 'outline' || mode === 'wall'"
-          class="flex flex-wrap items-start justify-between gap-2"
-          data-testid="tool-bar"
-        >
-          <span class="rounded-lg border border-default bg-default px-3 py-2 text-sm font-semibold text-highlighted shadow-sm">
-            {{ mode === 'outline' ? 'Draw outline' : 'Draw wall' }}
-            <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && floor.outline.length >= 3"> · {{ areaM2(floor.outline) }} m²</template></span>
-          </span>
-          <span class="pointer-events-auto flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
-            <USwitch
-              v-if="floorIndex > 0"
-              v-model="showBelow"
-              label="Show floor below"
-              size="sm"
-              class="px-1"
-            />
-            <UButton
-              v-if="floor.outline.length >= 3"
-              label="Cancel"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              @click="cancelTool()"
-            />
-            <UButton
-              label="Done"
-              size="sm"
-              :disabled="floor.outline.length < 3"
-              @click="finishTool()"
-            />
-          </span>
-        </div>
-
-        <div
-          v-else
-          class="flex flex-wrap items-start justify-between gap-2"
-        >
-          <div class="pointer-events-auto flex flex-wrap items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
-            <USelect
-              :model-value="floor.id"
-              :items="floorItems"
-              aria-label="Active floor"
-              size="sm"
-              @update:model-value="selectFloor"
-            />
-            <!-- The floor menu (9B). -->
-            <UPopover :content="{ align: 'start' }">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div class="flex min-w-0 flex-wrap items-center gap-2">
+            <UTooltip
+              v-if="!isExpanded || !sidebarOpen"
+              :text="isExpanded ? 'Show sidebar' : 'Open Studio sidebar'"
+            >
               <UButton
-                icon="i-lucide-ellipsis"
+                icon="i-lucide-panel-left-open"
                 color="neutral"
-                variant="ghost"
-                size="sm"
-                :aria-label="`${floor.name} floor options`"
-                data-testid="floor-menu"
+                variant="outline"
+                class="pointer-events-auto bg-default"
+                :aria-label="isExpanded ? 'Show sidebar' : 'Open Studio sidebar'"
+                @click="isExpanded ? sidebarOpen = true : sheet = 'sidebar'"
               />
-              <template #content>
-                <div
-                  class="flex w-72 flex-col gap-3 p-3"
-                  data-testid="floor-menu-panel"
-                >
-                  <UFormField label="Rename floor">
-                    <UInput
-                      v-model="floorName"
-                      :maxlength="30"
-                      class="w-full"
-                      @blur="renameFloor()"
-                      @keydown.enter="renameFloor()"
-                    />
-                  </UFormField>
-                  <UFormField
-                    label="Floor height (cm)"
-                    help="The wall height in 3D."
-                  >
-                    <UInputNumber
-                      :model-value="floor.height"
-                      :min="200"
-                      :max="800"
-                      :step="10"
-                      @update:model-value="setHeight"
-                    />
-                  </UFormField>
-                  <USwitch
-                    :model-value="floor.hasRoof"
-                    label="Roof over this floor"
-                    description="Off: open to the sky, like a rooftop patio."
-                    @update:model-value="setRoof"
-                  />
-                  <USeparator />
+            </UTooltip>
+            <!-- A tool's bar replaces the floor bar while it's open (3A, 9A). -->
+            <div
+              v-if="drawing"
+              class="flex flex-wrap items-center gap-2"
+              data-testid="tool-bar"
+            >
+              <span class="rounded-lg border border-default bg-default px-3 py-2 text-sm font-semibold text-highlighted shadow-sm">
+                {{ mode === 'outline' ? 'Draw outline' : 'Draw wall' }}
+                <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && floor.outline.length >= 3"> · {{ areaM2(floor.outline) }} m²</template></span>
+              </span>
+              <span class="pointer-events-auto flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
+                <USwitch
+                  v-if="floorIndex > 0"
+                  v-model="showBelow"
+                  label="Show floor below"
+                  size="sm"
+                  class="px-1"
+                />
+                <UButton
+                  v-if="floor.outline.length >= 3"
+                  label="Cancel"
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  @click="cancelTool()"
+                />
+                <UButton
+                  label="Done"
+                  size="sm"
+                  :disabled="floor.outline.length < 3"
+                  @click="finishTool()"
+                />
+              </span>
+            </div>
+            <template v-else>
+              <div class="pointer-events-auto flex flex-wrap items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
+                <USelect
+                  :model-value="floor.id"
+                  :items="floorItems"
+                  aria-label="Active floor"
+                  size="sm"
+                  @update:model-value="selectFloor"
+                />
+                <!-- The floor menu (9B). -->
+                <UPopover :content="{ align: 'start' }">
                   <UButton
-                    label="Remove floor…"
-                    icon="i-lucide-trash-2"
-                    color="error"
+                    icon="i-lucide-ellipsis"
+                    color="neutral"
                     variant="ghost"
-                    :disabled="floors.length <= 1"
-                    @click="removeFloor()"
+                    size="sm"
+                    :aria-label="`${floor.name} floor options`"
+                    data-testid="floor-menu"
                   />
-                </div>
-              </template>
-            </UPopover>
-            <USwitch
-              v-if="floorIndex > 0"
-              v-model="showBelow"
-              label="Floor below"
-              size="sm"
-              class="px-1"
+                  <template #content>
+                    <div
+                      class="flex w-72 flex-col gap-3 p-3"
+                      data-testid="floor-menu-panel"
+                    >
+                      <UFormField label="Rename floor">
+                        <UInput
+                          v-model="floorName"
+                          :maxlength="30"
+                          class="w-full"
+                          @blur="renameFloor()"
+                          @keydown.enter="renameFloor()"
+                        />
+                      </UFormField>
+                      <UFormField
+                        label="Floor height (cm)"
+                        help="The wall height in 3D."
+                      >
+                        <UInputNumber
+                          :model-value="floor.height"
+                          :min="200"
+                          :max="800"
+                          :step="10"
+                          @update:model-value="setHeight"
+                        />
+                      </UFormField>
+                      <USwitch
+                        :model-value="floor.hasRoof"
+                        label="Roof over this floor"
+                        description="Off: open to the sky, like a rooftop patio."
+                        @update:model-value="setRoof"
+                      />
+                      <USeparator />
+                      <UButton
+                        label="Remove floor…"
+                        icon="i-lucide-trash-2"
+                        color="error"
+                        variant="ghost"
+                        :disabled="floors.length <= 1"
+                        @click="removeFloor()"
+                      />
+                    </div>
+                  </template>
+                </UPopover>
+                <USwitch
+                  v-if="floorIndex > 0"
+                  v-model="showBelow"
+                  label="Floor below"
+                  size="sm"
+                  class="px-1"
+                />
+              </div>
+            </template>
+          </div>
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <UButton
+              v-if="exploreEnabled && !drawing"
+              label="Explore settings"
+              icon="i-lucide-map-pin"
+              color="neutral"
+              variant="outline"
+              class="pointer-events-auto bg-default"
+              :ui="{ label: 'max-sm:sr-only' }"
+              @click="exploreOpen = true"
+            />
+            <slot name="actions" />
+            <UButton
+              v-if="!isExpanded"
+              label="Properties"
+              icon="i-lucide-sliders-horizontal"
+              color="neutral"
+              variant="outline"
+              class="pointer-events-auto bg-default"
+              :ui="{ label: 'max-sm:sr-only' }"
+              @click="detailsOpen = true"
             />
           </div>
-          <UButton
-            v-if="exploreEnabled"
-            label="Explore settings"
-            icon="i-lucide-map-pin"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            class="pointer-events-auto bg-default"
-            :ui="{ label: 'max-sm:sr-only' }"
-            @click="exploreOpen = true"
-          />
         </div>
 
         <UAlert
@@ -2101,41 +2165,44 @@ const pendingLabel = computed(() => {
 
       <div
         v-if="mode === 'select' && !pending && !isExpanded && (selectedPlacement || selectedItem)"
-        class="absolute bottom-16 left-2 max-w-52 shadow-md"
+        class="absolute bottom-28 left-2 max-w-52 shadow-md sm:bottom-16"
       >
         <ReuseMovePad />
       </div>
-      <UButton
-        v-else-if="mode === 'select' && !pending && !isExpanded && selection"
-        label="Details"
-        color="neutral"
-        variant="outline"
-        class="absolute bottom-16 left-2 shadow-sm lg:hidden"
-        @click="detailsOpen = true"
-      />
       <div class="pointer-events-none absolute inset-x-2 bottom-2 flex justify-center sm:bottom-3">
-        <UFieldGroup
-          class="pointer-events-auto max-w-full rounded-lg border border-default bg-default p-1 shadow-sm"
-          aria-label="Canvas tools"
+        <StudioToolbar
+          v-model:view="view"
+          :zoom-level="canvas?.zoomLevel ?? 100"
+          fit-label="Fit to screen"
+          :can-undo="draft.canUndo.value"
+          :can-redo="draft.canRedo.value"
+          @zoom="direction => canvas?.zoom(direction)"
+          @fit="canvas?.fit()"
+          @undo="draft.undo()"
+          @redo="draft.redo()"
         >
-          <UButton
-            icon="i-lucide-mouse-pointer-2"
-            label="Select"
-            :variant="mode === 'select' ? 'soft' : 'ghost'"
-            :color="mode === 'select' ? 'primary' : 'neutral'"
-            :aria-pressed="mode === 'select'"
-            :ui="{ label: 'max-xl:sr-only' }"
-            @click="startTool('select')"
-          />
-          <UButton
-            icon="i-lucide-hand"
-            label="Hand"
-            :variant="mode === 'hand' ? 'soft' : 'ghost'"
-            :color="mode === 'hand' ? 'primary' : 'neutral'"
-            :aria-pressed="mode === 'hand'"
-            :ui="{ label: 'max-xl:sr-only' }"
-            @click="startTool('hand')"
-          />
+          <UTooltip text="Select">
+            <UButton
+              icon="i-lucide-mouse-pointer-2"
+              label="Select"
+              :variant="mode === 'select' ? 'soft' : 'ghost'"
+              :color="mode === 'select' ? 'primary' : 'neutral'"
+              :aria-pressed="mode === 'select'"
+              :ui="{ label: 'max-xl:sr-only' }"
+              @click="startTool('select')"
+            />
+          </UTooltip>
+          <UTooltip text="Hand">
+            <UButton
+              icon="i-lucide-hand"
+              label="Hand"
+              :variant="mode === 'hand' ? 'soft' : 'ghost'"
+              :color="mode === 'hand' ? 'primary' : 'neutral'"
+              :aria-pressed="mode === 'hand'"
+              :ui="{ label: 'max-xl:sr-only' }"
+              @click="startTool('hand')"
+            />
+          </UTooltip>
           <UDropdownMenu
             :items="drawTools"
             :modal="false"
@@ -2144,52 +2211,12 @@ const pendingLabel = computed(() => {
             <UButton
               icon="i-lucide-pen-tool"
               label="Draw"
-              color="neutral"
-              variant="ghost"
+              :color="drawing ? 'primary' : 'neutral'"
+              :variant="drawing ? 'soft' : 'ghost'"
               :ui="{ label: 'max-xl:sr-only' }"
             />
           </UDropdownMenu>
-          <UButton
-            icon="i-lucide-undo-2"
-            color="neutral"
-            variant="ghost"
-            aria-label="Undo"
-            :disabled="!draft.canUndo.value"
-            @click="draft.undo()"
-          />
-          <UButton
-            icon="i-lucide-redo-2"
-            color="neutral"
-            variant="ghost"
-            aria-label="Redo"
-            :disabled="!draft.canRedo.value"
-            @click="draft.redo()"
-          />
-        </UFieldGroup>
-      </div>
-      <div class="absolute right-2 bottom-16 flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
-        <UButton
-          icon="i-lucide-zoom-out"
-          color="neutral"
-          variant="ghost"
-          aria-label="Zoom out"
-          @click="canvas?.zoom(-1)"
-        />
-        <span class="text-xs tabular-nums text-muted">{{ canvas?.zoomLevel ?? 100 }}%</span>
-        <UButton
-          icon="i-lucide-zoom-in"
-          color="neutral"
-          variant="ghost"
-          aria-label="Zoom in"
-          @click="canvas?.zoom(1)"
-        />
-        <UButton
-          icon="i-lucide-scan"
-          color="neutral"
-          variant="ghost"
-          aria-label="Fit to screen"
-          @click="canvas?.fit()"
-        />
+        </StudioToolbar>
       </div>
       <div
         v-if="pending"
@@ -2215,7 +2242,6 @@ const pendingLabel = computed(() => {
     </main>
 
     <aside
-      v-if="!focusMode"
       aria-label="Properties"
       class="hidden w-60 shrink-0 overflow-y-auto border-l border-default bg-default p-3 lg:block xl:w-72"
     >

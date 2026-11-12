@@ -43,6 +43,16 @@ const selectedTable = defineModel<string | null>('selectedTable', { default: nul
 const selectedItem = defineModel<string | null>('selectedItem', { default: null })
 /** The branch's scene in the draft (step 4a): choosing one here is a layout change, saved with it. */
 const scene = defineModel<ScenePreset>('scene', { default: 'none' })
+/** The left sidebar on a wide screen (Studio owns it, so 2D keeps the same choice, D277). */
+const sidebarOpen = defineModel<boolean>('sidebar', { default: true })
+defineSlots<{
+  /** Studio's header at the top of the sidebar. `collapsible`: it may offer Hide sidebar. */
+  'sidebar-header'?: (props: { collapsible: boolean }) => unknown
+  /** Studio's actions at the view's top right (Save layout). */
+  'actions'?: () => unknown
+  /** Studio's toolbar at the bottom, given this viewer's zoom and fit. */
+  'toolbar'?: (props: { zoom: (direction: 1 | -1) => void, fit: () => Promise<void>, canFit: boolean, fitLabel: string }) => unknown
+}>()
 
 const colorMode = useColorMode()
 const dark = computed(() => colorMode.value === 'dark')
@@ -352,7 +362,7 @@ function selectFromList(tableId: string) {
   </DefineScenePanel>
 
   <DefineProperties>
-    <!-- The selected table: under Fit building on a wide screen, above the bottom bar on a phone.
+    <!-- The selected table: at the top right on a wide screen, above the toolbar on a phone.
          Shown without 3D too: the lists still find a table, its QR code and its place on the plan. -->
     <div
       v-if="selected"
@@ -459,40 +469,47 @@ function selectFromList(tableId: string) {
 
   <div class="flex h-full min-h-0">
     <aside
+      v-if="sidebarOpen"
       aria-label="Navigate the building"
-      class="hidden w-48 shrink-0 overflow-y-auto border-r border-default bg-default p-3 lg:block xl:w-60"
+      class="hidden w-72 shrink-0 flex-col border-r border-default bg-default lg:flex xl:w-80"
     >
-      <UFieldGroup
-        class="mb-3"
-        aria-label="Building panels"
-      >
-        <UButton
-          label="Floors"
-          icon="i-lucide-layers"
-          :variant="navigatorSection === 'floors' ? 'soft' : 'ghost'"
-          :aria-pressed="navigatorSection === 'floors'"
-          @click="navigatorSection = 'floors'"
-        />
-        <UButton
-          label="Tables"
-          icon="i-lucide-table-2"
-          :variant="navigatorSection === 'tables' ? 'soft' : 'ghost'"
-          :aria-pressed="navigatorSection === 'tables'"
-          @click="navigatorSection = 'tables'"
-        />
-      </UFieldGroup>
-      <BuildingNavigator
-        :section="navigatorSection"
-        :layout="layout"
-        :tables="tables"
-        :focused-floor="focusedFloor"
-        :inside-floor="insideFloor"
-        :selected-table="selectedTable"
-        :can-enter="canEnter"
-        @focus-floor="focusFloor"
-        @enter-floor="enterFloor"
-        @select-table="selectFromList"
+      <slot
+        name="sidebar-header"
+        :collapsible="true"
       />
+      <div class="min-h-0 flex-1 overflow-y-auto p-3">
+        <UFieldGroup
+          class="mb-3"
+          aria-label="Building panels"
+        >
+          <UButton
+            label="Floors"
+            icon="i-lucide-layers"
+            :variant="navigatorSection === 'floors' ? 'soft' : 'ghost'"
+            :aria-pressed="navigatorSection === 'floors'"
+            @click="navigatorSection = 'floors'"
+          />
+          <UButton
+            label="Tables"
+            icon="i-lucide-table-2"
+            :variant="navigatorSection === 'tables' ? 'soft' : 'ghost'"
+            :aria-pressed="navigatorSection === 'tables'"
+            @click="navigatorSection = 'tables'"
+          />
+        </UFieldGroup>
+        <BuildingNavigator
+          :section="navigatorSection"
+          :layout="layout"
+          :tables="tables"
+          :focused-floor="focusedFloor"
+          :inside-floor="insideFloor"
+          :selected-table="selectedTable"
+          :can-enter="canEnter"
+          @focus-floor="focusFloor"
+          @enter-floor="enterFloor"
+          @select-table="selectFromList"
+        />
+      </div>
     </aside>
 
     <main
@@ -580,6 +597,19 @@ function selectFromList(tableId: string) {
               class="bg-default lg:hidden"
               @click="listsOpen = true"
             />
+            <UTooltip
+              v-if="isExpanded && !sidebarOpen"
+              text="Show sidebar"
+            >
+              <UButton
+                icon="i-lucide-panel-left-open"
+                color="neutral"
+                variant="outline"
+                class="bg-default"
+                aria-label="Show sidebar"
+                @click="sidebarOpen = true"
+              />
+            </UTooltip>
             <UButton
               v-if="mode === 'inside'"
               label="Back to building"
@@ -665,16 +695,7 @@ function selectFromList(tableId: string) {
                 </div>
               </template>
             </UPopover>
-            <UButton
-              v-if="mode !== 'inside'"
-              :label="shownScene === 'none' ? 'Fit building' : 'Fit scene'"
-              icon="i-lucide-maximize"
-              color="neutral"
-              variant="outline"
-              class="bg-default"
-              :ui="{ label: 'max-sm:sr-only' }"
-              @click="fit"
-            />
+            <slot name="actions" />
           </div>
         </div>
 
@@ -715,58 +736,49 @@ function selectFromList(tableId: string) {
           </template>
         </div>
 
-        <div class="absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
-          <span
-            v-if="stats"
-            class="rounded-md bg-default/80 px-2 py-1 text-xs text-muted tabular-nums"
-            data-testid="quality"
-          >Quality {{ stats.quality }} · {{ stats.frameMs }} ms a frame</span>
-          <span v-else />
-          <div
+        <div class="pointer-events-none absolute inset-x-2 bottom-2 flex flex-col items-center gap-2 sm:bottom-3">
+          <UFieldGroup
             v-if="mode === 'inside'"
-            class="flex flex-col items-center gap-2"
+            class="pointer-events-auto rounded-md bg-default"
           >
-            <UFieldGroup class="rounded-md bg-default">
-              <UButton
-                v-for="point in viewpoints"
-                :key="point.id"
-                :label="point.label"
-                :color="point.id === viewpoint ? 'primary' : 'neutral'"
-                :variant="point.id === viewpoint ? 'soft' : 'outline'"
-                :aria-pressed="point.id === viewpoint"
-                @click="enterFloor(insideFloor!, point.id)"
-              />
-            </UFieldGroup>
-            <span class="rounded-md bg-default/80 px-2 py-0.5 text-xs text-muted">Drag to look around</span>
-          </div>
-          <span
-            v-else
-            class="hidden rounded-md bg-default/80 px-2 py-1 text-xs text-muted sm:inline"
-          >Drag to rotate · Scroll or pinch to zoom · Tap a table</span>
-          <div class="flex flex-col gap-1">
             <UButton
-              icon="i-lucide-plus"
-              color="neutral"
-              variant="outline"
-              class="bg-default"
-              aria-label="Zoom in"
-              @click="zoom(1)"
+              v-for="point in viewpoints"
+              :key="point.id"
+              :label="point.label"
+              :color="point.id === viewpoint ? 'primary' : 'neutral'"
+              :variant="point.id === viewpoint ? 'soft' : 'outline'"
+              :aria-pressed="point.id === viewpoint"
+              @click="enterFloor(insideFloor!, point.id)"
             />
-            <UButton
-              icon="i-lucide-minus"
-              color="neutral"
-              variant="outline"
-              class="bg-default"
-              aria-label="Zoom out"
-              @click="zoom(-1)"
-            />
+          </UFieldGroup>
+          <div class="flex flex-wrap justify-center gap-2 text-xs text-muted">
+            <span
+              v-if="stats"
+              class="rounded-md bg-default/80 px-2 py-1 tabular-nums"
+              data-testid="quality"
+            >Quality {{ stats.quality }} · {{ stats.frameMs }} ms a frame</span>
+            <span
+              v-if="mode === 'inside'"
+              class="rounded-md bg-default/80 px-2 py-1"
+            >Drag to look around</span>
+            <span
+              v-else
+              class="hidden rounded-md bg-default/80 px-2 py-1 sm:inline"
+            >Drag to rotate · Scroll or pinch to zoom · Tap a table</span>
           </div>
+          <slot
+            name="toolbar"
+            :zoom="zoom"
+            :fit="fit"
+            :can-fit="mode !== 'inside'"
+            :fit-label="shownScene === 'none' ? 'Fit building' : 'Fit scene'"
+          />
         </div>
       </template>
 
       <div
         v-if="!isExpanded && (selected || selectedPiece)"
-        class="absolute inset-x-3 bottom-24 rounded-lg border border-default bg-default shadow-lg sm:inset-x-auto sm:top-16 sm:right-3 sm:bottom-auto sm:w-64"
+        class="absolute inset-x-3 bottom-36 rounded-lg border border-default bg-default shadow-lg sm:inset-x-auto sm:top-16 sm:right-3 sm:bottom-auto sm:w-64"
       >
         <ReuseProperties />
       </div>
@@ -835,6 +847,10 @@ function selectFromList(tableId: string) {
       title="Floors and tables"
     >
       <template #body>
+        <slot
+          name="sidebar-header"
+          :collapsible="false"
+        />
         <BuildingNavigator
           :layout="layout"
           :tables="tables"
