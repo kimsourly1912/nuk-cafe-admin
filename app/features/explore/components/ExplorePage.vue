@@ -54,6 +54,7 @@ const status = ref<Status>({
   place: 'Street',
   indoors: false,
   seated: false,
+  moto: false,
   waypoint: null,
   waypointId: null,
   crossing: null,
@@ -74,6 +75,7 @@ const benchmarking = route.query.bench === 'walk'
 const bench = ref<{ phase: string, report: WalkReport | null, copied: boolean } | null>(null)
 let detachInput: (() => void) | undefined
 let disposed = false
+const pedals = new Map<number, 'gas' | 'brake'>()
 
 const dark = computed(() => colorMode.value === 'dark')
 const isBranch = computed(() => network.value.some(branch => branch.id === status.value.placeId))
@@ -95,6 +97,25 @@ function interact() {
 
 function jump() {
   world.value?.actions.press('jump')
+}
+
+function holdPedal(event: PointerEvent, pedal: 'gas' | 'brake') {
+  if (event.button !== 0 || [...pedals.values()].includes(pedal) || !(event.currentTarget instanceof HTMLElement)) return
+  event.currentTarget.setPointerCapture(event.pointerId)
+  pedals.set(event.pointerId, pedal)
+  world.value?.actions.pedal(pedal, true)
+}
+
+function releasePedal(event: PointerEvent) {
+  const pedal = pedals.get(event.pointerId)
+  if (!pedal) return
+  pedals.delete(event.pointerId)
+  world.value?.actions.pedal(pedal, false)
+}
+
+function resetMoto() {
+  world.value?.resetMoto()
+  mapOpen.value = false
 }
 
 function setWaypoint(id: string | null) {
@@ -221,7 +242,7 @@ onMounted(async () => {
       onMap: () => {
         mapOpen.value = true
       },
-      onLeave: () => goToMenu(),
+      onLeave: () => status.value.moto ? (mapOpen.value = true) : goToMenu(),
     })
     if (benchmarking) void runBenchmark(created)
   }
@@ -239,7 +260,13 @@ watch(() => status.value.place, (place, before) => {
   if (before && place !== before) hint.value = false
 })
 
-watch(overlayOpen, open => world.value?.setPaused(open), { flush: 'sync' })
+watch(overlayOpen, (open) => {
+  if (open) pedals.clear()
+  world.value?.setPaused(open)
+}, { flush: 'sync' })
+watch([() => status.value.moto, () => status.value.crossing], ([moto, crossing]) => {
+  if (!moto || crossing) pedals.clear()
+})
 watch(dark, (value) => {
   world.value?.setTheme(value)
   nextTick(readColors)
@@ -273,6 +300,7 @@ onBeforeUnmount(() => {
       v-if="world && touch && state === 'ready' && !overlayOpen && !status.crossing"
       :actions="world.actions"
       :passenger="status.seated && Boolean(status.ride.label)"
+      :moto="status.moto"
     />
 
     <!-- The HUD: the frame passes taps through to the world; its controls catch them. -->
@@ -292,8 +320,8 @@ onBeforeUnmount(() => {
           aria-live="polite"
         >
           <UBadge
-            :label="status.crossing && !status.crossing.failed ? `Entering ${status.crossing.name}…` : status.ride.label ?? status.place"
-            :icon="status.ride.label ? 'i-lucide-car-front' : status.indoors ? 'i-lucide-coffee' : 'i-lucide-map-pin'"
+            :label="status.crossing && !status.crossing.failed ? `Entering ${status.crossing.name}…` : status.ride.label ?? (status.moto ? 'Riding moto' : status.place)"
+            :icon="status.ride.label ? 'i-lucide-car-front' : status.moto ? 'i-lucide-bike' : status.indoors ? 'i-lucide-coffee' : 'i-lucide-map-pin'"
             color="neutral"
             variant="soft"
             class="max-w-full whitespace-normal"
@@ -393,7 +421,7 @@ onBeforeUnmount(() => {
         />
       </div>
       <p
-        v-else-if="hint && !touch && !status.ride.label"
+        v-else-if="hint && !touch && !status.ride.label && !status.moto"
         class="self-center rounded-md bg-default/90 px-3 py-2 text-center text-sm text-muted ring ring-default"
       >
         Click the street to look around. <UKbd value="W" /><UKbd value="A" /><UKbd value="S" /><UKbd value="D" /> to move,
@@ -413,6 +441,12 @@ onBeforeUnmount(() => {
         />
         <span v-else />
         <div class="flex min-w-0 flex-col items-end gap-2">
+          <p
+            v-if="status.moto && !touch && !status.crossing"
+            class="rounded-md bg-default/90 px-3 py-2 text-sm text-muted ring ring-default"
+          >
+            <UKbd value="W" /> Gas · <UKbd value="S" /> Brake / Reverse · <UKbd value="A" /> / <UKbd value="D" /> Steer · <UKbd value="R" /> Reset
+          </p>
           <UButton
             v-if="status.ride.view"
             :label="status.ride.view === 'inside' ? 'Outside view' : 'Inside view'"
@@ -455,6 +489,23 @@ onBeforeUnmount(() => {
             class="pointer-events-auto"
             @click="world?.rideAction({ type: 'cancel' })"
           />
+          <div
+            v-if="status.moto && touch && !status.crossing && !overlayOpen"
+            class="flex gap-2"
+          >
+            <UButton
+              v-for="pedal in (['brake', 'gas'] as const)"
+              :key="pedal"
+              :label="pedal === 'gas' ? 'Gas' : 'Brake'"
+              :color="pedal === 'gas' ? 'primary' : 'neutral'"
+              variant="solid"
+              class="pointer-events-auto touch-none select-none"
+              @pointerdown.prevent="holdPedal($event, pedal)"
+              @pointerup="releasePedal"
+              @pointercancel="releasePedal"
+              @lostpointercapture="releasePedal"
+            />
+          </div>
           <div class="flex flex-wrap justify-end gap-2">
             <UButton
               v-if="touch && state === 'ready' && !status.seated"
@@ -519,6 +570,7 @@ onBeforeUnmount(() => {
       :place-id="status.placeId"
       :waypoint-id="status.waypointId"
       :can-call-ride="status.ride.canCall"
+      :moto="status.moto"
       :branches="network"
       :chain="chain"
       :location="location.state.value"
@@ -526,6 +578,7 @@ onBeforeUnmount(() => {
       @waypoint="setWaypoint"
       @menu="goToMenu"
       @street="returnToStreet"
+      @reset-moto="resetMoto"
       @call-ride="callFromMap"
       @ride="rideHere"
       @locate="location.locate"

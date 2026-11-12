@@ -18,6 +18,7 @@ export interface AvatarRig {
   locomotion: (speed: number, grounded: boolean, dt: number) => void
   /** 0 standing, 1 seated on a seat this high (metres above the floor). */
   sit: (amount: number, seatHeight: number) => void
+  rideMoto: (amount: number, seatHeight: number) => void
 }
 
 interface Limb {
@@ -99,6 +100,7 @@ export function createAvatar(context: BuildContext): AvatarRig {
   let phase = 0
   let stride = 0
   let seated = 0
+  let riding = false
   let seatHeight = 0.46
   let airborne = 0
 
@@ -114,15 +116,16 @@ export function createAvatar(context: BuildContext): AvatarRig {
       const walkKnee = lift * (0.45 + 0.8 * run) * walkAmount
       const airThigh = -0.5 * airborne
       const airKnee = 0.9 * airborne
-      leg.upper.rotation.x = mix(walkThigh + airThigh, -Math.PI / 2, seated)
-      leg.lower.rotation.x = mix(walkKnee + airKnee, Math.PI / 2, seated)
+      leg.upper.rotation.x = mix(walkThigh + airThigh, riding ? -1.05 : -Math.PI / 2, seated)
+      leg.lower.rotation.x = mix(walkKnee + airKnee, riding ? 1.85 : Math.PI / 2, seated)
+      leg.upper.rotation.z = (index === 0 ? 1 : -1) * (riding ? 0.26 * seated : 0)
     })
     arms.forEach((arm, index) => {
       const s = index === 0 ? -swing : swing
-      arm.upper.rotation.x = mix(-s * (0.3 + 0.35 * run) * walkAmount - 0.35 * airborne, -0.55, seated)
-      arm.lower.rotation.x = mix(-(0.25 + 0.7 * run) * walkAmount - 0.1, -0.7, seated)
+      arm.upper.rotation.x = mix(-s * (0.3 + 0.35 * run) * walkAmount - 0.35 * airborne, riding ? -0.6 : -0.55, seated)
+      arm.lower.rotation.x = mix(-(0.25 + 0.7 * run) * walkAmount - 0.1, riding ? -1.05 : -0.7, seated)
     })
-    torso.rotation.x = (0.04 + 0.12 * run) * walkAmount
+    torso.rotation.x = (0.04 + 0.12 * run) * walkAmount + (riding ? 0.18 * seated : 0)
     const bob = Math.abs(Math.sin(phase)) * 0.035 * walkAmount
     // Seated: the hips rest on the seat.
     body.position.y = mix(bob, seatHeight + 0.05 - HIP, seated)
@@ -145,7 +148,14 @@ export function createAvatar(context: BuildContext): AvatarRig {
       pose(time)
     },
     sit(amount, height) {
+      riding = false
       seated = Math.max(0, Math.min(1, amount))
+      seatHeight = height
+      pose(time)
+    },
+    rideMoto(amount, height) {
+      riding = true
+      seated = amount
       seatHeight = height
       pose(time)
     },

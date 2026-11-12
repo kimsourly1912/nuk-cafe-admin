@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { BrowserContextOptions, Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { afterEach, describe, expect, inject, it } from 'vitest'
+import { approachAndInteract } from './support/explore-input'
 import { setupE2e } from './support/mock-api'
 
 // Close each WebGL context after the failure-capture hook has taken its evidence.
@@ -103,6 +104,38 @@ describe('Explore', () => {
     await shot(page, 'phone-street')
   })
 
+  it('mounts the moto, drives with touch, resets from the map and gets off safely', { timeout: 180_000 }, async () => {
+    const page = await createExplorePage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce' })
+    await open(page)
+    const action = (name: string) => page.getByRole('button', { name, exact: true })
+    await approachAndInteract(page, ['KeyA', 'KeyW'], 'Ride moto')
+    await page.getByText('Riding moto', { exact: true }).waitFor()
+    await action('Get off').waitFor()
+    await expect(action('Jump').count()).resolves.toBe(0)
+
+    // Dispatch actual touchscreen pointer events so Gas remains held across multiple frames.
+    const gas = await action('Gas').boundingBox()
+    expect(gas).not.toBeNull()
+    const session = await page.context().newCDPSession(page)
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x: gas!.x + gas!.width / 2, y: gas!.y + gas!.height / 2 }],
+    })
+    await action('Get off').waitFor({ state: 'hidden' })
+    await page.keyboard.press('e')
+    await expect(page.getByText('Riding moto', { exact: true }).count()).resolves.toBe(1)
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await action('Get off').waitFor()
+
+    await action('Open the map').first().tap()
+    const map = page.getByRole('dialog', { name: 'Map' })
+    await map.getByRole('button', { name: 'Reset moto' }).tap()
+    await map.waitFor({ state: 'hidden' })
+    await action('Get off').tap()
+    await action('Jump').waitFor()
+    await expect(action('Gas').count()).resolves.toBe(0)
+  })
+
   it('calls the tuk-tuk from the map and cancels before pickup', { timeout: 120_000 }, async () => {
     const page = await createExplorePage()
     await open(page)
@@ -143,14 +176,7 @@ describe('Explore', () => {
     await picker.waitFor({ state: 'hidden' })
 
     // Back and right, around the rear of the tuk-tuk and onto the pickup curb.
-    await page.keyboard.down('s')
-    try {
-      await holdUntil(page, 'd', () => action('Open passenger door').waitFor({ timeout: 35_000 }))
-    }
-    finally {
-      await page.keyboard.up('s')
-    }
-    await action('Open passenger door').click()
+    await approachAndInteract(page, ['KeyS', 'KeyD'], 'Open passenger door')
     await action('Get in').click()
     await action('Outside view').waitFor()
     await shot(page, 'phone-ride-inside')

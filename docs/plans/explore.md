@@ -87,7 +87,9 @@ Drag or mouse to look from the seat (yaw ±110°, pitch ±30°). **Outside view*
 | Throttle / brake | W / S (S reverses slowly from a stop) | **Gas** and **Brake** buttons on the right |
 | Look around | Mouse | Drag above the buttons |
 | Get off | E, only below 0.5 m/s | The context button, only when stopped |
-| Recover | R | **Reset moto** in the pause sheet: back to the last safe curb |
+| Recover | R | **Reset moto** in the map: back to the last safe curb |
+
+A parked moto appears near the starting sidewalk when the road has a clear spot for it. The player can look around without changing steering. The moto stays on the road, checks both sides for a safe step down, and keeps the rider and waypoint when entering another district. A failed gateway load offers Retry or Go back on the current street.
 
 ## Map
 

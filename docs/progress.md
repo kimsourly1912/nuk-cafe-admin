@@ -3,6 +3,17 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Explore E5: moto (D275, 2026-11-12)
+
+Branch `codex/explore-e5-moto`, based on PR #296 (E4). [Plan → Moto](plans/explore.md#moto-e5).
+
+- **Built:** a parked, generated moto, a short mount/dismount animation, a chase camera, keyboard and touch controls, and low-speed reverse after braking to a stop. The moto uses the same plan colliders and stays on the road. Dismount requires speed below 0.5 m/s and a clear step to one side, with the curb side preferred.
+- **Recovery:** R on desktop or Reset moto in the map returns the rider to the most recent clear curb position. Entering a gateway preserves the riding mode and waypoint. If the district cannot load, Retry and Go back keep the rider on the current street.
+- **How to verify on staging:** approach the parked moto and tap Ride moto. Hold Gas, steer left or right, hold Brake through a stop to reverse slowly, then release and tap Get off. Repeat with the keyboard. Open the map while riding and use Reset moto. On a cafe with two Explore branches, ride to an arch, enter, and confirm the moto and waypoint remain available.
+- **Evidence:** `pnpm lint`, `pnpm typecheck`, and `pnpm test:unit` passed (2,921 passed, 1 skipped). The final Explore unit rerun passed 65 tests. Both Explore browser files passed all 10 scenarios in Chrome with one worker, including touch pedals, dismount and map reset, and a failed gateway load retried while mounted. Parallel browser runs on Windows timed out on held-key prompts.
+- **CI follow-up:** the vehicle browser tests now start diagonal movement together, then release movement and activate the context action in the same browser task. Tuk Trail uses fixed branch IDs to keep its generated street props and pickup approach repeatable.
+- **Owner review:** test the loop and controls on a physical Android phone before E6. The Riverside pilot remains the production shipping gate.
+
 ### Explore E4: real branches (D275, 2026-11-11)
 
 Branch `ccr-f3a7b704-dz2d9j`, after PR #295 (E3). A large step: its own PR. [Plan → Step E4](plans/explore.md#step-e4-real-branches-built-2026-11-11).

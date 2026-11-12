@@ -2,6 +2,7 @@ import type { ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, Ta
 import type { SurroundingsPlan } from '~/features/branches'
 import { BUILT_IN_LOOKS, chairPoses, DOOR_HEIGHT_CM, findLook, ITEM_SPECS, outwardNormal, pieceHeight, placementExtent, planLane, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, toPlan } from '~/features/branches'
 import type { GatewaySide } from './network'
+import type { MotoStreet } from './moto'
 import type { RideCourse } from './ride'
 import type { RideLegs } from './ride-course'
 import { buildRideCourse, buildRideLegs } from './ride-course'
@@ -96,6 +97,7 @@ export interface District {
   entrance: DoorInfo | null
   seats: SeatInfo[]
   counter: CounterInfo | null
+  moto: MotoStreet
   rideCourse: RideCourse
   /** The tuk-tuk's legs to and from each gateway (step E4). */
   rideLegs: RideLegs
@@ -245,6 +247,17 @@ export function buildDistrict(input: DistrictInput): District {
   for (const gateway of gateways) {
     for (const post of [gateway.a, gateway.b]) solids.push({ shape: 'circle', center: post, radius: 0.22, bottom: street, top: street + GATEWAY_HEIGHT })
   }
+  const { lane, frame } = plan
+  const point = (u: number, n: number) => m(toPlan(frame, u, n))
+  const heading = yawOf(sub(point(-100, 0), point(0, 0)))
+  const road = span(lane.u0, lane.u1, lane.n0, lane.n1)
+  const parkingU = [45, -80, -200, -350, 550]
+  // Between the two tuk-tuk lanes, so its scripted route can pass a parked moto.
+  const parking = parkingU.map(u => ({ position: point(u, (lane.n0 + lane.n1) / 2), heading }))
+  const recovery = parkingU.flatMap(u => [
+    { position: point(u, lane.n1 - 95), heading },
+    { position: point(u, lane.n0 + 95), heading: heading + Math.PI },
+  ])
   const xs = base.map(point => point.x)
   const zs = base.map(point => point.z)
   return {
@@ -256,6 +269,7 @@ export function buildDistrict(input: DistrictInput): District {
     entrance,
     seats,
     counter,
+    moto: { road, curbs: [[road[0]!, road[1]!], [road[3]!, road[2]!]], parking, recovery },
     rideCourse: buildRideCourse(plan),
     rideLegs: buildRideLegs(plan),
     gateways,
@@ -266,7 +280,7 @@ export function buildDistrict(input: DistrictInput): District {
         { kind: 'ground', points: base },
         { kind: 'yard', points: span(plan.yard.u0, plan.yard.u1, plan.yard.n0, plan.yard.n1) },
         { kind: 'pavement', points: span(plan.pavement.u0, plan.pavement.u1, plan.pavement.n0, plan.pavement.n1) },
-        { kind: 'lane', points: span(plan.lane.u0, plan.lane.u1, plan.lane.n0, plan.lane.n1) },
+        { kind: 'lane', points: road },
         { kind: 'planting', points: span(plan.farSide.u0, plan.farSide.u1, plan.farSide.n0, plan.farSide.n1) },
         ...plan.neighbours.map(block => ({ kind: 'building' as const, points: span(block.u0, block.u1, block.n0, block.n1) })),
         { kind: 'cafe', points: groundFloor.outline },

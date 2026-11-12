@@ -124,8 +124,7 @@ const CUSTOMERS: ShopSeed['customers'] = {
   twoStepCashier: { name: 'Bunna Phan', email: 'bunna@example.com', password: 'long-enough-password-48' },
 }
 
-async function addBranch(db: Db, name: string, tenantId = TEST_TENANT) {
-  const id = crypto.randomUUID()
+async function addBranch(db: Db, name: string, tenantId = TEST_TENANT, id: string = crypto.randomUUID()) {
   await insertBranch(db, { id, name, timezone: 'Asia/Phnom_Penh', tenantId })
   return id
 }
@@ -173,10 +172,14 @@ async function seedExploreTrail(db: Db, qr: { secret: string, baseUrl: string })
   await db.update(organization).set({ name: cafe.name }).where(eq(organization.id, cafe.id))
   const owner = await createAdmin(db, 'owner@tuk-trail.example', cafe.id)
   const actor: Actor = { userId: owner.userId, tenantId: cafe.id, role: 'owner' }
-  const pins = { 'Old Market': [11.5696, 104.9210], 'Riverwalk': [11.5720, 104.9300] } as const
+  // Explore seeds its street props from the branch id. Keep the pickup approach repeatable.
+  const branches = [
+    { id: '10000000-0000-4000-8000-000000000001', name: 'Old Market', latitude: 11.5696, longitude: 104.9210 },
+    { id: '10000000-0000-4000-8000-000000000002', name: 'Riverwalk', latitude: 11.5720, longitude: 104.9300 },
+  ]
   const ids: string[] = []
-  for (const [name, [latitude, longitude]] of Object.entries(pins)) {
-    const branchId = await addBranch(db, name, cafe.id)
+  for (const { id, name, latitude, longitude } of branches) {
+    const branchId = await addBranch(db, name, cafe.id, id)
     await updateBranchSettings(db, actor, branchId, { version: 1, hours: ALL_DAY, latitude, longitude })
     const table = await createTable(db, actor, branchId, { label: 'X1', area: null, seats: 2 }, qr)
     await saveLayout(db, actor, branchId, { version: 0, layout: exploreLayout(table.id) })

@@ -8,7 +8,7 @@ import type { Actions } from '../runtime/actions'
  * touch lets go. Buttons (Jump, the context action) sit above this layer.
  */
 
-const { actions, passenger } = defineProps<{ actions: Actions, passenger: boolean }>()
+const { actions, passenger, moto } = defineProps<{ actions: Actions, passenger: boolean, moto: boolean }>()
 
 /** Radians a pixel of drag turns the camera. */
 const TOUCH_LOOK = 0.0055
@@ -30,7 +30,7 @@ function apply() {
   }
   const tilt = Math.min(1, Math.hypot(current.dx, current.dy) / RADIUS)
   const now = performance.now()
-  if (tilt >= 0.95) rimSince ??= now
+  if (!moto && tilt >= 0.95) rimSince ??= now
   else rimSince = null
   const sprint = rimSince !== null && now - rimSince >= SPRINT_HOLD_MS
   actions.stick({ x: current.dx / RADIUS, y: -current.dy / RADIUS }, sprint)
@@ -62,6 +62,7 @@ function move(event: PointerEvent) {
     const box = root.value.getBoundingClientRect()
     let dx = event.clientX - box.left - stick.value.x
     let dy = event.clientY - box.top - stick.value.y
+    if (moto) dy = 0
     const size = Math.hypot(dx, dy)
     if (size > RADIUS) {
       dx = (dx / size) * RADIUS
@@ -86,7 +87,7 @@ function up(event: PointerEvent) {
   if (lookPointer?.id === event.pointerId) lookPointer = null
 }
 
-watch(() => passenger, () => {
+watch([() => passenger, () => moto], () => {
   stick.value = null
   lookPointer = null
   rimSince = null

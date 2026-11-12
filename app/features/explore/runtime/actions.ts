@@ -6,7 +6,7 @@
  * an overlay takes focus, so nobody keeps walking after a dialog.
  */
 
-export type OneShot = 'jump' | 'interact' | 'camera'
+export type OneShot = 'jump' | 'interact' | 'camera' | 'resetMoto'
 
 /** Keys (KeyboardEvent.code) and what they hold. */
 const MOVE_KEYS: Record<string, 'forward' | 'back' | 'left' | 'right'> = {
@@ -33,6 +33,8 @@ export interface Actions {
   /** The move asked for, length at most 1 (diagonals are clamped). */
   move: () => Move
   sprint: () => boolean
+  drive: () => { steer: number, gas: boolean, brake: boolean }
+  pedal: (pedal: 'gas' | 'brake', held: boolean) => void
   /** A key went down or up. Returns whether it is one of Explore's keys. */
   key: (code: string, down: boolean) => boolean
   /** The touch stick: a tilt (length up to 1), and whether it is held at its rim for a sprint. */
@@ -49,6 +51,7 @@ export interface Actions {
 export function createActions(): Actions {
   const held = new Set<string>()
   const queued = new Set<OneShot>()
+  const pedals = new Set<'gas' | 'brake'>()
   let stickMove: Move | null = null
   let stickSprint = false
   let lookX = 0
@@ -68,10 +71,11 @@ export function createActions(): Actions {
       else held.delete(code)
       return true
     }
-    if (!down) return code === 'Space' || code === 'KeyE' || code === 'KeyF' || code === 'KeyV'
+    if (!down) return code === 'Space' || code === 'KeyE' || code === 'KeyF' || code === 'KeyV' || code === 'KeyR'
     if (code === 'Space') press('jump')
     else if (code === 'KeyE' || code === 'KeyF') press('interact')
     else if (code === 'KeyV') press('camera')
+    else if (code === 'KeyR') press('resetMoto')
     else return false
     return true
   }
@@ -87,6 +91,7 @@ export function createActions(): Actions {
   function clear() {
     held.clear()
     queued.clear()
+    pedals.clear()
     stickMove = null
     stickSprint = false
     lookX = 0
@@ -95,6 +100,15 @@ export function createActions(): Actions {
 
   return {
     move,
+    drive: () => ({
+      steer: stickMove?.x ?? Number(held.has('KeyD') || held.has('ArrowRight')) - Number(held.has('KeyA') || held.has('ArrowLeft')),
+      gas: pedals.has('gas') || held.has('KeyW') || held.has('ArrowUp'),
+      brake: pedals.has('brake') || held.has('KeyS') || held.has('ArrowDown'),
+    }),
+    pedal: (name, down) => {
+      if (down) pedals.add(name)
+      else pedals.delete(name)
+    },
     sprint: () => stickSprint || [...held].some(code => SPRINT_KEYS.has(code)),
     key,
     stick: (next, sprint = false) => {

@@ -4,6 +4,7 @@ import type { BrowserContextOptions, Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { afterEach, describe, expect, inject, it } from 'vitest'
 import { allowBrowserProblems } from './support/browser-problems'
+import { approachAndInteract } from './support/explore-input'
 import { setupE2e } from './support/mock-api'
 
 // Explore's real branches (D275 step E4, docs/plans/explore.md → Districts and gateways) on the
@@ -97,6 +98,37 @@ describe('Explore with real branches', () => {
     await page.waitForURL(address => address.pathname === `/c/${trail.slug}` && address.searchParams.get('explore') === trail.riverId)
   })
 
+  it('keeps the moto and waypoint across a gateway retry', { timeout: 180_000 }, async () => {
+    const page = await createExplorePage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' })
+    // The branch with the higher id has its gateway at the start of the lane, ahead of the moto.
+    const from = trail.marketId > trail.riverId ? trail.marketId : trail.riverId
+    const to = from === trail.marketId ? trail.riverId : trail.marketId
+    const name = to === trail.marketId ? 'Old Market' : 'Riverwalk'
+    const layout = `**/api/c/${trail.slug}/public/explore/branches/${to}`
+    allowBrowserProblems(new RegExp(`GET /api/c/${trail.slug}/public/explore/branches/${to} → 503`))
+    await page.route(layout, route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"Unavailable"}' }))
+    await page.goto(url(`/c/${trail.slug}/explore?at=${from}`))
+    await page.getByText('Street', { exact: true }).waitFor()
+    const action = (label: string) => page.getByRole('button', { name: label })
+    await approachAndInteract(page, ['KeyA', 'KeyW'], 'Ride moto')
+    await action('Get off').waitFor()
+    await page.keyboard.press('m')
+    const map = page.getByRole('dialog', { name: 'Map' })
+    await map.getByRole('button', { name: `Set waypoint: ${name}` }).click()
+    await map.waitFor({ state: 'hidden' })
+
+    await approachAndInteract(page, ['KeyW'], `Enter ${name}`)
+    await action('Go back').waitFor()
+    await page.unroute(layout)
+    await action('Retry').click()
+    await action('Get off').waitFor()
+    await page.getByText('Riding moto', { exact: true }).waitFor()
+    await page.getByText(`Waypoint: ${name}`).waitFor()
+
+    await action('View menu').click()
+    await page.waitForURL(address => address.pathname === `/c/${trail.slug}` && address.searchParams.get('explore') === to)
+  })
+
   it('rides through the gateway, held while the next street fails to load, then arrives at its curb', { timeout: 240_000 }, async () => {
     const page = await createExplorePage({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' })
     const layout = `**/api/c/${trail.slug}/public/explore/branches/${trail.riverId}`
@@ -117,16 +149,7 @@ describe('Explore with real branches', () => {
     await page.getByText('To Riverwalk', { exact: true }).waitFor({ timeout: 60_000 })
 
     // Back and right, around the rear of the tuk-tuk and onto the pickup curb (as in E2's test).
-    await page.keyboard.down('s')
-    try {
-      await page.keyboard.down('d')
-      await action('Open passenger door').waitFor({ timeout: 35_000 })
-    }
-    finally {
-      await page.keyboard.up('d')
-      await page.keyboard.up('s')
-    }
-    await action('Open passenger door').click()
+    await approachAndInteract(page, ['KeyS', 'KeyD'], 'Open passenger door')
     await action('Get in').click()
     await action('Skip ride').click()
     await page.getByText('Can\'t reach Riverwalk right now', { exact: true }).waitFor()

@@ -24,13 +24,14 @@ const props = defineProps<{
   placeId: string
   waypointId: string | null
   canCallRide: boolean
+  moto: boolean
   /** Step E4: the branches in Explore and their chain; empty on the demo street. */
   branches: readonly ExploreBranch[]
   chain: readonly NetworkBranch[]
   location: LocationState
   position: Pin | null
 }>()
-const emit = defineEmits<{ waypoint: [id: string | null], menu: [id: string], street: [], callRide: [], ride: [stopId: string], locate: [] }>()
+const emit = defineEmits<{ waypoint: [id: string | null], menu: [id: string], street: [], resetMoto: [], callRide: [], ride: [stopId: string], locate: [] }>()
 const open = defineModel<boolean>('open', { required: true })
 
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
@@ -264,6 +265,15 @@ onBeforeUnmount(() => cancelAnimationFrame(pending))
         />
         <div class="space-y-1">
           <UButton
+            v-if="moto"
+            icon="i-lucide-undo-2"
+            label="Reset moto"
+            color="neutral"
+            variant="outline"
+            @click="emit('resetMoto')"
+          />
+          <UButton
+            v-else
             icon="i-lucide-undo-2"
             label="Return to street"
             color="neutral"
@@ -271,7 +281,7 @@ onBeforeUnmount(() => cancelAnimationFrame(pending))
             @click="emit('street')"
           />
           <p class="text-sm text-muted">
-            Stuck? This puts you back across the street from the café.
+            {{ moto ? 'Return to the last safe curb.' : 'Stuck? This puts you back across the street from the café.' }}
           </p>
         </div>
       </div>
