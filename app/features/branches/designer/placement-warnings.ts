@@ -1,8 +1,8 @@
 import type { Floor, LayoutItem, Point, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength, isFigureKind } from '#shared/contracts/shop-layout'
+import { edgeLength, innerWallLength, isFigureKind } from '#shared/contracts/shop-layout'
 import { ITEM_SPECS } from './catalog'
 import type { Bounds, Pose, Sized } from './geometry'
-import { BOOTH_BENCH_DEPTH_CM, boundsOf, outwardNormal, pointInPolygon, pointOnEdge, rectCorners, rotatePoint, WALL_THICKNESS_CM, wallPieces } from './geometry'
+import { BOOTH_BENCH_DEPTH_CM, boundsOf, outwardNormal, pointInPolygon, pointOnEdge, rectCorners, rotatePoint, INNER_WALL_THICKNESS_CM, WALL_THICKNESS_CM, wallPieces } from './geometry'
 
 const EPSILON = 1e-7
 type FloorShape = Pick<Floor, 'outline' | 'edges' | 'walls' | 'height'>
@@ -98,14 +98,21 @@ function insideOutline(points: Point[], outline: Point[]): boolean {
 
 function wallFootprints(floor: FloorShape): Point[][] {
   const walls: Point[][] = []
-  const append = (from: Point, to: Point, shift: Point) => {
+  const append = (from: Point, to: Point, shift: Point, thickness = WALL_THICKNESS_CM) => {
     const length = Math.hypot(to.x - from.x, to.y - from.y)
     if (length <= EPSILON) return
     const center = { x: (from.x + to.x) / 2 + shift.x, y: (from.y + to.y) / 2 + shift.y }
     const rotation = Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI
-    walls.push(rectCorners(center, length, WALL_THICKNESS_CM, rotation))
+    walls.push(rectCorners(center, length, thickness, rotation))
   }
-  for (const wall of floor.walls) append(wall.from, wall.to, { x: 0, y: 0 })
+  // Inside walls (D278): their doorways are clear, like the outline's.
+  for (const wall of floor.walls) {
+    const length = innerWallLength(wall)
+    const at = (offset: number) => ({ x: wall.from.x + (wall.to.x - wall.from.x) * offset / Math.max(length, EPSILON), y: wall.from.y + (wall.to.y - wall.from.y) * offset / Math.max(length, EPSILON) })
+    for (const part of wallPieces(length, floor.height, wall.openings ?? [])) {
+      if (part.bottom === 0) append(at(part.from), at(part.to), { x: 0, y: 0 }, INNER_WALL_THICKNESS_CM)
+    }
+  }
   for (const [index, edge] of floor.edges.entries()) {
     if (edge.kind !== 'wall') continue
     const normal = outwardNormal(floor.outline, index)

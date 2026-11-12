@@ -146,6 +146,12 @@ export type LookChair = typeof LOOK_CHAIRS[number]
 
 export const EDGE_KINDS = ['wall', 'railing', 'open'] as const
 export type EdgeKind = typeof EDGE_KINDS[number]
+/**
+ * What an inside wall is (D278): a full wall, a railing (a mezzanine's edge), a half wall (a bar's
+ * back, 110 cm) or a glass partition. Left out: a wall, as every inside wall was before.
+ */
+export const INNER_WALL_KINDS = ['wall', 'railing', 'half', 'glass'] as const
+export type InnerWallKind = typeof INNER_WALL_KINDS[number]
 export const OPENING_KINDS = ['door', 'window'] as const
 export type OpeningKind = typeof OPENING_KINDS[number]
 
@@ -174,9 +180,25 @@ export const edgeSchema = v.strictObject({
 })
 export type Edge = v.InferOutput<typeof edgeSchema>
 
-/** A wall inside a floor (a stair kiosk, a kitchen), drawn with Draw wall. */
-export const innerWallSchema = v.strictObject({ id: idSchema, from: pointSchema, to: pointSchema })
+/**
+ * A wall inside a floor (a stair kiosk, a kitchen), drawn with Draw wall. `kind` and `openings`
+ * (D278) are left out for a plain wall without doors, as saved before: a door's offset runs from
+ * `from`. Only a full wall takes windows; a door in a railing is a gate, in a half wall or glass a
+ * gap.
+ */
+export const innerWallSchema = v.strictObject({
+  id: idSchema,
+  from: pointSchema,
+  to: pointSchema,
+  kind: v.optional(v.picklist(INNER_WALL_KINDS)),
+  openings: v.optional(v.pipe(v.array(openingSchema), v.maxLength(20))),
+})
 export type InnerWall = v.InferOutput<typeof innerWallSchema>
+
+/** An inside wall's kind, a plain wall when left out. */
+export const innerWallKind = (wall: Pick<InnerWall, 'kind'>): InnerWallKind => wall.kind ?? 'wall'
+/** An inside wall's length in centimetres. */
+export const innerWallLength = (wall: Pick<InnerWall, 'from' | 'to'>) => Math.hypot(wall.to.x - wall.from.x, wall.to.y - wall.from.y)
 
 const finishesSchema = v.pipe(
   v.record(v.pipe(v.string(), v.regex(/^[a-z]{1,20}$/)), finishSchema),
@@ -235,6 +257,8 @@ export const floorSchema = v.pipe(
   v.check(floor => floor.edges.length !== floor.outline.length || floor.edges.every((edge, index) => openingsFit(edge, edgeLength(floor.outline, index))), 'A door or window does not fit its edge'),
   v.check(floor => floor.edges.every(edge => edge.kind !== 'open' || edge.openings.length === 0), 'An open edge has no doors or windows'),
   v.check(floor => floor.edges.every(edge => edge.kind !== 'railing' || edge.openings.every(opening => opening.kind === 'door')), 'A window needs a wall'),
+  v.check(floor => floor.walls.every(wall => openingsFit({ openings: wall.openings ?? [] }, innerWallLength(wall))), 'A door or window does not fit its wall'),
+  v.check(floor => floor.walls.every(wall => innerWallKind(wall) === 'wall' || (wall.openings ?? []).every(opening => opening.kind === 'door')), 'A window needs a full wall'),
   v.check(floor => Math.abs(signedArea(floor.outline)) >= 10_000, 'The outline has no area'),
   v.check(floor => jsonBytes(floor) <= LAYOUT_MAX_FLOOR_BYTES, 'This floor holds too much: move some furniture to another floor'),
 )
@@ -523,7 +547,7 @@ export function signedArea(outline: readonly Point[]): number {
   return twice / 2
 }
 
-function openingsFit(edge: Edge, length: number): boolean {
+function openingsFit(edge: Pick<Edge, 'openings'>, length: number): boolean {
   const sorted = [...edge.openings].sort((a, b) => a.offset - b.offset)
   let cursor = 0
   for (const opening of sorted) {

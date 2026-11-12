@@ -10,7 +10,7 @@
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import type { ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, heightRangeMessage, ITEM_HEIGHTS, isFigureKind, isItemLookKind, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
+import { edgeLength, heightRangeMessage, innerWallKind, ITEM_HEIGHTS, isFigureKind, isItemLookKind, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
@@ -21,8 +21,10 @@ import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength,
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
 import { canAddFloor, newFloor } from '../designer/starters'
+import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
 import type { Starter } from '../designer/starters'
 import EdgePanel from './EdgePanel.vue'
+import InnerWallPanel from './InnerWallPanel.vue'
 import ExploreLayoutSettings from './ExploreLayoutSettings.vue'
 import ItemLookFormModal from './ItemLookFormModal.vue'
 import type { ItemLookSource } from './ItemLookFormModal.vue'
@@ -381,6 +383,13 @@ function updateShape(shape: FloorShape) {
 /** The edge whose length is being typed, where its label is on screen, and what's typed so far. */
 const lengthEdit = ref<{ index: number, at: Point, value: number | undefined } | null>(null)
 const lengthInput = useTemplateRef<{ inputRef?: HTMLInputElement | null }>('lengthInput')
+/** Inside walls' kinds, for the right-click menu (D278). */
+const INNER_WALL_OPTIONS = [
+  { value: 'wall', label: 'Wall' },
+  { value: 'railing', label: 'Railing' },
+  { value: 'half', label: 'Half wall' },
+  { value: 'glass', label: 'Glass' },
+] as const
 const EDGE_KINDS = [
   { value: 'wall', label: 'Wall' },
   { value: 'railing', label: 'Railing' },
@@ -416,6 +425,13 @@ watch(() => [mode.value, floor.value?.id], () => {
 
 function addWall(wall: Omit<InnerWall, 'id'>) {
   changeFloor(target => target.walls.push({ id: newLayoutId('wall'), ...wall }))
+}
+
+/** The floor's inside walls after a change from their panel or the plan (D278): one undo step. */
+function setWalls(walls: InnerWall[]) {
+  changeFloor((target) => {
+    target.walls = walls
+  })
 }
 
 function turn(degrees: number) {
@@ -885,8 +901,19 @@ const contextItems = computed((): ContextMenuItem[][] => {
       { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', kbds: ['delete'], onSelect: () => remove({ kind: 'item', id: itemId }) },
     ]]
   }
-  if (selectedWall.value && target) {
-    return [zoomItems, [{ label: 'Delete wall', icon: 'i-lucide-trash-2', color: 'error', kbds: ['delete'], onSelect: () => remove(target) }]]
+  if (selectedWall.value && target && floor.value) {
+    const wall = selectedWall.value
+    const walls = floor.value.walls
+    const kind = innerWallKind(wall)
+    return [
+      INNER_WALL_OPTIONS.map(option => ({ label: option.label, type: 'checkbox' as const, checked: kind === option.value, onSelect: () => setWalls(setInnerWallKind(walls, wall.id, option.value)) })),
+      [
+        { label: kind === 'railing' ? 'Add a gate' : kind === 'wall' ? 'Add a door' : 'Add an opening', icon: 'i-lucide-door-open', disabled: !innerOpeningFits(wall, 'door'), onSelect: () => setWalls(addInnerOpening(walls, wall.id, 'door', newLayoutId('door'))) },
+        ...(kind === 'wall' ? [{ label: 'Add a window', icon: 'i-lucide-app-window', disabled: !innerOpeningFits(wall, 'window'), onSelect: () => setWalls(addInnerOpening(walls, wall.id, 'window', newLayoutId('window'))) }] : []),
+      ],
+      zoomItems,
+      [{ label: 'Delete wall', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => remove(target) }],
+    ]
   }
   const current = floor.value
   const index = selectedEdge.value
@@ -988,7 +1015,6 @@ function revertField(event: KeyboardEvent, value: number) {
   input.blur()
 }
 
-const wallLength = (wall: InnerWall) => Math.round(Math.hypot(wall.to.x - wall.from.x, wall.to.y - wall.from.y))
 const swatch = (finish: Finish) => FINISH_SWATCHES[finish]
 
 function chooseStarter(starter: Starter) {
@@ -1782,46 +1808,14 @@ const pendingLabel = computed(() => {
       </div>
     </div>
 
-    <div
-      v-else-if="selectedWall"
-      class="flex flex-col gap-4"
-      data-testid="selected-wall"
-    >
-      <div class="flex items-center gap-3">
-        <span class="flex size-9 items-center justify-center rounded-md bg-elevated text-muted">
-          <UIcon
-            name="i-lucide-brick-wall"
-            class="size-5"
-          />
-        </span>
-        <div class="min-w-0 flex-1">
-          <p class="text-base font-semibold text-highlighted">
-            Inside wall
-          </p>
-          <p class="text-xs text-muted tabular-nums">
-            {{ wallLength(selectedWall) }} cm
-          </p>
-        </div>
-        <UButton
-          icon="i-lucide-x"
-          color="neutral"
-          variant="ghost"
-          aria-label="Close panel"
-          @click="selection = null; detailsOpen = false"
-        />
-      </div>
-      <p class="text-sm text-muted">
-        Inside walls make a stair kiosk or a kitchen. The outline makes the outer walls.
-      </p>
-      <UButton
-        label="Delete wall"
-        icon="i-lucide-trash-2"
-        color="error"
-        variant="outline"
-        block
-        @click="remove(selection!)"
-      />
-    </div>
+    <InnerWallPanel
+      v-else-if="selectedWall && floor"
+      :walls="floor.walls"
+      :wall="selectedWall"
+      @change="setWalls"
+      @remove="remove(selection!)"
+      @close="selection = null; detailsOpen = false"
+    />
 
     <EdgePanel
       v-else-if="floor && selectedEdge !== undefined"
@@ -2141,6 +2135,7 @@ const pendingLabel = computed(() => {
                 @remove="remove"
                 @shape="updateShape"
                 @add-wall="addWall"
+                @walls="setWalls"
                 @edit-length="editLength"
               />
             </div>

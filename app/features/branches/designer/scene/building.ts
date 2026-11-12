@@ -2,8 +2,8 @@ import { BoxGeometry, ExtrudeGeometry, Group, Mesh, Path, PointLight, Shape, Vec
 import type { BufferGeometry, Material, Object3D } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Floor, Point } from '#shared/contracts/shop-layout'
-import { edgeLength, signedArea } from '#shared/contracts/shop-layout'
-import { DOOR_HEIGHT_CM, floorInteriorPoint, outwardNormal, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, WALL_THICKNESS_CM, wallPieces, WINDOW_SILL_CM, WINDOW_TOP_CM } from '../geometry'
+import { edgeLength, innerWallKind, innerWallLength, signedArea } from '#shared/contracts/shop-layout'
+import { DOOR_HEIGHT_CM, floorInteriorPoint, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, innerWallHeight, outwardNormal, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, WALL_THICKNESS_CM, wallPieces, WINDOW_SILL_CM, WINDOW_TOP_CM } from '../geometry'
 import type { BuildContext } from './furniture'
 import { cm, yRotation } from './units'
 
@@ -84,16 +84,29 @@ export function buildFloor(context: BuildContext, options: FloorBuildOptions): F
     walls.push({ object: edgeGroup, normal: new Vector3(normal.x, 0, normal.y), center: new Vector3(cm((from.x + to.x) / 2), 0, cm((from.y + to.y) / 2)) })
   })
 
+  // Inside walls (D278): a wall, half wall or glass with its doors and windows, or a railing.
   for (const wall of floor.walls) {
-    const length = Math.hypot(wall.to.x - wall.from.x, wall.to.y - wall.from.y)
+    const length = innerWallLength(wall)
     if (length < 1) continue
+    const kind = innerWallKind(wall)
+    const openings = wall.openings ?? []
     const angle = (Math.atan2(wall.to.y - wall.from.y, wall.to.x - wall.from.x) * 180) / Math.PI
-    const mesh = new Mesh(blockGeometry(context, length + 12, floor.height, 12), surfaces.surface('plaster'))
-    mesh.position.set(cm((wall.from.x + wall.to.x) / 2), cm(floor.height / 2), cm((wall.from.y + wall.to.y) / 2))
-    mesh.rotation.y = yRotation(angle)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    group.add(mesh)
+    const wallGroup = new Group()
+    wallGroup.rotation.y = yRotation(angle)
+    wallGroup.position.set(cm((wall.from.x + wall.to.x) / 2), 0, cm((wall.from.y + wall.to.y) / 2))
+    if (kind === 'railing') railingEdge(context, wallGroup, length, openings)
+    else {
+      const thickness = kind === 'glass' ? GLASS_THICKNESS_CM : INNER_WALL_THICKNESS_CM
+      // Square ends: the wall runs half its thickness past each end, so two walls meeting close the corner.
+      const extra = kind === 'glass' ? 0 : thickness / 2
+      wallEdge(context, wallGroup, { length, height: innerWallHeight(kind, floor.height), openings, startExtra: extra, endExtra: extra, thickness, surface: kind === 'glass' ? 'glass' : 'plaster', leaves: kind === 'wall' })
+      if (kind === 'glass') {
+        // A frame along the top and at each end holds the glass.
+        addBox(context, wallGroup, length, 4, 6, surfaces.surface('frame'), { x: 0, y: floor.height - 2, z: 0 })
+        for (const end of [-length / 2 + 2, length / 2 - 2]) addBox(context, wallGroup, 4, floor.height, 6, surfaces.surface('frame'), { x: end, y: floor.height / 2, z: 0 })
+      }
+    }
+    group.add(wallGroup)
   }
 
   if (floor.hasRoof) {
@@ -185,18 +198,23 @@ interface WallEdgeOptions {
   openings: Floor['edges'][number]['openings']
   startExtra: number
   endExtra: number
+  /** An inside wall's own (D278); the outline's walls are `WALL_THICKNESS_CM`. */
+  thickness?: number
+  surface?: 'plaster' | 'glass'
+  /** Door leaves in its doorways (a half wall's or glass's doorway is an open gap). */
+  leaves?: boolean
 }
 
 /** One edge's wall as merged solid pieces, plus window glass and frames and door leaves. */
 function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions) {
-  const { length, height, openings, startExtra, endExtra } = options
+  const { length, height, openings, startExtra, endExtra, thickness = WALL_THICKNESS_CM, surface = 'plaster', leaves = true } = options
   const pieces = wallPieces(length, height, openings).map(piece => ({
     ...piece,
     from: piece.from === 0 ? -startExtra : piece.from,
     to: piece.to === length ? length + endExtra : piece.to,
   }))
   const boxes = pieces.map((piece) => {
-    const geometry = new BoxGeometry(cm(piece.to - piece.from), cm(piece.top - piece.bottom), cm(WALL_THICKNESS_CM))
+    const geometry = new BoxGeometry(cm(piece.to - piece.from), cm(piece.top - piece.bottom), cm(thickness))
     geometry.translate(cm((piece.from + piece.to) / 2 - length / 2), cm((piece.top + piece.bottom) / 2), 0)
     return geometry
   })
@@ -205,8 +223,8 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
     for (const piece of boxes) piece.dispose()
     // Owned by this wall: its size is its own, so it isn't cached.
     context.geometries.set(`wall:${group.uuid}`, merged)
-    const mesh = new Mesh(merged, context.materials.surface('plaster'))
-    mesh.castShadow = true
+    const mesh = new Mesh(merged, context.materials.surface(surface))
+    mesh.castShadow = surface !== 'glass'
     mesh.receiveShadow = true
     group.add(mesh)
   }
@@ -217,7 +235,7 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
       const bottom = Math.min(WINDOW_SILL_CM, height)
       const top = Math.min(WINDOW_TOP_CM, height)
       addBox(context, group, opening.width - 4, top - bottom - 4, 2, context.materials.surface('glass'), { x, y: (top + bottom) / 2, z: 0 }, false)
-      addBox(context, group, opening.width, 4, WALL_THICKNESS_CM + 2, frame, { x, y: bottom + 2, z: 0 })
+      addBox(context, group, opening.width, 4, thickness + 2, frame, { x, y: bottom + 2, z: 0 })
       addBox(context, group, opening.width, 4, 8, frame, { x, y: top - 2, z: 0 })
       addBox(context, group, 4, top - bottom, 8, frame, { x: x - opening.width / 2 + 2, y: (top + bottom) / 2, z: 0 })
       addBox(context, group, 4, top - bottom, 8, frame, { x: x + opening.width / 2 - 2, y: (top + bottom) / 2, z: 0 })
@@ -227,11 +245,12 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
       }
     }
     else {
+      if (!leaves) continue
       const doorHeight = Math.min(DOOR_HEIGHT_CM, height)
       // The leaf and its handle name their door, so Explore (D275) can swing them on a hinge.
-      const leaf = addBox(context, group, opening.width - 6, doorHeight - 3, 4, context.materials.finish('walnut'), { x, y: (doorHeight - 3) / 2, z: -WALL_THICKNESS_CM / 2 + 4 })
-      addBox(context, group, opening.width, 5, WALL_THICKNESS_CM + 1, frame, { x, y: doorHeight - 2.5, z: 0 })
-      const handle = addBox(context, group, 2, 18, 4, context.materials.finish('brass'), { x: x + opening.width / 2 - 14, y: 105, z: -WALL_THICKNESS_CM / 2 + 1 })
+      const leaf = addBox(context, group, opening.width - 6, doorHeight - 3, 4, context.materials.finish('walnut'), { x, y: (doorHeight - 3) / 2, z: -thickness / 2 + 4 })
+      addBox(context, group, opening.width, 5, thickness + 1, frame, { x, y: doorHeight - 2.5, z: 0 })
+      const handle = addBox(context, group, 2, 18, 4, context.materials.finish('brass'), { x: x + opening.width / 2 - 14, y: 105, z: -thickness / 2 + 1 })
       leaf.userData.doorId = opening.id
       handle.userData.doorId = opening.id
     }
