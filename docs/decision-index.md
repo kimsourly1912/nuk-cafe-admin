@@ -9,7 +9,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Replaced Spring/SPA/SDK | D1–D5; superseded by D39, D43, D71, D95 |
 | API/server architecture and integrity | D39–D45, D52, D71, D116, D194, D200; version, idempotency, guard, audit, repository, shared owner conditions, token queues, connect codes, joined snapshots and JSON-bound sets, archive and permanent delete |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
-| UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256, D263, D264, D268, D269, D270, D271, D273, D274; counter board layout; motion, animation, transitions, easing curves; shop designer, floor plan, 3D view, scenes, surroundings |
+| UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256, D263, D264, D268, D269, D270, D271, D273, D274, D278; counter board layout; motion, animation, transitions, easing curves; shop designer, floor plan, 3D view, scenes, surroundings |
 | Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248, D272; organization, tenant, branch, platform console, Better Auth endpoint allowlist |
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250, D257, D265, D266; KHQR recovery, review cases, customer order index |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
@@ -324,3 +324,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 
 | [D276](decisions.md#d276-studio-is-the-branch-layout-workspace-2026-11-12) | Dedicated Studio workspace, responsive panels, shared 2D/3D draft and selection, legacy links redirected (2026-11-12) |
 | [D277](decisions.md#d277-studio-editor-revision-2026-11-12) | Studio revision: explicit Save layout in a canvas chip (autosave rejected), one left sidebar with the header and panel rail, one floating toolbar for 2D and 3D, floor settings and kind-specific typed fields in the inspector, Assets as a catalog with finishes in the inspector, Manage looks inside Studio, floor picker kept on the canvas, `USplitter` sidebar 232–430 px that collapses instead of unmounting (2026-11-12) |
+| [D278](decisions.md#d278-studio-canvas-follows-figma-2026-11-12) | Studio canvas follows Figma: furniture above edges for clicks, hover outline, Delete opens an edge, wheel pans and Ctrl/⌘ or pinch zooms, Studio-wide shortcuts (V H P W, arrows 5/25 cm, Shift+R), right-click menu with the quick bar for touch, Alt+drag copy; Room, Edit points, inside wall kinds and Shape in PR 2; multi-select in PR 3 (2026-11-12) |

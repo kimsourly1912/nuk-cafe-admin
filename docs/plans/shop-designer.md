@@ -446,3 +446,34 @@ In the same PR as step 3e (owner's choice), its own commit.
   - `test/e2e/shop-designer.test.ts`: the four sections and **New lounge look**; an armchair, a coffee station, a pendant lamp and a parasol placed, the parasol's range shown, saved, drawn in 3D; the Looks page's Lounge seating and Outdoor sections.
 - **Review on staging:** in Design shop, furnish a lounge corner (sofa, armchair, coffee table, floor lamp) and a terrace (parasol over a table, bicycle); put a pendant lamp over the counter. No warnings for the parasol or the lamp. Make a **New outdoor look** (a terracotta parasol) on the Looks page. View in 3D.
 
+
+## Studio canvas like Figma (D278, planned 2026-11-12)
+
+The owner found the 2D plan hard to use: some pieces can't be clicked, walls and railings can't be deleted, and drawing is rigid. The owner asked for Figma's flow, tools and shortcuts, and agreed to every recommendation below (2026-11-12). Figma's help site was blocked from the build session, so the Figma behavior here is from Claude's knowledge, to be checked by the owner.
+
+**Problems found in the code (2026-11-12):**
+
+1. An outline edge's invisible hit line (40 cm or 16 px wide) was drawn **above furniture**: a coffee station or counter against a wall selected the edge.
+2. Shortcuts listened on the plan's `<svg>` only: after a click in a panel, R, Delete and the arrows did nothing.
+3. The wheel always zoomed: a trackpad's two-finger scroll zoomed instead of panning.
+4. A drag on empty space panned in Select; one piece at a time could be selected.
+5. No hover feedback.
+6. The quick-action bar covered the plan and repeated Properties.
+7. Draw outline and Draw wall sat in a dropdown, with no keys; no Space to pan.
+8. Arrow 25 cm, Shift+arrow 5 cm: the reverse of Figma, where Shift is the bigger step.
+9. Delete ignored an outline edge (Open was the only way to remove a wall or railing). Inside walls have no type, no doors, and can't be moved or reshaped.
+
+**Steps.** Small and medium steps share PR 1 (owner, 2026-11-12); the large ones get a PR each.
+
+| PR | Step | What |
+|---|---|---|
+| 1 | A. Clicking | Edge hit lines under furniture and tables; a hover outline on what a click would pick; Delete on an outline edge makes it **Open** ("Wall removed", Undo) |
+| 1 | B. Navigation | Wheel pans (Shift: sideways), Ctrl/⌘+wheel and a trackpad pinch zoom at the pointer; hold Space or drag with the middle button to pan; Shift+1 fit, Shift+2 zoom to selection, Shift+0 100 %; Ctrl/⌘ + and −; a zoom menu on the toolbar's percentage |
+| 1 | C. Shortcuts | Studio-wide (Nuxt UI `defineShortcuts`, skipped while typing or with a dialog or menu open): V Select, H Hand, P Draw outline, W Draw wall, Esc (cancel the gesture, then leave the tool, then clear the selection), Ctrl/⌘+D duplicate, Delete, arrows 5 cm and Shift+arrows 25 cm, Shift+R turn 90°, Shift+? the shortcut list; tooltips show the keys; Draw outline and Draw wall become their own toolbar buttons |
+| 1 | E. On the canvas | A right-click menu on a piece, wall or edge (the quick bar's actions); the quick bar only on touch screens; Alt+drag drags a copy; Shift+drag keeps the move straight across or down; Ctrl/⌘ while dragging snaps to 5 cm |
+| 2 | Drawing (large) | **Room** (R: drag a rectangle; it merges into the floor's outline, Alt cuts it out; `polygon-clipping`), **Edit points** (Enter or double-click; replaces Draw outline: drag corners, drag a whole side, add and remove corners), **inside walls** with a kind (wall, railing, half wall, glass), doors and windows, dragged ends, joined ends; **Shape** (S: a rectangle or circle piece of any size with a name, height and finish). Contract, server, 3D and e2e |
+| 3 | Multi-select (large) | Shift+click, a box drag on empty space, Ctrl/⌘+A; move, duplicate and delete together as one undo step; Properties shows shared values |
+
+**Agreed (owner, 2026-11-12):** R becomes Room in PR 2 and turning moves to Shift+R; rooms merge with `polygon-clipping`; Shape pieces are rectangles and circles first; curved walls wait for the pilot. Explicit save (D277) stays. Touch keeps working: the quick bar and long-press stay for fingers.
+
+**Moved from PR 1 to PR 2:** the Shape tool needs the same contract, server and 3D work as the inside-wall kinds. Smart guides and Alt distances wait until multi-select, which they share their geometry with.
