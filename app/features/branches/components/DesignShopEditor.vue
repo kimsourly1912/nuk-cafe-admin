@@ -42,8 +42,6 @@ const props = defineProps<{
   looks: readonly TableLook[]
 }>()
 
-
-
 const exploreEnabled = useRuntimeConfig().public.explore
 const exploreOpen = ref(false)
 const draft = props.editor.draft
@@ -756,8 +754,14 @@ const pendingLabel = computed(() => {
   />
   <!-- The library (lg and up beside the plan; below, in a slide-over). -->
   <DefineLibrary>
-    <div v-if="panel === 'floors'" class="flex flex-col gap-2">
-      <div v-for="candidate in floors" :key="candidate.id">
+    <div
+      v-if="panel === 'floors'"
+      class="flex flex-col gap-2"
+    >
+      <div
+        v-for="candidate in floors"
+        :key="candidate.id"
+      >
         <UButton
           :label="candidate.name"
           :color="candidate.id === floor?.id ? 'primary' : 'neutral'"
@@ -773,7 +777,10 @@ const pendingLabel = computed(() => {
             <span class="ml-auto text-xs text-muted">{{ tablesOn(candidate.id).length }} tables</span>
           </template>
         </UButton>
-        <div v-if="candidate.id === floor?.id" class="mt-1 ml-3 flex flex-col gap-1 border-l border-default pl-2">
+        <div
+          v-if="candidate.id === floor?.id"
+          class="mt-1 ml-3 flex flex-col gap-1 border-l border-default pl-2"
+        >
           <UButton
             v-for="table in tablesOn(candidate.id)"
             :key="table.tableId"
@@ -812,7 +819,10 @@ const pendingLabel = computed(() => {
         @click="addFloor(); panelOpen = null"
       />
     </div>
-    <div v-else class="flex flex-col gap-4">
+    <div
+      v-else
+      class="flex flex-col gap-4"
+    >
       <SearchInput
         v-model="search"
         :placeholder="panel === 'tables' ? 'Search tables…' : 'Search assets…'"
@@ -834,7 +844,10 @@ const pendingLabel = computed(() => {
           @click="assetTab = 'finishes'; search = ''"
         />
       </UFieldGroup>
-      <section v-if="panel === 'tables'" class="flex flex-col gap-2">
+      <section
+        v-if="panel === 'tables'"
+        class="flex flex-col gap-2"
+      >
         <div class="flex items-center gap-2">
           <h2 class="text-sm font-semibold text-highlighted">
             Unplaced tables
@@ -891,8 +904,13 @@ const pendingLabel = computed(() => {
         />
       </section>
 
-      <section v-if="panel === 'tables'" class="flex flex-col gap-2">
-        <h2 class="text-sm font-semibold text-highlighted">On plan</h2>
+      <section
+        v-if="panel === 'tables'"
+        class="flex flex-col gap-2"
+      >
+        <h2 class="text-sm font-semibold text-highlighted">
+          On plan
+        </h2>
         <UButton
           v-for="table in placedTables"
           :key="table.id"
@@ -906,13 +924,32 @@ const pendingLabel = computed(() => {
             <span class="ml-auto text-xs text-muted">{{ table.floorName }}</span>
           </template>
         </UButton>
-        <p v-if="!placedTables.length" class="text-sm text-muted">No placed tables match.</p>
+        <p
+          v-if="!placedTables.length"
+          class="text-sm text-muted"
+        >
+          No placed tables match.
+        </p>
       </section>
 
-      <section v-if="panel === 'assets' && assetTab === 'finishes'" class="flex flex-col gap-3">
-        <p v-if="!finishSlots.length" class="text-sm text-muted">Select a piece with editable finishes to apply one here.</p>
-        <div v-for="slot in finishSlots" :key="slot.key" class="flex flex-col gap-2">
-          <h2 class="text-sm font-semibold text-highlighted">{{ slot.label }}</h2>
+      <section
+        v-if="panel === 'assets' && assetTab === 'finishes'"
+        class="flex flex-col gap-3"
+      >
+        <p
+          v-if="!finishSlots.length"
+          class="text-sm text-muted"
+        >
+          Select a piece with editable finishes to apply one here.
+        </p>
+        <div
+          v-for="slot in finishSlots"
+          :key="slot.key"
+          class="flex flex-col gap-2"
+        >
+          <h2 class="text-sm font-semibold text-highlighted">
+            {{ slot.label }}
+          </h2>
           <UButton
             v-for="finish in slot.options.filter(option => matches(swatch(option).label))"
             :key="finish"
@@ -923,13 +960,19 @@ const pendingLabel = computed(() => {
             @click="updateItem(selectedItem!.id, { finishes: { ...selectedItem!.finishes, [slot.key]: finish } })"
           >
             <template #leading>
-              <span class="size-4 rounded-full border border-default" :style="{ background: swatch(finish).color }" />
+              <span
+                class="size-4 rounded-full border border-default"
+                :style="{ background: swatch(finish).color }"
+              />
             </template>
           </UButton>
         </div>
       </section>
 
-      <section v-if="panel === 'assets' && assetTab === 'objects' && (!search || looks.some(look => matches(look.name)))" class="flex flex-col gap-2">
+      <section
+        v-if="panel === 'assets' && assetTab === 'objects' && (!search || looks.some(look => matches(look.name)))"
+        class="flex flex-col gap-2"
+      >
         <h2 class="text-xs font-semibold tracking-wide text-muted uppercase">
           Table looks · chairs follow the table’s seats
         </h2>
@@ -1592,8 +1635,13 @@ const pendingLabel = computed(() => {
       @change="updateShape"
       @close="selection = null; detailsOpen = false"
     />
-    <div v-else-if="floor" class="flex flex-col gap-3">
-      <p class="text-sm font-semibold text-highlighted">{{ floor.name }} floor</p>
+    <div
+      v-else-if="floor"
+      class="flex flex-col gap-3"
+    >
+      <p class="text-sm font-semibold text-highlighted">
+        {{ floor.name }} floor
+      </p>
       <UFormField label="Floor height (cm)">
         <UInputNumber
           :model-value="floor.height"
@@ -1608,7 +1656,9 @@ const pendingLabel = computed(() => {
         label="Roof over this floor"
         @update:model-value="setRoof"
       />
-      <p class="text-sm text-muted">Select an object on the plan to edit its properties.</p>
+      <p class="text-sm text-muted">
+        Select an object on the plan to edit its properties.
+      </p>
     </div>
     <ReuseMovePad
       v-if="isExpanded && mode === 'select' && (selectedPlacement || selectedItem)"
@@ -1645,7 +1695,10 @@ const pendingLabel = computed(() => {
     v-else
     class="relative flex h-full min-h-0 pb-12 sm:pb-0"
   >
-    <nav aria-label="Studio panels" class="absolute inset-x-0 bottom-0 z-10 flex h-12 shrink-0 items-center justify-around border-t border-default bg-elevated sm:static sm:h-auto sm:w-16 sm:flex-col sm:justify-start sm:gap-1 sm:border-t-0 sm:border-r sm:p-1">
+    <nav
+      aria-label="Studio panels"
+      class="absolute inset-x-0 bottom-0 z-10 flex h-12 shrink-0 items-center justify-around border-t border-default bg-elevated sm:static sm:h-auto sm:w-16 sm:flex-col sm:justify-start sm:gap-1 sm:border-t-0 sm:border-r sm:p-1"
+    >
       <UButton
         v-for="option in panels"
         :key="option.value"
@@ -1671,8 +1724,14 @@ const pendingLabel = computed(() => {
         @click="focusMode = !focusMode"
       />
     </nav>
-    <aside v-if="!focusMode" :aria-label="panelTitle" class="hidden w-48 shrink-0 overflow-y-auto border-r border-default bg-default p-3 lg:block xl:w-60">
-      <h2 class="mb-3 border-b border-default pb-3 text-sm font-semibold text-highlighted">{{ panelTitle }}</h2>
+    <aside
+      v-if="!focusMode"
+      :aria-label="panelTitle"
+      class="hidden w-48 shrink-0 overflow-y-auto border-r border-default bg-default p-3 lg:block xl:w-60"
+    >
+      <h2 class="mb-3 border-b border-default pb-3 text-sm font-semibold text-highlighted">
+        {{ panelTitle }}
+      </h2>
       <ReuseLibrary />
     </aside>
     <AppDrawer
@@ -2040,7 +2099,10 @@ const pendingLabel = computed(() => {
         </template>
       </div>
 
-      <div v-if="mode === 'select' && !pending && !isExpanded && (selectedPlacement || selectedItem)" class="absolute bottom-16 left-2 max-w-52 shadow-md">
+      <div
+        v-if="mode === 'select' && !pending && !isExpanded && (selectedPlacement || selectedItem)"
+        class="absolute bottom-16 left-2 max-w-52 shadow-md"
+      >
         <ReuseMovePad />
       </div>
       <UButton
@@ -2128,8 +2190,14 @@ const pendingLabel = computed(() => {
           @click="canvas?.fit()"
         />
       </div>
-      <div v-if="pending" class="absolute inset-x-2 bottom-28 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-default bg-default p-2 shadow-sm">
-        <span class="text-sm text-toned" role="status">Click or tap the plan to place {{ pendingLabel }}.</span>
+      <div
+        v-if="pending"
+        class="absolute inset-x-2 bottom-28 flex flex-wrap items-center justify-center gap-2 rounded-lg border border-default bg-default p-2 shadow-sm"
+      >
+        <span
+          class="text-sm text-toned"
+          role="status"
+        >Click or tap the plan to place {{ pendingLabel }}.</span>
         <UButton
           label="Place at center"
           color="neutral"
@@ -2145,8 +2213,14 @@ const pendingLabel = computed(() => {
       </div>
     </main>
 
-    <aside v-if="!focusMode" aria-label="Properties" class="hidden w-60 shrink-0 overflow-y-auto border-l border-default bg-default p-3 lg:block xl:w-72">
-      <h2 class="mb-3 border-b border-default pb-3 text-sm font-semibold text-highlighted">Properties</h2>
+    <aside
+      v-if="!focusMode"
+      aria-label="Properties"
+      class="hidden w-60 shrink-0 overflow-y-auto border-l border-default bg-default p-3 lg:block xl:w-72"
+    >
+      <h2 class="mb-3 border-b border-default pb-3 text-sm font-semibold text-highlighted">
+        Properties
+      </h2>
       <ReuseDetails />
     </aside>
   </div>

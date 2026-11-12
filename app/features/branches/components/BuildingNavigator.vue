@@ -83,7 +83,10 @@ const unplaced = computed(() => {
       </div>
     </section>
 
-    <section v-if="section !== 'floors' || insideFloor" class="flex flex-col gap-3">
+    <section
+      v-if="section !== 'floors' || insideFloor"
+      class="flex flex-col gap-3"
+    >
       <h2 class="text-sm font-semibold text-highlighted">
         {{ insideFloor ? 'Tables on this floor' : 'Tables' }}
       </h2>

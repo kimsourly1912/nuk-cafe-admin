@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { NO_SCENE } from '#shared/contracts/shop-layout'
 import type { ScenePreset } from '#shared/contracts/shop-layout'
+import { SupportBanner } from '~/features/support'
 import { useBranchSettings, useBranchTables } from '../composables/useBranches'
 import { useLayoutEditor } from '../composables/useLayoutEditor'
 import BuildingView3D from './BuildingView3D.vue'
@@ -9,6 +10,7 @@ import LayoutSaveAlerts from './LayoutSaveAlerts.vue'
 
 const props = defineProps<{ id: string }>()
 const route = useRoute()
+const router = useRouter()
 const tenantPath = useTenantPath()
 const cafe = useCafe()
 const { data: settings, error, refresh } = useBranchSettings(props.id)
@@ -21,11 +23,21 @@ editor.load()
 const layout = editor.draft.layout
 const hasOutline = computed(() => layout.value.floors.some(floor => floor.outline.length >= 3))
 const explore = useRuntimeConfig().public.explore
-const publishes = computed(() => explore && hasPin.value && layout.value.scene?.explore)
+const publishes = computed(() => explore && hasPin.value && (layout.value.scene?.explore || editor.query.data.value?.scene?.explore))
 const exitOpen = ref(false)
+function adminReturnPath() {
+  const back = router.options.history.state.back
+  if (typeof back !== 'string' || !back.startsWith(tenantPath('/admin'))) return tenantPath('/admin')
+  const path = router.resolve(back).path
+  const admin = tenantPath('/admin')
+  const studio = tenantPath('/admin/studio')
+  const inAdmin = path === admin || path.startsWith(`${admin}/`)
+  return inAdmin && path !== studio && !path.startsWith(`${studio}/`) ? back : admin
+}
+
 const backTo = computed(() => route.query.from === 'tables'
   ? { path: tenantPath(`/admin/branches/${props.id}`), query: { tab: 'tables' } }
-  : { path: tenantPath(route.query.from === 'picker' ? '/admin/studio' : '/admin') })
+  : route.query.from === 'picker' ? tenantPath('/admin/studio') : adminReturnPath())
 
 async function leave(save: boolean) {
   if (save) {
@@ -81,6 +93,7 @@ function showItemOnPlan(itemId: string) {
 
 <template>
   <div class="flex h-dvh min-h-0 flex-col overflow-hidden bg-default">
+    <SupportBanner />
     <header class="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 border-b border-default px-2 py-2 sm:gap-3 sm:px-4">
       <div class="flex min-w-0 items-center gap-1 sm:gap-3">
         <UButton
@@ -95,8 +108,12 @@ function showItemOnPlan(itemId: string) {
           class="hidden size-5 shrink-0 text-primary sm:block"
         />
         <div class="min-w-0">
-          <h1 class="truncate text-sm font-semibold text-highlighted">{{ cafe.name.value ? `${cafe.name.value} Studio` : 'Studio' }}</h1>
-          <p class="truncate text-xs text-muted">{{ settings?.name }}</p>
+          <h1 class="truncate text-sm font-semibold text-highlighted">
+            {{ cafe.name.value ? `${cafe.name.value} Studio` : 'Studio' }}
+          </h1>
+          <p class="truncate text-xs text-muted">
+            {{ settings?.name }}
+          </p>
         </div>
       </div>
       <UFieldGroup
@@ -119,7 +136,11 @@ function showItemOnPlan(itemId: string) {
         />
       </UFieldGroup>
       <div class="flex min-w-0 items-center justify-end gap-2">
-        <span class="hidden text-xs text-muted sm:inline" role="status" :data-testid="isDirty ? 'layout-unsaved' : undefined">{{ saving ? 'Saving…' : isDirty ? 'Unsaved changes' : ready ? 'Saved' : '' }}</span>
+        <span
+          class="hidden text-xs text-muted sm:inline"
+          role="status"
+          :data-testid="isDirty ? 'layout-unsaved' : undefined"
+        >{{ saving ? 'Saving…' : isDirty ? 'Unsaved changes' : ready ? 'Saved' : '' }}</span>
         <UColorModeButton class="hidden sm:inline-flex" />
         <UButton
           label="Save layout"
@@ -141,8 +162,17 @@ function showItemOnPlan(itemId: string) {
         :editor="editor"
         :dining-tables="tables ?? []"
       />
-      <p v-if="publishes && isDirty" class="border-b border-default px-3 py-1 text-xs text-muted" role="status">Saving can update the customer-facing Explore layout.</p>
-      <div v-show="view === 'design'" class="min-h-0 flex-1">
+      <p
+        v-if="publishes && isDirty"
+        class="border-b border-default px-3 py-1 text-xs text-muted"
+        role="status"
+      >
+        Saving can update the customer-facing Explore layout.
+      </p>
+      <div
+        v-show="view === 'design'"
+        class="min-h-0 flex-1"
+      >
         <DesignShopEditor
           :editor="editor"
           :branch-id="id"
@@ -152,23 +182,39 @@ function showItemOnPlan(itemId: string) {
           :active="view === 'design'"
         />
       </div>
-      <div v-if="view === '3d'" class="min-h-0 flex-1">
-        <div v-if="editor.error.value" class="p-4">
+      <div
+        v-if="view === '3d'"
+        class="min-h-0 flex-1"
+      >
+        <div
+          v-if="editor.error.value"
+          class="p-4"
+        >
           <ApiErrorAlert
             :error="editor.error.value"
             title="Could not load the shop layout"
             @retry="editor.retry()"
           />
         </div>
-        <div v-else-if="!ready" class="p-4">
+        <div
+          v-else-if="!ready"
+          class="p-4"
+        >
           <ListSkeleton
             label="Loading the shop layout…"
             variant="card"
           />
         </div>
-        <div v-else-if="!hasOutline" class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-          <p class="font-semibold text-highlighted">No shop layout yet</p>
-          <p class="text-sm text-muted">Draw the shop in 2D to see it here.</p>
+        <div
+          v-else-if="!hasOutline"
+          class="flex h-full flex-col items-center justify-center gap-3 p-6 text-center"
+        >
+          <p class="font-semibold text-highlighted">
+            No shop layout yet
+          </p>
+          <p class="text-sm text-muted">
+            Draw the shop in 2D to see it here.
+          </p>
           <UButton
             label="Edit in 2D"
             icon="i-lucide-layout-dashboard"

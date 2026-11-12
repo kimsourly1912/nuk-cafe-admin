@@ -98,7 +98,7 @@ const selected = computed(() => {
   const floor = props.layout.floors.find(candidate => candidate.id === placement?.floorId)
   if (!placement || !table || !floor) return null
   const details = props.diningTables.find(candidate => candidate.id === table.id)
-  return { table, floor, look: findLook(props.looks, placement.lookId), area: details?.area ?? null, qrUrl: details?.qrUrl ?? null }
+  return { table, floor, placement, look: findLook(props.looks, placement.lookId), area: details?.area ?? null, qrUrl: details?.qrUrl ?? null }
 })
 /** The selected piece's card: its name, what it is, its size and floor, its picture. */
 const selectedPiece = computed(() => {
@@ -352,106 +352,109 @@ function selectFromList(tableId: string) {
   </DefineScenePanel>
 
   <DefineProperties>
-      <!-- The selected table: under Fit building on a wide screen, above the bottom bar on a phone.
-           Shown without 3D too: the lists still find a table, its QR code and its place on the plan. -->
+    <!-- The selected table: under Fit building on a wide screen, above the bottom bar on a phone.
+         Shown without 3D too: the lists still find a table, its QR code and its place on the plan. -->
+    <div
+      v-if="selected"
+      class="p-3"
+      data-testid="table-card"
+    >
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <p class="text-lg font-semibold text-highlighted">
+            {{ selected.table.label }}
+          </p>
+          <p class="text-sm text-muted">
+            {{ [selected.area, `${selected.table.seats} ${selected.table.seats === 1 ? 'seat' : 'seats'}`, `${selected.floor.name} floor`].filter(Boolean).join(' · ') }}
+          </p>
+        </div>
+        <UButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          aria-label="Clear selection"
+          @click="selectedTable = null"
+        />
+      </div>
+      <p class="mt-2 text-sm tabular-nums text-muted">
+        {{ selected.placement.width }} × {{ selected.placement.depth }} cm · {{ selected.placement.rotation }}°
+      </p>
+      <!-- A custom look's photo of the real piece (step 3b). -->
       <div
-        v-if="selected"
-        class="p-3"
-        data-testid="table-card"
+        v-if="selected.look.photo"
+        class="mt-3 flex items-center gap-2"
       >
-        <div class="flex items-start justify-between gap-2">
-          <div>
-            <p class="text-lg font-semibold text-highlighted">
-              {{ selected.table.label }}
+        <img
+          :src="selected.look.photo.url"
+          :alt="`Photo of ${selected.look.name}`"
+          class="aspect-4/3 w-14 shrink-0 rounded-md bg-muted object-cover"
+          data-testid="table-card-photo"
+        >
+        <span class="min-w-0 text-sm break-words text-toned">{{ selected.look.name }}</span>
+      </div>
+      <div class="mt-3 flex gap-2">
+        <UButton
+          label="View QR"
+          icon="i-lucide-qr-code"
+          size="sm"
+          :disabled="!selected.qrUrl"
+          @click="viewQr"
+        />
+        <UButton
+          label="Edit in 2D"
+          icon="i-lucide-layout-dashboard"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          @click="emit('showOnPlan', selected.table.id)"
+        />
+      </div>
+    </div>
+
+    <!-- A selected piece (step 3e): picked in 3D or in Design shop. Where the table card goes. -->
+    <div
+      v-else-if="selectedPiece"
+      class="p-3"
+      data-testid="piece-card"
+    >
+      <div class="flex items-start justify-between gap-2">
+        <div class="flex min-w-0 items-start gap-2">
+          <img
+            v-if="selectedPiece.photo"
+            :src="selectedPiece.photo"
+            :alt="`Picture of ${selectedPiece.name}`"
+            class="aspect-4/3 w-14 shrink-0 rounded-md bg-muted object-cover"
+          >
+          <div class="min-w-0">
+            <p class="text-lg font-semibold break-words text-highlighted">
+              {{ selectedPiece.name }}
             </p>
             <p class="text-sm text-muted">
-              {{ [selected.area, `${selected.table.seats} ${selected.table.seats === 1 ? 'seat' : 'seats'}`, `${selected.floor.name} floor`].filter(Boolean).join(' · ') }}
+              {{ selectedPiece.details }}
             </p>
           </div>
-          <UButton
-            icon="i-lucide-x"
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            aria-label="Clear selection"
-            @click="selectedTable = null"
-          />
         </div>
-        <!-- A custom look's photo of the real piece (step 3b). -->
-        <div
-          v-if="selected.look.photo"
-          class="mt-3 flex items-center gap-2"
-        >
-          <img
-            :src="selected.look.photo.url"
-            :alt="`Photo of ${selected.look.name}`"
-            class="aspect-4/3 w-14 shrink-0 rounded-md bg-muted object-cover"
-            data-testid="table-card-photo"
-          >
-          <span class="min-w-0 text-sm break-words text-toned">{{ selected.look.name }}</span>
-        </div>
-        <div class="mt-3 flex gap-2">
-          <UButton
-            label="View QR"
-            icon="i-lucide-qr-code"
-            size="sm"
-            :disabled="!selected.qrUrl"
-            @click="viewQr"
-          />
-          <UButton
-            label="Edit in 2D"
-            icon="i-lucide-layout-dashboard"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            @click="emit('showOnPlan', selected.table.id)"
-          />
-        </div>
+        <UButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          aria-label="Clear selection"
+          @click="selectedItem = null"
+        />
       </div>
-
-      <!-- A selected piece (step 3e): picked in 3D or in Design shop. Where the table card goes. -->
-      <div
-        v-else-if="selectedPiece"
-        class="p-3"
-        data-testid="piece-card"
-      >
-        <div class="flex items-start justify-between gap-2">
-          <div class="flex min-w-0 items-start gap-2">
-            <img
-              v-if="selectedPiece.photo"
-              :src="selectedPiece.photo"
-              :alt="`Picture of ${selectedPiece.name}`"
-              class="aspect-4/3 w-14 shrink-0 rounded-md bg-muted object-cover"
-            >
-            <div class="min-w-0">
-              <p class="text-lg font-semibold break-words text-highlighted">
-                {{ selectedPiece.name }}
-              </p>
-              <p class="text-sm text-muted">
-                {{ selectedPiece.details }}
-              </p>
-            </div>
-          </div>
-          <UButton
-            icon="i-lucide-x"
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            aria-label="Clear selection"
-            @click="selectedItem = null"
-          />
-        </div>
-        <div class="mt-3 flex gap-2">
-          <UButton
-            label="Edit in 2D"
-            icon="i-lucide-layout-dashboard"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            @click="emit('showItemOnPlan', selectedPiece.item.id)"
-          />
-        </div>
+      <div class="mt-3 flex gap-2">
+        <UButton
+          label="Edit in 2D"
+          icon="i-lucide-layout-dashboard"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          @click="emit('showItemOnPlan', selectedPiece.item.id)"
+        />
       </div>
+    </div>
   </DefineProperties>
 
   <div class="flex h-full min-h-0">
@@ -761,7 +764,10 @@ function selectFromList(tableId: string) {
         </div>
       </template>
 
-      <div v-if="selected || selectedPiece" class="absolute inset-x-3 bottom-24 rounded-lg border border-default bg-default shadow-lg sm:inset-x-auto sm:top-16 sm:right-3 sm:bottom-auto sm:w-64 lg:hidden">
+      <div
+        v-if="selected || selectedPiece"
+        class="absolute inset-x-3 bottom-24 rounded-lg border border-default bg-default shadow-lg sm:inset-x-auto sm:top-16 sm:right-3 sm:bottom-auto sm:w-64 lg:hidden"
+      >
         <ReuseProperties />
       </div>
     </main>
@@ -787,10 +793,21 @@ function selectFromList(tableId: string) {
       <ReuseScenePanel />
       <ReuseProperties />
     </aside>
-    <aside v-if="!sceneOpen" aria-label="Properties" class="hidden w-60 shrink-0 overflow-y-auto border-l border-default bg-default lg:block xl:w-72">
-      <h2 class="border-b border-default p-3 text-sm font-semibold text-highlighted">Properties</h2>
+    <aside
+      v-if="!sceneOpen"
+      aria-label="Properties"
+      class="hidden w-60 shrink-0 overflow-y-auto border-l border-default bg-default lg:block xl:w-72"
+    >
+      <h2 class="border-b border-default p-3 text-sm font-semibold text-highlighted">
+        Properties
+      </h2>
       <ReuseProperties />
-      <p v-if="!selected && !selectedPiece" class="p-3 text-sm text-muted">Select a table or piece in the scene to inspect it.</p>
+      <p
+        v-if="!selected && !selectedPiece"
+        class="p-3 text-sm text-muted"
+      >
+        Select a table or piece in the scene to inspect it.
+      </p>
     </aside>
     <AppSlideover
       v-if="scenesEnabled"

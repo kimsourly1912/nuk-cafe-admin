@@ -467,7 +467,6 @@ describe('the shop designer on saved layouts', () => {
     await plan(page).getByTestId('plan-table-L1').waitFor()
   })
 
-
   it('opens Studio from Dining tables, keeps the selected table and zoom across views, and returns to the table list', async () => {
     const page = await signedIn()
     await page.goto(url(`/c/${lab.slug}/admin/branches/${lab.branchId}?tab=tables`), { waitUntil: 'hydration' })

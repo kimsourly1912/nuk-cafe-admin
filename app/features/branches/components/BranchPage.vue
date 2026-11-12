@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAuth } from '~/features/auth'
 import { useAddBranch } from '../composables/useAddBranch'
 import { useBranchOptions } from '../composables/useBranchOptions'
 import { useBranchSettings, useBranchTables } from '../composables/useBranches'
@@ -7,6 +8,7 @@ import BranchSettingsTab from './BranchSettingsTab.vue'
 import BranchTablesTab from './BranchTablesTab.vue'
 
 const tenantPath = useTenantPath()
+const { can } = useAuth()
 
 const props = defineProps<{ id: string }>()
 
@@ -110,6 +112,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           class="flex shrink-0 items-center gap-3"
         >
           <UButton
+            v-if="can('branch:update')"
             :to="{ path: tenantPath(`/admin/studio/${id}`), query: { from: 'tables' } }"
             label="Open Studio"
             icon="i-lucide-layout-dashboard"
