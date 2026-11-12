@@ -43,6 +43,13 @@ const sidebarWidth = ref<number>(STUDIO_SIDEBAR.initial)
 const saveStatus = computed(() => saving.value ? 'Saving…' : isDirty.value ? 'Unsaved changes' : ready.value ? 'Saved' : '')
 const [DefineHeader, ReuseHeader] = createReusableTemplate<{ collapsible?: boolean }>()
 const [DefineSave, ReuseSave] = createReusableTemplate()
+// Undo and redo from the keyboard in both views (D277): they share the draft and the toolbar.
+defineShortcuts({
+  meta_z: () => editor.draft.undo(),
+  meta_shift_z: () => editor.draft.redo(),
+  meta_y: () => editor.draft.redo(),
+})
+
 function exit() {
   if (isDirty.value) exitOpen.value = true
   else void navigateTo(backTo.value)

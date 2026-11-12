@@ -10,7 +10,7 @@
 import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, heightRangeMessage, ITEM_HEIGHTS, isFigureKind, isItemLookKind, LAYOUT_MAX_EXTENT_CM } from '#shared/contracts/shop-layout'
+import { edgeLength, heightRangeMessage, ITEM_HEIGHTS, isFigureKind, isItemLookKind, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
@@ -766,12 +766,6 @@ function onLibraryUp(event: PointerEvent) {
 
 onBeforeUnmount(clearLibraryDrag)
 
-defineShortcuts({
-  meta_z: () => props.active && draft.undo(),
-  meta_shift_z: () => props.active && draft.redo(),
-  meta_y: () => props.active && draft.redo(),
-})
-
 // --- Quick actions beside the selection (2B) ---
 
 const planArea = useTemplateRef<HTMLElement>('planArea')
@@ -992,6 +986,13 @@ const pendingLabel = computed(() => {
           />
         </div>
       </div>
+      <p
+        v-if="!canAddFloor(layout)"
+        class="text-xs text-muted"
+        data-testid="floor-limit"
+      >
+        Add floor is off: a layout has at most {{ LAYOUT_MAX_FLOORS }} floors.
+      </p>
     </div>
     <StudioLooksPanel v-else-if="panel === 'looks'" />
     <div
@@ -1046,7 +1047,7 @@ const pendingLabel = computed(() => {
         <div
           v-for="table in unplaced.filter(table => matches(table.label))"
           :key="table.id"
-          class="flex items-center gap-2 rounded-md border border-default py-1.5 pr-1.5 pl-1"
+          class="flex flex-wrap items-center gap-2 rounded-md border border-default py-1.5 pr-1.5 pl-1"
           :data-testid="`unplaced-${table.label}`"
         >
           <span
@@ -1060,11 +1061,12 @@ const pendingLabel = computed(() => {
             />
             <span class="ml-1 inline-flex h-6 min-w-11 items-center justify-center rounded-md border border-primary bg-primary/10 px-1 text-xs font-semibold text-highlighted">{{ table.label }}</span>
           </span>
-          <span class="flex-1 text-sm text-muted">{{ table.seats }} seats</span>
+          <span class="flex-1 text-sm whitespace-nowrap text-muted">{{ table.seats }} seats</span>
           <UButton
             label="Place on map"
             size="xs"
             variant="ghost"
+            class="ml-auto"
             @click="beginPlacement({ kind: 'table', tableId: table.id })"
           />
         </div>
@@ -1773,7 +1775,7 @@ const pendingLabel = computed(() => {
           @click="startFind()"
         />
       </UTooltip>
-      <UTooltip :text="canAddFloor(layout) ? 'Add floor' : 'This layout has the most floors it can have'">
+      <UTooltip text="Add floor">
         <UButton
           icon="i-lucide-plus"
           color="neutral"

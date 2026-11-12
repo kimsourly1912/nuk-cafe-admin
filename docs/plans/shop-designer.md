@@ -66,8 +66,10 @@ Lengths are whole centimetres; angles whole degrees (0–359, clockwise in the t
 
 ## Editor (Design shop)
 
+> **Now Studio (D276, D277).** The editor lives in Studio: a left sidebar with the header and panels, one canvas toolbar for 2D and 3D, Save layout on the canvas, and Properties with typed position and rotation. The move pad and the Design shop header described below and in the step sections are gone. [Progress → Studio editor revision](../progress.md#studio-editor-revision-d277-2026-11-12).
+
 - **Rendering:** SVG with Pointer Events. Pointer capture plus a movement threshold separates tap/click from drag; pinch zooms; Space-drag or empty-space drag pans. Hit testing and accessibility come from the DOM.
-- **No-drag path:** Place on map, the move pad and keyboard (arrows, Shift for 5 cm, R rotate, Enter done, Esc cancel). The e2e tests drive the editor this way.
+- **No-drag path:** Place on map, keyboard (arrows, Shift for 5 cm, R rotate, Enter done, Esc cancel) and typed X, Y and rotation in Properties (D277; the move pad until then). The e2e tests drive the editor this way.
 - **State:** the draft layout lives in a managed composable, cleared on session transitions; undo/redo is a capped list of document snapshots. Leaving with unsaved changes asks first (the app's existing guard).
 - **Upper floors** show the floor below as a faint outline (toggle), so stairs and walls line up.
 - **Table form reuse:** New table and Edit table open the branches feature's own form, which is why the editor lives in `app/features/branches/designer/` (forms are never exported, AGENTS.md).
