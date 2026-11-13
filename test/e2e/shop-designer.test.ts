@@ -800,6 +800,17 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Tab')
     expect(await plan(page).evaluate(svg => svg.contains(document.activeElement))).toBe(false)
 
+    // Ctrl+/ searches Studio's actions (owner, 2026-11-13): typing finds one, Enter runs it.
+    await page.keyboard.press('Control+/')
+    const commands = page.getByTestId('studio-commands')
+    await commands.waitFor()
+    await page.keyboard.type('draw wall')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => plan(page).getAttribute('data-mode')).toBe('wall')
+    await commands.waitFor({ state: 'detached' })
+    await page.keyboard.press('Escape')
+    await expect.poll(() => plan(page).getAttribute('data-mode')).toBe('select')
+
     // ? lists the shortcuts (ISS-025), the new ones included.
     await page.keyboard.press('Shift+Slash')
     const list = page.getByRole('dialog').filter({ hasText: 'Copy the selection' })

@@ -8,7 +8,7 @@
  * Properties, so the editor works without dragging on touch, with a keyboard and in the e2e tests.
  */
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
-import type { ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
+import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
 import { edgeLength, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
@@ -32,6 +32,7 @@ import ExploreLayoutSettings from './ExploreLayoutSettings.vue'
 import ItemLookFormModal from './ItemLookFormModal.vue'
 import type { ItemLookSource } from './ItemLookFormModal.vue'
 import FloorPlanCanvas from './FloorPlanCanvas.vue'
+import StudioCommands from './StudioCommands.vue'
 import LayoutStarterPicker from './LayoutStarterPicker.vue'
 import LookFormModal from './LookFormModal.vue'
 import PickTableModal from './PickTableModal.vue'
@@ -1019,6 +1020,51 @@ onBeforeUnmount(clearLibraryDrag)
 
 const shortcutsHelp = overlay.create(ShortcutsHelp)
 /** Studio's keys and drag keys, one list (`STUDIO_SHORTCUTS`): by `?` or the plan's right-click menu. */
+/** Ctrl/⌘+/: Studio's actions to search (StudioCommands). */
+const commandsOpen = ref(false)
+const commandGroups = computed<CommandPaletteGroup[]>(() => {
+  const plan = canvas.value
+  const selected = props.editor.selected.value.length > 0
+  const tool = (label: string, next: PlanMode, icon: string, kbd: string, round?: boolean) => ({
+    label,
+    icon,
+    kbds: [kbd],
+    onSelect: () => {
+      if (round !== undefined) roundShape.value = round
+      startTool(next)
+    },
+  })
+  return [
+    { id: 'tools', label: 'Tools', items: [
+      tool('Select', 'select', 'i-lucide-mouse-pointer-2', 'v'),
+      tool('Hand', 'hand', 'i-lucide-hand', 'h'),
+      tool('Room', 'room', 'i-lucide-square-plus', 'r'),
+      tool('Shape: rectangle', 'shape', 'i-lucide-square', 's', false),
+      tool('Shape: ellipse', 'shape', 'i-lucide-circle', 'o', true),
+      tool('Edit points', 'outline', 'i-lucide-pen-tool', 'p'),
+      tool('Draw wall', 'wall', 'i-lucide-brick-wall', 'w'),
+    ] },
+    { id: 'edit', label: 'Edit', items: [
+      { label: 'Undo', icon: 'i-lucide-undo-2', kbds: ['meta', 'z'], disabled: !draft.canUndo.value, onSelect: () => draft.undo() },
+      { label: 'Redo', icon: 'i-lucide-redo-2', kbds: ['meta', 'shift', 'z'], disabled: !draft.canRedo.value, onSelect: () => draft.redo() },
+      { label: 'Select all', icon: 'i-lucide-box-select', kbds: ['meta', 'a'], onSelect: () => (mode.value === 'select' ? selectAll() : undefined) },
+      { label: 'Copy', icon: 'i-lucide-copy', kbds: ['meta', 'c'], disabled: !selected, onSelect: () => void props.editor.copy() },
+      { label: 'Paste', icon: 'i-lucide-clipboard-paste', kbds: ['meta', 'v'], disabled: !props.editor.clipboard.value, onSelect: pasteCopied },
+      { label: 'Duplicate', icon: 'i-lucide-copy-plus', kbds: ['meta', 'd'], disabled: !selected, onSelect: duplicateSelection },
+      { label: 'Delete', icon: 'i-lucide-trash-2', kbds: ['delete'], disabled: !selected, onSelect: () => (multi.value ? removeGroup() : selection.value && remove(selection.value)) },
+    ] },
+    { id: 'view', label: 'View', items: [
+      { label: 'Zoom to fit', icon: 'i-lucide-scan', kbds: ['shift', '1'], onSelect: () => plan?.fit() },
+      { label: 'Zoom to selection', icon: 'i-lucide-scan-search', kbds: ['shift', '2'], onSelect: () => plan?.zoomToSelection() },
+      { label: 'Zoom to 100%', icon: 'i-lucide-search', kbds: ['meta', '0'], onSelect: () => plan?.zoomTo(100) },
+      { label: 'Zoom in', icon: 'i-lucide-zoom-in', kbds: ['meta', '+'], onSelect: () => plan?.zoom(1) },
+      { label: 'Zoom out', icon: 'i-lucide-zoom-out', kbds: ['meta', '-'], onSelect: () => plan?.zoom(-1) },
+    ] },
+    { id: 'help', label: 'Help', items: [
+      { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
+    ] },
+  ]
+})
 const showShortcuts = () => void shortcutsHelp.open({ shortcuts: [...STUDIO_SHORTCUTS, ...STUDIO_DRAG_KEYS] })
 
 /**
@@ -1072,6 +1118,8 @@ function onStudioKey(event: KeyboardEvent) {
     const key = event.key.toLowerCase()
     if (key === 'd' && !event.shiftKey) return run(duplicateSelection)
     // Copy and paste (ISS-022): in memory, on the floor copied from.
+    // Command search (owner, 2026-11-13: like Figma's Ctrl/⌘+/).
+    if (key === '/') return run(() => (commandsOpen.value = true))
     if (key === 'c' && !event.shiftKey && mode.value === 'select' && props.editor.selected.value.length) return run(() => props.editor.copy())
     if (key === 'v' && !event.shiftKey && mode.value === 'select' && props.editor.clipboard.value) return run(pasteCopied)
     if (key === 'a' && !event.shiftKey && mode.value === 'select') return run(selectAll)
@@ -1197,6 +1245,7 @@ const contextItems = computed((): ContextMenuItem[][] => {
     { label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'], onSelect: () => startTool('wall') },
   ], [
     // The shortcut list from a menu too (ISS-025), not only by its key.
+    { label: 'Search actions', icon: 'i-lucide-search', kbds: ['meta', '/'], onSelect: () => (commandsOpen.value = true) },
     { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   ]]
 })
@@ -2914,5 +2963,10 @@ const pendingLabel = computed(() => {
       </h2>
       <ReuseDetails />
     </aside>
+
+    <StudioCommands
+      v-model:open="commandsOpen"
+      :groups="commandGroups"
+    />
   </div>
 </template>

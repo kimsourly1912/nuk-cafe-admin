@@ -34,6 +34,7 @@ export const STUDIO_SHORTCUTS = [
   { kbds: ['meta', 'z'], label: 'Undo' },
   { kbds: ['meta', 'shift', 'z'], label: 'Redo' },
   { kbds: ['?'], label: 'Show keyboard shortcuts' },
+  { kbds: ['meta', '/'], label: 'Search actions' },
 ] as const
 
 /** With the mouse: what the keys held change (shown in the same list). */
