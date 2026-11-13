@@ -107,3 +107,14 @@ export function wheelZoomFactor(deltaY: number): number {
   const delta = Math.min(WHEEL_ZOOM_MAX_PX, Math.max(-WHEEL_ZOOM_MAX_PX, deltaY))
   return Math.exp(-delta * WHEEL_ZOOM_PER_PX)
 }
+
+/**
+ * A zoom percentage typed in the zoom menu (ISS-003): "150", "150 %" or "62.5". Null for
+ * anything else, so the field keeps the zoom it had. The zoom itself clamps to the limits.
+ */
+export function parseZoomPercent(text: string): number | null {
+  const match = /^\s*(\d+(?:[.,]\d+)?)\s*%?\s*$/.exec(text)
+  if (!match) return null
+  const percent = Number(match[1]!.replace(',', '.'))
+  return Number.isFinite(percent) && percent > 0 ? percent : null
+}

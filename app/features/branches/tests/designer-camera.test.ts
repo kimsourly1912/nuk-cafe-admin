@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitBounds, followCanvas, panBy, planToScreen, screenToPlan, visibleRect, wheelZoomFactor, ZOOM_LIMITS, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, panBy, parseZoomPercent, planToScreen, screenToPlan, visibleRect, wheelZoomFactor, ZOOM_LIMITS, zoomAt } from '../designer/camera'
 import type { Camera } from '../designer/camera'
 
 const camera: Camera = { x: 100, y: 50, scale: 1.96 }
@@ -69,5 +69,13 @@ describe('the plan camera (ISS-028)', () => {
     expect(wheelZoomFactor(-100)).toBeGreaterThan(1.09)
     expect(wheelZoomFactor(-100)).toBeLessThan(1.11)
     expect(wheelZoomFactor(100)).toBeLessThan(1)
+  })
+
+  it('reads a typed zoom percentage, and nothing else (ISS-003)', () => {
+    expect(parseZoomPercent('150')).toBe(150)
+    expect(parseZoomPercent(' 150 % ')).toBe(150)
+    expect(parseZoomPercent('62,5')).toBe(62.5)
+    expect(parseZoomPercent('99999')).toBe(99999)
+    for (const text of ['', 'abc', '0', '-50', '1e3', '15a', '%']) expect(parseZoomPercent(text)).toBeNull()
   })
 })

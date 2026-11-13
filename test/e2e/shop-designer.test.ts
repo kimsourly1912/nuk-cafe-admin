@@ -728,6 +728,21 @@ describe('the shop designer on saved layouts', () => {
     // Ctrl+0 is 100 % too (ISS-006), without the browser's page zoom.
     await page.keyboard.press('Control+0')
     await expect.poll(() => zoom.textContent()).toBe('100%')
+    // A typed percentage in the zoom menu (ISS-003): clamped to 800 %, letters are ignored.
+    const typeZoom = async (text: string) => {
+      if (!(await page.getByTestId('zoom-input').isVisible())) await zoom.click()
+      const field = page.getByTestId('zoom-input')
+      await field.fill(text)
+      await field.press('Enter')
+    }
+    await typeZoom('150')
+    await expect.poll(() => zoom.textContent()).toBe('150%')
+    await typeZoom('99999')
+    await expect.poll(() => zoom.textContent()).toBe('800%')
+    await typeZoom('abc')
+    await expect.poll(() => page.getByTestId('zoom-input').inputValue()).toBe('800')
+    expect(await zoom.textContent()).toBe('800%')
+    await page.keyboard.press('Escape')
     await page.keyboard.press('Shift+1')
 
     // Tool keys: W opens Draw wall, Escape goes back to Select; V and H switch too.
