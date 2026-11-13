@@ -59,3 +59,6 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-017](issues/ISS-017.md) | Medium | Gap | Shape and Room drawing: Shift and Alt not like Figma |
 | [ISS-018](issues/ISS-018.md) | Medium | Gap | Wall tool: straight by default, not free with Shift 45 |
 | [ISS-019](issues/ISS-019.md) | Medium | Gap | Edit points keeps right angles by default |
+| [ISS-020](issues/ISS-020.md) | Medium | Gap | Inspector number fields: Shift+arrow, math, label scrub |
+| [ISS-021](issues/ISS-021.md) | Low | Gap | Layers list: range select, hover outline, hide and lock |
+| [ISS-022](issues/ISS-022.md) | Medium | Gap | Ctrl+C and Ctrl+V do nothing |
