@@ -3,6 +3,16 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Account security step 5: Switch person on the counter (2026-11-13)
+
+Branch `claude/bold-hypatia-sx8nkl`, from main after PR #311. The owner's Q4 (no PIN mode; a Switch person action instead), as planned in [account security](plans/account-security.md#step-5-switch-person-on-the-counter-built-2026-11-13).
+
+- **Built:** the counter's user menu has **Switch person** above Sign out: it signs out (the leave guard and the identity clear as for Sign out) and shows the counter sign-in with `?redirect=` set to the page being left, so the next person lands on the same branch. No idle auto-lock. Counter help updated.
+- **Edge cases:** the next person who doesn't work at that branch is refused by the branch page's checks (D240), as with any typed address; a redirect outside this cafe's counter is ignored by `counterRedirectTarget`; Sign out still goes to a bare sign-in.
+- **How to verify:** on staging, the counter at a branch → initials → **Switch person**: the sign-in is empty; sign in as another staff member of that branch: the same branch's queue opens with their initials.
+- **Evidence (local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2,998 passed, 1 skipped; e2e `counter.test.ts`, `two-factor.test.ts`, `auth-state.test.ts`: 62 passed. With the redirect removed, "switching person at the counter" fails. No staging check yet.
+- **Same PR, upgrade follow-up:** the four `simple-git` audit exemptions (D54) removed from `pnpm-workspace.yaml`: `simple-git` is no longer in the lockfile (`pnpm why` finds nothing). `pnpm audit --audit-level high` (CI's) still passes with the same 19 low and moderate findings; `pnpm install --frozen-lockfile` unchanged. The `braces` exemption stays.
+
 ### Studio follows Figma QA, fifth PR: the remaining small items (D278, 2026-11-13)
 
 Branch `claude/bold-hypatia-sx8nkl`, from main after PR #310. Owner: merge #310 when green, then the next step, small and medium items in one PR.

@@ -29,6 +29,11 @@ export function counterRedirectTarget(redirect: unknown, slug: string): string {
   return isCounterPath(path) && path !== counterSignInPath(slug) ? redirect : counterHomePath(slug)
 }
 
+export interface SignOutOptions {
+  /** Come back to this page after the next sign-in (Switch person). */
+  switchPerson?: boolean
+}
+
 const NO_COUNTER_ACCESS = 'This account doesn\'t work at any branch, so it can\'t use the counter.'
 
 /** 403 from `/counter/me`: signed in, but at no branch (a customer). */
@@ -107,7 +112,13 @@ export function useCounterSession() {
     await identity.updated()
   }
 
-  async function signOut() {
+  /**
+   * Signs out to the counter's sign-in. `switchPerson` (account security step 5, Q4): the sign-in
+   * then returns to the page being left (its branch), so the next person on a shared tablet carries
+   * on there; the server still checks they work at that branch.
+   */
+  async function signOut(options: SignOutOptions = {}) {
+    const { switchPerson = false } = options
     if (!await useLeaveGuard().confirmLeave()) return
     const startedIn = identity.generation.value
     try {
@@ -118,9 +129,12 @@ export function useCounterSession() {
       // Preserve the existing local sign-out behavior when the network fails.
     }
     if (identity.generation.value !== startedIn) return
-    const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug
+    const route = nuxtApp.$router.currentRoute.value
+    const slug = splitTenantUrl(route.path)?.slug
     // To sign in first, then the identity is cleared: the queue being left never shows empty.
-    await leaveSignedOut(slug ? counterSignInPath(slug) : CAFES_PATH)
+    if (!slug) return await leaveSignedOut(CAFES_PATH)
+    const back = switchPerson && isCounterPath(route.path) ? route.fullPath : undefined
+    await leaveSignedOut({ path: counterSignInPath(slug), query: back ? { redirect: back } : {} })
   }
 
   /**
