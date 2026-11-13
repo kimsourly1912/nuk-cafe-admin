@@ -72,6 +72,14 @@ export type ShapeKind = typeof SHAPE_KINDS[number]
 export const isShapeKind = (kind: string): kind is ShapeKind => (SHAPE_KINDS as readonly string[]).includes(kind)
 export const SHAPE_HEIGHT = { default: 90, min: 20, max: 300 } as const
 export const SHAPE_NAME_MAX = 40
+/**
+ * A round shape's arc (ED-06, Figma's arc): where the opening starts (degrees clockwise from the
+ * right, like the plan's turns), how much of the circle is drawn, and the inner hole as a percent
+ * of the outer size (a ring). Left out: 0°, the whole circle, no hole.
+ */
+export const SHAPE_ARC = { sweepMin: 1, sweepMax: 359, innerMax: 95 } as const
+/** A rectangle shape's corner radius (ED-05): at most half its shorter side. */
+export const SHAPE_RADIUS_MAX_CM = 1_000
 
 /** Furniture, fixtures and figures that are not dining tables: they carry no QR. */
 export const ITEM_KINDS = [
@@ -265,7 +273,22 @@ export const itemSchema = v.pipe(
     name: layerNameSchema,
     hidden: flagSchema,
     locked: flagSchema,
+    /**
+     * Mirrored left to right or front to back (ED-07, Figma's flips), before the turn. Left out:
+     * not flipped. On the plan and in 3D alike.
+     */
+    flipX: flagSchema,
+    flipY: flagSchema,
+    /** A rectangle shape's corner radius in cm (ED-05). Left out: square corners. */
+    radius: v.optional(sizeSchema(1, SHAPE_RADIUS_MAX_CM)),
+    /** A round shape's arc (ED-06, see `SHAPE_ARC`). */
+    arcStart: v.optional(rotationSchema),
+    arcSweep: v.optional(sizeSchema(SHAPE_ARC.sweepMin, SHAPE_ARC.sweepMax)),
+    arcInner: v.optional(sizeSchema(1, SHAPE_ARC.innerMax)),
   }),
+  v.forward(v.check(item => item.radius === undefined || item.kind === 'block', 'Only a rectangle shape has a corner radius'), ['radius']),
+  v.forward(v.check(item => item.radius === undefined || item.radius * 2 <= Math.min(item.width, item.depth), 'The radius is more than half the shorter side'), ['radius']),
+  v.check(item => item.kind === 'block-round' || (item.arcStart === undefined && item.arcSweep === undefined && item.arcInner === undefined), 'Only a round shape has an arc'),
   v.check(item => item.lookId === undefined || isItemLookKind(item.kind), 'Stairs, people and pets have no custom look'),
   v.forward(v.check(item => item.height === undefined || itemHeightRange(item.kind) !== undefined, 'Stairs, people and pets keep their own height'), ['height']),
   v.forward(v.check(item => item.height === undefined || itemHeightRange(item.kind) === undefined || heightFits(item.kind, item.height), 'Out of this kind\'s height range'), ['height']),

@@ -109,10 +109,13 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
         figures.push({ itemId: item.id, kind: item.kind, floorId: floor.id, anchor: object, body: figure.body, idle: figure.idle })
       }
       else {
-        object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, height: item.height, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height })
+        const shape = { radius: item.radius, arcStart: item.arcStart, arcSweep: item.arcSweep, arcInner: item.arcInner }
+        object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, height: item.height, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height, shape })
       }
       object.position.set(cm(item.x), 0, cm(item.y))
       object.rotation.y = yRotation(item.rotation)
+      // Flipped (ED-07) in its own frame, before the turn, as on the plan.
+      object.scale.set(item.flipX ? -1 : 1, 1, item.flipY ? -1 : 1)
       object.userData.itemId = item.id
       built.group.add(object)
       const look = findItemLook(itemLooks, item.lookId)

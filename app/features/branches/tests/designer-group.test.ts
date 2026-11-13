@@ -148,6 +148,16 @@ describe('align (ISS-026)', () => {
     expect(alignOffsets(boxes, 'middle')).toEqual([{ target: boxes[0]!.target, delta: { x: 0, y: 125 } }, { target: boxes[1]!.target, delta: { x: 0, y: -50 } }])
     expect(alignOffsets([boxes[0]!], 'left')).toEqual([])
   })
+
+  it('aligns one piece to its floor when given the floor\'s bounds (ED-11)', () => {
+    const floor = { minX: 0, minY: 0, maxX: 1000, maxY: 800 }
+    const one = [boxes[1]!]
+    const box = one[0]!.bounds
+    expect(alignOffsets(one, 'left', floor)).toEqual([{ target: one[0]!.target, delta: { x: -box.minX, y: 0 } }])
+    expect(alignOffsets(one, 'bottom', floor)).toEqual([{ target: one[0]!.target, delta: { x: 0, y: 800 - box.maxY } }])
+    expect(alignOffsets(one, 'center', floor)).toEqual([{ target: one[0]!.target, delta: { x: Math.round((1000 - box.minX - box.maxX) / 2), y: 0 } }])
+    expect(alignOffsets([], 'left', floor)).toEqual([])
+  })
 })
 
 describe('paste on another floor (ISS-022)', () => {

@@ -11,12 +11,14 @@ import StudioNumberField from './StudioNumberField.vue'
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, floorPageId, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
+import { edgeLength, floorPageId, SHAPE_ARC, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
 import type { AlignEdge, PlanClipboard } from '../designer/group'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
+import { fittedRadius, maxRadius } from '../designer/shapes'
+import type { ShapeEdit } from '../designer/shapes'
 import { besideOf, boundsOf, newLayoutId, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
@@ -420,10 +422,42 @@ function setShapeName(itemId: string, value: string) {
   })
 }
 
-function updateItem(itemId: string, change: Partial<{ x: number, y: number, rotation: number, width: number, depth: number, height: number, finishes: Partial<Record<string, Finish>> }>) {
+function updateItem(itemId: string, change: Partial<{ x: number, y: number, rotation: number, width: number, depth: number, height: number, finishes: Partial<Record<string, Finish>> }> & ShapeEdit) {
   draft.change((next) => {
     const item = next.floors.flatMap(candidate => candidate.items).find(candidate => candidate.id === itemId)
-    if (item) Object.assign(item, change)
+    if (!item) return
+    Object.assign(item, change)
+    // A shape setting back at its default is left out (ED-05 to ED-07), and a radius stays within
+    // the shape after a resize.
+    const radius = fittedRadius(item.radius, item.width, item.depth)
+    if (radius === undefined) delete item.radius
+    else item.radius = radius
+    if (item.arcStart === undefined) delete item.arcStart
+    if (item.arcSweep === undefined) delete item.arcSweep
+    if (item.arcInner === undefined) delete item.arcInner
+    if (item.flipX === undefined) delete item.flipX
+    if (item.flipY === undefined) delete item.flipY
+  })
+}
+
+/** A shape's dot dragged on the plan, or a Properties setting (ED-05, ED-06). */
+function editShape(target: PlanSelection, change: ShapeEdit) {
+  if (target.kind === 'item') updateItem(target.id, change)
+}
+
+/** Flip horizontal or vertical (ED-07, Figma's Shift+H, Shift+V): every selected piece; tables stay. */
+function flip(axis: 'flipX' | 'flipY') {
+  const targets = (multi.value ? group.value : selection.value ? [selection.value] : []).filter(target => target.kind === 'item')
+  if (!targets.length) return
+  draft.change((next) => {
+    for (const target of targets) {
+      const item = next.floors.flatMap(candidate => candidate.items).find(candidate => candidate.id === target.id)
+      if (!item || item.locked) continue
+      if (axis === 'flipX') item.flipX = item.flipX ? undefined : true
+      else item.flipY = item.flipY ? undefined : true
+      if (!item.flipX) delete item.flipX
+      if (!item.flipY) delete item.flipY
+    }
   })
 }
 
@@ -601,12 +635,19 @@ function alignGroup(edge: AlignEdge) {
 function distributeGroup(axis: 'x' | 'y') {
   moveEach(boxes => distributeOffsets(boxes, axis))
 }
+/** Align one piece to its floor (ED-11, Figma's align to the frame): the outline's edges, as drawn. */
+function alignToFloor(edge: AlignEdge) {
+  const target = selection.value
+  const outline = floor.value?.outline
+  if (!target || !outline || outline.length < 3) return
+  moveEach(boxes => alignOffsets(boxes, edge, boundsOf(outline)), [target])
+}
 /** Moves each selected one by its own offset, from their boxes as drawn; one undo step. */
-function moveEach(offsets: (boxes: { target: PlanSelection, bounds: Bounds }[]) => { target: PlanSelection, delta: Point }[]) {
+function moveEach(offsets: (boxes: { target: PlanSelection, bounds: Bounds }[]) => { target: PlanSelection, delta: Point }[], targets: readonly PlanSelection[] = group.value) {
   const plan = canvas.value
   const floorId = floor.value?.id
   if (!plan || !floorId) return
-  const boxes = group.value.flatMap((target) => {
+  const boxes = targets.flatMap((target) => {
     const bounds = plan.boxOf(target)
     return bounds ? [{ target, bounds }] : []
   })
@@ -1367,6 +1408,10 @@ function onStudioKey(event: KeyboardEvent) {
     if (mode.value === 'select' && (!selection.value || selection.value.kind === 'edge')) return run(() => startTool('outline'))
     if (mode.value === 'outline') return run(finishTool)
   }
+  // Figma's flips (ED-07): Shift+H, Shift+V on the selected pieces.
+  if (event.shiftKey && mode.value === 'select' && (event.code === 'KeyH' || event.code === 'KeyV') && props.editor.selected.value.some(target => target.kind === 'item')) {
+    return run(() => flip(event.code === 'KeyH' ? 'flipX' : 'flipY'))
+  }
   if (event.shiftKey) return
   const tools: Record<string, PlanMode> = { v: 'select', h: 'hand', r: 'room', s: 'shape', o: 'shape', p: 'outline', w: 'wall' }
   const key = event.key.toLowerCase()
@@ -1392,6 +1437,8 @@ const contextItems = computed((): ContextMenuItem[][] => {
   if (multi.value) {
     return [[
       { label: 'Rotate 90°', icon: 'i-lucide-rotate-cw', kbds: ['shift', 'r'], onSelect: turnGroup },
+      { label: 'Flip horizontal', icon: 'i-lucide-flip-horizontal-2', kbds: ['shift', 'h'], disabled: group.value.every(member => member.kind !== 'item'), onSelect: () => flip('flipX') },
+      { label: 'Flip vertical', icon: 'i-lucide-flip-vertical-2', kbds: ['shift', 'v'], disabled: group.value.every(member => member.kind !== 'item'), onSelect: () => flip('flipY') },
       { label: 'Duplicate', icon: 'i-lucide-copy', kbds: ['meta', 'd'], disabled: group.value.every(member => member.kind === 'table'), onSelect: duplicateGroup },
     ], ...editGroup([...group.value]), zoomItems, [
       { label: `Delete ${group.value.length}`, icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: removeGroup },
@@ -1413,6 +1460,8 @@ const contextItems = computed((): ContextMenuItem[][] => {
     const itemId = selectedItem.value.id
     return [[
       { label: 'Rotate 90°', icon: 'i-lucide-rotate-cw', kbds: ['shift', 'r'], onSelect: () => turn(90) },
+      { label: 'Flip horizontal', icon: 'i-lucide-flip-horizontal-2', kbds: ['shift', 'h'], onSelect: () => flip('flipX') },
+      { label: 'Flip vertical', icon: 'i-lucide-flip-vertical-2', kbds: ['shift', 'v'], onSelect: () => flip('flipY') },
       { label: 'Duplicate', icon: 'i-lucide-copy', kbds: ['meta', 'd'], onSelect: () => duplicateItem(itemId) },
     ], ...editGroup([{ kind: 'item', id: itemId }]), zoomItems, [
       { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', kbds: ['delete'], onSelect: () => remove({ kind: 'item', id: itemId }) },
@@ -2049,6 +2098,27 @@ const pendingLabel = computed(() => {
       role="group"
       aria-label="Position and rotation"
     >
+      <!-- Figma's align row for one piece (ED-11): to its floor's edges. -->
+      <div
+        role="group"
+        aria-label="Align to floor"
+        class="flex flex-wrap gap-1"
+      >
+        <UTooltip
+          v-for="button in ALIGN_BUTTONS"
+          :key="button.edge"
+          :text="`${button.label} to the floor`"
+        >
+          <UButton
+            :icon="button.icon"
+            color="neutral"
+            variant="ghost"
+            :aria-label="`${button.label} to the floor`"
+            :data-testid="`align-floor-${button.edge}`"
+            @click="alignToFloor(button.edge)"
+          />
+        </UTooltip>
+      </div>
       <div class="grid grid-cols-2 gap-2">
         <UFormField label="X (cm)">
           <StudioNumberField
@@ -2409,6 +2479,39 @@ const pendingLabel = computed(() => {
         :y="selectedItem.y"
         :rotation="selectedItem.rotation"
       />
+      <!-- Figma's flips (ED-07): mirrored on the plan and in 3D. -->
+      <div
+        role="group"
+        aria-label="Flip"
+        class="flex gap-1"
+      >
+        <UTooltip
+          text="Flip horizontal"
+          :kbds="['shift', 'h']"
+        >
+          <UButton
+            icon="i-lucide-flip-horizontal-2"
+            color="neutral"
+            :variant="selectedItem.flipX ? 'soft' : 'ghost'"
+            aria-label="Flip horizontal"
+            :aria-pressed="!!selectedItem.flipX"
+            @click="flip('flipX')"
+          />
+        </UTooltip>
+        <UTooltip
+          text="Flip vertical"
+          :kbds="['shift', 'v']"
+        >
+          <UButton
+            icon="i-lucide-flip-vertical-2"
+            color="neutral"
+            :variant="selectedItem.flipY ? 'soft' : 'ghost'"
+            aria-label="Flip vertical"
+            :aria-pressed="!!selectedItem.flipY"
+            @click="flip('flipY')"
+          />
+        </UTooltip>
+      </div>
       <div
         v-if="!isFigureKind(selectedItem.kind)"
         class="grid grid-cols-2 gap-2"
@@ -2463,6 +2566,59 @@ const pendingLabel = computed(() => {
             @update:model-value="value => setNumber(value, pieceHeight(selectedItem!), height => updateItem(selectedItem!.id, { height }))"
           />
         </UFormField>
+        <!-- A rectangle shape's corner radius (ED-05); also by the dots inside its corners. -->
+        <UFormField
+          v-if="selectedItem.kind === 'block'"
+          label="Corner radius (cm)"
+          :help="`0 to ${maxRadius(selectedItem.width, selectedItem.depth)} cm`"
+          class="col-span-2"
+        >
+          <StudioNumberField
+            :model-value="selectedItem.radius ?? 0"
+            label="Corner radius"
+            unit="cm"
+            :min="0"
+            :max="maxRadius(selectedItem.width, selectedItem.depth)"
+            @update:model-value="value => setNumber(value, selectedItem!.radius ?? 0, radius => updateItem(selectedItem!.id, { radius: radius || undefined }))"
+          />
+        </UFormField>
+        <!-- A round shape's arc (ED-06): Figma's Start, Sweep and Ratio; also by the dots on the plan. -->
+        <template v-if="selectedItem.kind === 'block-round'">
+          <UFormField label="Start (°)">
+            <StudioNumberField
+              :model-value="selectedItem.arcStart ?? 0"
+              label="Start"
+              unit="°"
+              :min="0"
+              :max="359"
+              @update:model-value="value => setNumber(value, selectedItem!.arcStart ?? 0, arcStart => updateItem(selectedItem!.id, { arcStart: arcStart || undefined }))"
+            />
+          </UFormField>
+          <UFormField label="Sweep (°)">
+            <StudioNumberField
+              :model-value="selectedItem.arcSweep ?? 360"
+              label="Sweep"
+              unit="°"
+              :min="SHAPE_ARC.sweepMin"
+              :max="360"
+              @update:model-value="value => setNumber(value, selectedItem!.arcSweep ?? 360, arcSweep => updateItem(selectedItem!.id, { arcSweep: arcSweep >= 360 ? undefined : arcSweep }))"
+            />
+          </UFormField>
+          <UFormField
+            label="Ratio (%)"
+            help="The hole in the middle: 0 for none, up to 95 for a thin ring."
+            class="col-span-2"
+          >
+            <StudioNumberField
+              :model-value="selectedItem.arcInner ?? 0"
+              label="Ratio"
+              unit="%"
+              :min="0"
+              :max="SHAPE_ARC.innerMax"
+              @update:model-value="value => setNumber(value, selectedItem!.arcInner ?? 0, arcInner => updateItem(selectedItem!.id, { arcInner: arcInner || undefined }))"
+            />
+          </UFormField>
+        </template>
       </div>
       <template v-if="isItemLookKind(selectedItem.kind)">
         <USeparator label="Look" />
@@ -2941,6 +3097,7 @@ const pendingLabel = computed(() => {
                 @copy="copyTo"
                 @rotate="rotate"
                 @resize="resize"
+                @shape-edit="editShape"
                 @remove="remove"
                 @shape="updateShape"
                 @add-wall="addWall"

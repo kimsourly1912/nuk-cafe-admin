@@ -266,6 +266,20 @@ describe('corner handles and Duplicate (2B)', () => {
     expect(resizeFromCorner(round, { ...limits, round: true, corner: 1, delta: { x: 2, y: 25 } })).toMatchObject({ width: 45, depth: 45 })
   })
 
+  it('a side changes one size and keeps the opposite side; Shift scales the other about the middle (ED-01)', () => {
+    // Right side out 30: wider, the left side stays.
+    const right = resizeFromCorner(table, { ...limits, corner: 5, delta: { x: 30, y: 17 } })
+    expect(right).toEqual({ x: 115, y: 100, rotation: 0, width: 150, depth: 80 })
+    expect(corner(right, 0)).toEqual(corner(table, 0))
+    // Top side up 20: deeper, the bottom stays.
+    expect(resizeFromCorner(table, { ...limits, corner: 4, delta: { x: 50, y: -20 } })).toEqual({ x: 100, y: 90, rotation: 0, width: 120, depth: 100 })
+    // Left side with Shift: 1.5 times, the depth grows about the middle.
+    expect(resizeFromCorner(table, { ...limits, corner: 7, delta: { x: -60, y: 0 }, keepRatio: true })).toEqual({ x: 70, y: 100, rotation: 0, width: 180, depth: 120 })
+    // A round piece's side keeps it round.
+    const round = { ...table, width: 70, depth: 70 }
+    expect(resizeFromCorner(round, { ...limits, round: true, corner: 6, delta: { x: 0, y: 30 } })).toMatchObject({ width: 100, depth: 100 })
+  })
+
   it('puts a copy beside the original, clear of it, turned the same way', () => {
     expect(besideOf({ x: 0, y: 40, rotation: 0 }, 100, 60)).toEqual({ x: 125, y: 40 })
     expect(besideOf({ x: 0, y: 40, rotation: 90 }, 200, 60)).toEqual({ x: 75, y: 40 })
@@ -375,5 +389,10 @@ describe('resize cursors (ISS-030)', () => {
     expect(resizeCursor(1, 45)).toBe('ew-resize')
     expect(resizeCursor(0, 90)).toBe('nesw-resize')
     expect(resizeCursor(2, 360)).toBe('nwse-resize')
+  })
+
+  it('sides show the arrow across them (ED-01)', () => {
+    expect([4, 5, 6, 7].map(side => resizeCursor(side, 0))).toEqual(['ns-resize', 'ew-resize', 'ns-resize', 'ew-resize'])
+    expect(resizeCursor(5, 90)).toBe('ns-resize')
   })
 })

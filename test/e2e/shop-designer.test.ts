@@ -1429,8 +1429,8 @@ describe('the shop designer on saved layouts', () => {
     await page.mouse.move(start.x, start.y)
     await page.mouse.down()
     await page.mouse.move(start.x + 40 * scale, start.y + 40 * scale, { steps: 5 })
-    // The size beside the pointer while resizing (ISS-029).
-    await expect.poll(() => plan(page).getByTestId('live-label').textContent()).toBe(`${before + 40} × ${before + 40} cm`)
+    // The size under the piece while resizing (ISS-029, ED-04's badge).
+    await expect.poll(() => plan(page).getByTestId('size-badge').textContent()).toBe(`${before + 40} × ${before + 40} cm`)
     await page.mouse.up()
     await expect.poll(width).toBe(String(before + 40))
     expect(await panel.getByLabel('Depth (cm)').inputValue()).toBe(String(before + 40))
@@ -1961,5 +1961,126 @@ describe('the shop designer on saved layouts', () => {
     const after = await savedLayout(page)
     expect(after.floors.map(floor => floor.id)).toEqual(before.floors.map(floor => floor.id))
     expect(after.placements).toEqual(before.placements)
+  })
+
+  it('Figma\'s editing (ED-01 to ED-11): side resize, turn just outside a corner, size badge, align to the floor, radius, arc and ring, flips, and 3D draws them', { timeout: 120_000 }, async () => {
+    const page = await signedIn()
+    const branchId = lab.annexBranchId
+    // Its own layout on Lab Annex: a 200 x 100 block and a 200 cm round block on an empty floor.
+    const existing = await savedLayout(page, branchId)
+    await openDesign(page, branchId)
+    const prepared = await page.request.put(url(`${api(branchId)}/layout`), { headers: { origin: new URL(page.url()).origin }, data: {
+      version: existing.version,
+      layout: {
+        floors: [{
+          id: 'ed', name: 'Ground', height: 300, hasRoof: true,
+          outline: [{ x: 0, y: 0 }, { x: 800, y: 0 }, { x: 800, y: 600 }, { x: 0, y: 600 }],
+          edges: [0, 1, 2, 3].map(() => ({ kind: 'wall', openings: [] })),
+          walls: [],
+          items: [
+            { id: 'ed-block', kind: 'block', x: 200, y: 200, rotation: 0, width: 200, depth: 100, finishes: {} },
+            { id: 'ed-round', kind: 'block-round', x: 550, y: 250, rotation: 0, width: 200, depth: 200, finishes: {} },
+          ],
+        }],
+        placements: [],
+        // An earlier test's Explore door is not on this floor: no street door, not in Explore.
+        scene: { ...existing.scene, entrance: null, explore: false },
+      },
+    } })
+    expect(prepared.status(), await prepared.text()).toBe(200)
+    await openDesign(page, branchId)
+    const block = plan(page).getByTestId('plan-item-block')
+    await block.waitFor()
+    await page.keyboard.press('Shift+1')
+    const panel = page.getByRole('complementary', { name: 'Properties' })
+    const field = (label: string) => panel.getByLabel(label, { exact: true })
+    const point = async (at: Point) => onScreen(page, at)
+
+    // The size badge under the selection (ED-04).
+    await clickPlan(page, { x: 200, y: 200 })
+    await expect.poll(() => plan(page).getByTestId('size-badge').textContent()).toBe('200 × 100 cm')
+
+    // A side resizes one way and keeps the opposite side (ED-01).
+    const right = await point({ x: 300, y: 200 })
+    const further = await point({ x: 340, y: 200 })
+    await page.mouse.move(right.x, right.y)
+    await page.mouse.down()
+    await page.mouse.move(further.x, further.y, { steps: 6 })
+    await expect.poll(() => plan(page).getByTestId('size-badge').textContent()).toBe('240 × 100 cm')
+    await page.mouse.up()
+    await expect.poll(() => field('X (cm)').inputValue()).toBe('220')
+    expect(await field('Width (cm)').inputValue()).toBe('240')
+    await page.keyboard.press('Control+z')
+    await expect.poll(() => field('Width (cm)').inputValue()).toBe('200')
+
+    // Just outside a corner turns, not resizes (ED-02): 12 px out from the top-right corner.
+    const corner = await point({ x: 300, y: 150 })
+    await page.mouse.move(corner.x + 12, corner.y - 12)
+    await page.mouse.down()
+    await page.mouse.move(corner.x + 40, corner.y + 30, { steps: 6 })
+    await expect.poll(() => plan(page).getByTestId('live-label').textContent()).toMatch(/°$/)
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    expect(await field('Width (cm)').inputValue()).toBe('200')
+
+    // Align one piece to its floor (ED-11).
+    await panel.getByTestId('align-floor-left').click()
+    await expect.poll(() => field('X (cm)').inputValue()).toBe('100')
+    await panel.getByTestId('align-floor-top').click()
+    await expect.poll(() => field('Y (cm)').inputValue()).toBe('50')
+
+    // Corner radius (ED-05): a dot dragged in from the top-left corner, then typed.
+    const dot = (await plan(page).getByTestId('shape-dot-radius-0').boundingBox())!
+    const inner = await point({ x: 40, y: 40 })
+    await page.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(inner.x, inner.y, { steps: 6 })
+    await expect.poll(() => plan(page).getByTestId('live-label').textContent()).toBe('Radius 40 cm')
+    await page.mouse.up()
+    await expect.poll(() => field('Corner radius (cm)').inputValue()).toBe('40')
+    expect(await block.locator('path').count()).toBe(1)
+    await field('Corner radius (cm)').fill('30')
+    await field('Corner radius (cm)').press('Enter')
+    await expect.poll(() => field('Corner radius (cm)').inputValue()).toBe('30')
+    // Studio's keys are off while a field has the focus.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+
+    // Flips (ED-07): Shift+H, then the panel's Flip vertical; both mirror the drawing.
+    await page.keyboard.press('Shift+H')
+    await expect.poll(() => block.getAttribute('transform')).toContain('scale(-1 1)')
+    await panel.getByRole('button', { name: 'Flip vertical' }).click()
+    await expect.poll(() => block.getAttribute('transform')).toContain('scale(-1 -1)')
+    await panel.getByRole('button', { name: 'Flip horizontal' }).click()
+    await expect.poll(() => block.getAttribute('transform')).toContain('scale(1 -1)')
+
+    // The round block's arc (ED-06): only the Arc dot while whole; dragged back a quarter, 270°.
+    await clickPlan(page, { x: 550, y: 250 })
+    await plan(page).getByTestId('shape-dot-arc-sweep').waitFor()
+    expect(await plan(page).getByTestId('shape-dot-arc-start').count()).toBe(0)
+    const arc = (await plan(page).getByTestId('shape-dot-arc-sweep').boundingBox())!
+    await page.mouse.move(arc.x + arc.width / 2, arc.y + arc.height / 2)
+    await page.mouse.down()
+    for (const degrees of [-20, -45, -70, -90]) {
+      const at = await point({ x: 550 + Math.cos((degrees * Math.PI) / 180) * 90, y: 250 + Math.sin((degrees * Math.PI) / 180) * 90 })
+      await page.mouse.move(at.x, at.y, { steps: 3 })
+    }
+    await expect.poll(() => plan(page).getByTestId('live-label').textContent()).toBe('Sweep 270°')
+    await page.mouse.up()
+    await expect.poll(() => field('Sweep (°)').inputValue()).toBe('270')
+    await plan(page).getByTestId('shape-dot-arc-start').waitFor()
+    await field('Ratio (%)').fill('50')
+    await field('Ratio (%)').press('Enter')
+
+    await save(page)
+    const items = (await savedLayout(page, branchId)).floors[0]!.items
+    expect(items.find(item => item.id === 'ed-block')).toMatchObject({ x: 100, y: 50, radius: 30, flipY: true })
+    expect(items.find(item => item.id === 'ed-block')!.flipX).toBeUndefined()
+    expect(items.find(item => item.id === 'ed-round')).toMatchObject({ arcSweep: 270, arcInner: 50 })
+
+    await shot(page, 'figma-editing-2d')
+    // 3D builds the rounded block and the ring segment (the browser check fails on any error).
+    await page.getByRole('button', { name: '3D', exact: true }).click()
+    await drawn(page)
+    await shot(page, 'figma-editing-3d')
   })
 })
