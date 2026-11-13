@@ -25,7 +25,7 @@ import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, 
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
 import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
-import { fitBounds, followCanvas, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
 import { moveWall, moveWallEnd, moveWalls } from '../designer/walls'
@@ -111,6 +111,8 @@ const viewBox = computed(() => `${view.value.x} ${view.value.y} ${view.value.wid
 const perPixel = computed(() => 1 / scale.value)
 /** The canvas's size to fit to: none while hidden (3D), nor while the splitter lays out its first frame (a few pixels wide). */
 const MEASURED_MIN_PX = 100
+/** The fine grid fades out when its lines get close on screen (ISS-031). */
+const minorOpacity = computed(() => minorGridOpacity(scale.value))
 const measured = computed(() => screenWidth.value >= MEASURED_MIN_PX && screenHeight.value >= MEASURED_MIN_PX)
 
 // The canvas moved on the page (the sidebar hid, showed or was resized): every plan point stays
@@ -1117,31 +1119,33 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
     <defs>
       <pattern
         id="plan-grid-minor"
-        :width="GRID_CM"
-        :height="GRID_CM"
+        :width="GRID_MINOR_CM"
+        :height="GRID_MINOR_CM"
         patternUnits="userSpaceOnUse"
       >
         <path
-          :d="`M${GRID_CM} 0H0V${GRID_CM}`"
+          :d="`M${GRID_MINOR_CM} 0H0V${GRID_MINOR_CM}`"
           fill="none"
           stroke="var(--ui-border)"
+          :stroke-opacity="minorOpacity"
           stroke-width="1"
           vector-effect="non-scaling-stroke"
         />
       </pattern>
       <pattern
         id="plan-grid"
-        width="100"
-        height="100"
+        :width="GRID_MAJOR_CM"
+        :height="GRID_MAJOR_CM"
         patternUnits="userSpaceOnUse"
       >
         <rect
-          width="100"
-          height="100"
+          v-if="minorOpacity > 0"
+          :width="GRID_MAJOR_CM"
+          :height="GRID_MAJOR_CM"
           fill="url(#plan-grid-minor)"
         />
         <path
-          d="M100 0H0V100"
+          :d="`M${GRID_MAJOR_CM} 0H0V${GRID_MAJOR_CM}`"
           fill="none"
           stroke="var(--ui-border-accented)"
           stroke-width="1"

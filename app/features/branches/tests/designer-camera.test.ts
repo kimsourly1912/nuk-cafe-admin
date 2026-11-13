@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitBounds, followCanvas, panBy, parseZoomPercent, planToScreen, screenToPlan, visibleRect, wheelZoomFactor, ZOOM_LIMITS, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, minorGridOpacity, panBy, parseZoomPercent, planToScreen, screenToPlan, visibleRect, wheelZoomFactor, ZOOM_LIMITS, zoomAt } from '../designer/camera'
 import type { Camera } from '../designer/camera'
 
 const camera: Camera = { x: 100, y: 50, scale: 1.96 }
@@ -77,5 +77,13 @@ describe('the plan camera (ISS-028)', () => {
     expect(parseZoomPercent('62,5')).toBe(62.5)
     expect(parseZoomPercent('99999')).toBe(99999)
     for (const text of ['', 'abc', '0', '-50', '1e3', '15a', '%']) expect(parseZoomPercent(text)).toBeNull()
+  })
+
+  it('fades the 10 cm grid out when its lines get close on screen (ISS-031)', () => {
+    expect(minorGridOpacity(1)).toBe(1)
+    expect(minorGridOpacity(0.8)).toBe(1)
+    expect(minorGridOpacity(0.6)).toBeCloseTo(0.5)
+    expect(minorGridOpacity(0.4)).toBe(0)
+    expect(minorGridOpacity(0.1)).toBe(0)
   })
 })

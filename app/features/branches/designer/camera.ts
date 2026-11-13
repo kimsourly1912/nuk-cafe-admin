@@ -118,3 +118,16 @@ export function parseZoomPercent(text: string): number | null {
   const percent = Number(match[1]!.replace(',', '.'))
   return Number.isFinite(percent) && percent > 0 ? percent : null
 }
+
+/** The drawn grid (ISS-031), apart from the snap step: a fine line every 10 cm, a strong one every metre. */
+export const GRID_MINOR_CM = 10
+export const GRID_MAJOR_CM = 100
+
+/**
+ * How strongly the fine grid lines show at this zoom: fully from 8 px apart on screen, fading out
+ * below and gone at 4 px, so zooming out never turns the grid into a grey texture.
+ */
+export function minorGridOpacity(scale: number): number {
+  const gap = GRID_MINOR_CM * scale
+  return Math.min(1, Math.max(0, (gap - 4) / 4))
+}
