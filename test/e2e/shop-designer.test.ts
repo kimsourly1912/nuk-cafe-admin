@@ -400,17 +400,17 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('tool-bar').getByText('24 m²').waitFor()
     await shot(page, 'blank-outline')
 
-    // A corner picked, then the arrow key: the corner next to it keeps the right angle.
+    // A corner picked, then the arrow key: only that corner moves, like Figma's point nudge (ISS-019).
     await plan(page).getByTestId('plan-corner-1').click()
     await page.keyboard.press('Shift+ArrowRight')
     await expect.poll(() => plan(page).getByTestId('plan-edge-length-0').textContent()).toBe('625 cm')
-    await expect.poll(() => plan(page).getByTestId('plan-edge-length-1').textContent()).toBe('400 cm')
+    await expect.poll(() => plan(page).getByTestId('plan-edge-length-1').textContent()).not.toBe('400 cm')
     await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
 
     await placeTable(page, 'A1')
     await save(page)
     const layout = await savedLayout(page, lab.annexBranchId)
-    expect(layout.floors[0]!.outline).toEqual([{ x: 0, y: 0 }, { x: 625, y: 0 }, { x: 625, y: 400 }, { x: 0, y: 400 }])
+    expect(layout.floors[0]!.outline).toEqual([{ x: 0, y: 0 }, { x: 625, y: 0 }, { x: 600, y: 400 }, { x: 0, y: 400 }])
     expect(layout.floors[0]!.edges.every(edge => edge.kind === 'wall')).toBe(true)
   })
 
@@ -841,6 +841,15 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Enter')
     await expect.poll(mode).toBe('outline')
     await dragPlan(page, { x: right + 200, y: top + 50 }, { x: right + 300, y: top + 50 })
+    // A double-click on a side adds a corner there (ISS-019); undone again.
+    const corners = () => plan(page).locator('[data-kind="corner"]').count()
+    const cornersBefore = await corners()
+    // Off the side's middle: its round handle there adds a corner on a single click.
+    const onSide = await onScreen(page, { x: right + 300, y: top + 40 })
+    await page.mouse.dblclick(onSide.x, onSide.y)
+    await expect.poll(corners).toBe(cornersBefore + 1)
+    await page.keyboard.press('Control+z')
+    await expect.poll(corners).toBe(cornersBefore)
     await page.keyboard.press('Escape')
     await expect.poll(mode).toBe('select')
     await save(page)

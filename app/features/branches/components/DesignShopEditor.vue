@@ -2676,7 +2676,7 @@ const pendingLabel = computed(() => {
               <span>Click the first corner, double-click or press Enter to close the shape.</span>
             </template>
             <template v-else-if="mode === 'outline'">
-              <span>Drag a corner to move it (right angles kept unless you hold Alt), or drag a side to move it.</span>
+              <span>Drag a corner to move it (Shift: in a straight line, Alt: keep right angles), or drag a side to move it.</span>
               <span>Double-click a side or click its round handle to add a corner. Click a corner, then Delete to remove it.</span>
               <span>Click an edge to make it a wall, railing or open, or to add doors and windows. Escape or Enter when done.</span>
             </template>

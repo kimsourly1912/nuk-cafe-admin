@@ -8,7 +8,8 @@
  *   or down with Shift); a drag just outside a corner turns it freely (15° steps with Shift, like
  *   Figma); a corner handle resizes it in 5 cm steps with the opposite corner staying put (2B).
  * - **outline** (frame 3A): with no outline yet, clicks add corners and clicking the first corner,
- *   a double-click or Enter closes the shape; otherwise corners drag (keeping right angles unless
+ *   a double-click or Enter closes the shape; otherwise corners drag freely (ISS-019: Shift on a
+ *   straight or 45° line, Alt keeping the corners beside it at right angles; was: right angles unless
  *   Alt is held), a round edge handle adds a corner, a clicked corner moves with the arrow keys and
  *   goes with Delete. Furniture fades back.
  * - **wall** (frame 9A): click where an inside wall starts and where it ends; walls chain from the
@@ -868,7 +869,10 @@ function followPointer(event: PointerMove) {
     }
   }
   if (gesture.type === 'corner') {
-    liveShape.value = moveCorner({ outline: floor.value.outline, edges: floor.value.edges }, gesture.index, to, !event.altKey)
+    // Like Figma (ISS-019): the corner moves freely, Shift keeps it on a straight or 45° line from
+    // where it was; Alt keeps the corners beside it at right angles.
+    const at = event.shiftKey ? constrainAngle(gesture.origin, to, step) : to
+    liveShape.value = moveCorner({ outline: floor.value.outline, edges: floor.value.edges }, gesture.index, at, event.altKey)
     return
   }
   preview.value = { selection: gesture.selection, ...to, rotation: gesture.origin.rotation, copy: gesture.type === 'drag' && event.altKey }
@@ -1026,7 +1030,10 @@ function closeDrawing() {
 function onDoubleClick(event: MouseEvent) {
   if (drawing.value) return closeDrawing()
   if (props.mode === 'wall') return endWallChain()
-  const target = (event.target as Element).closest<SVGElement>('[data-kind]')
+  // What is under the pointer, not the event's target: the press captured the pointer, so the
+  // double-click is sent to the plan itself (ISS-019: a side's double-click added no corner).
+  const under = document.elementFromPoint(event.clientX, event.clientY)
+  const target = under && svg.value?.contains(under) ? under.closest<SVGElement>('[data-kind]') : null
   const plan = toPlan(event.clientX, event.clientY)
   if (props.mode === 'outline' && target?.dataset.kind === 'edge' && plan) {
     emit('shape', insertCorner(shape.value, Number(target.dataset.id), plan))
@@ -1108,7 +1115,8 @@ function keydown(event: KeyboardEvent): boolean {
     }
     const at = shape.value.outline[index]
     if (arrow && at) {
-      emit('shape', moveCorner(shape.value, index, { x: at.x + arrow.x * step, y: at.y + arrow.y * step }, !event.altKey))
+      // A nudge moves only this corner (ISS-019, Figma's point nudge).
+      emit('shape', moveCorner(shape.value, index, { x: at.x + arrow.x * step, y: at.y + arrow.y * step }, false))
       return done()
     }
     if ((event.key === 'Delete' || event.key === 'Backspace') && shape.value.outline.length > 3) {
