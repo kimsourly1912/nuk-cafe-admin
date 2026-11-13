@@ -4,7 +4,7 @@ import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook, keepsCircle } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { besideOf, chairPoses, constrainAngle, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, constrainAngle, outlineWallBands, wallStrip, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import { fitDistance } from '../designer/scene/units'
@@ -334,5 +334,36 @@ describe('Shift while drawing walls and corners (ISS-018)', () => {
     expect(constrainAngle(from, { x: -200, y: 175 })).toEqual({ x: -188, y: 188 })
     expect(constrainAngle(from, { x: -200, y: 175 }, 25)).toEqual({ x: -200, y: 200 })
     expect(constrainAngle(from, { x: -300, y: 25 })).toEqual({ x: -300, y: 0 })
+  })
+})
+
+describe('wall corners (ISS-034)', () => {
+  const square = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 300 }, { x: 0, y: 300 }]
+  const close = (points: { x: number, y: number }[] | null | undefined) => points?.map(point => ({ x: Math.round(point.x * 1000) / 1000, y: Math.round(point.y * 1000) / 1000 }))
+
+  it('meets at a clean outside corner, the band outside the floor', () => {
+    const bands = outlineWallBands(square, [true, true, true, true], 20)
+    expect(close(bands[0])).toEqual([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 420, y: -20 }, { x: -20, y: -20 }])
+    expect(close(bands[1])).toEqual([{ x: 400, y: 0 }, { x: 400, y: 300 }, { x: 420, y: 320 }, { x: 420, y: -20 }])
+    // The same, drawn the other way round.
+    const reversed = outlineWallBands([...square].reverse(), [true, true, true, true], 20)
+    expect(close(reversed[0])!.map(point => point.y).filter(y => y > 300)).toEqual([320, 320])
+  })
+
+  it('ends square where the next edge is open or a railing', () => {
+    const bands = outlineWallBands(square, [true, false, true, true], 20)
+    expect(bands[1]).toBeNull()
+    expect(close(bands[0])).toEqual([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: -20 }, { x: -20, y: -20 }])
+  })
+
+  it('mitres at 45° and squares a corner too sharp to mitre', () => {
+    const a = { from: { x: 0, y: 0 }, to: { x: 100, y: 0 } }
+    const diagonal = { from: { x: 100, y: 0 }, to: { x: 200, y: 100 } }
+    const strip = close(wallStrip(a, -6, 6, undefined, diagonal))!
+    // The far side's end lies on the diagonal's far side: not at the plain square end (100, 6).
+    expect(strip[2]).not.toEqual({ x: 100, y: 6 })
+    expect(strip[2]!.y).toBe(6)
+    const back = { from: { x: 100, y: 0 }, to: { x: 0, y: 5 } }
+    expect(close(wallStrip(a, -6, 6, undefined, back))![2]).toEqual({ x: 100, y: 6 })
   })
 })

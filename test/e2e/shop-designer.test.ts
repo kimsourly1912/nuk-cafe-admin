@@ -871,6 +871,14 @@ describe('the shop designer on saved layouts', () => {
     await clickPlan(page, { x: wallX - 15, y: wallY })
     await expect.poll(() => panel.getByLabel('X (cm)').inputValue()).toBe(String(wallX - 15))
     expect(await plan(page).getByTestId('plan-edge-selected').count()).toBe(0)
+
+    // Dragged near the wall, the plant snaps flush against its inner face (ISS-034): its right edge
+    // (25 cm from its centre) on the wall, no gap.
+    await dragPlan(page, { x: wallX - 15, y: wallY }, { x: wallX - 29, y: wallY + 40 })
+    await expect.poll(() => panel.getByLabel('X (cm)').inputValue()).toBe(String(wallX - 25))
+    // The outline's walls are drawn as mitred bands, one shape per wall edge (clean corners).
+    expect(await plan(page).locator('[data-testid^="plan-outline-band-"]').count()).toBeGreaterThan(0)
+    await page.getByRole('button', { name: 'Undo' }).click()
   })
 
   it('draws like Figma (D278 PR 2): Room adds and refuses, Edit points drags a side, inside glass with a gap, a named Shape', { timeout: 90_000 }, async () => {

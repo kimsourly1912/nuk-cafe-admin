@@ -19,6 +19,8 @@ Built in one PR on `claude/bold-hypatia-sx8nkl` (owner: collect the small and me
 
 Second PR (owner's answers, 2026-11-13): ISS-004 snap step, 031, 011, 017, 022, 026, 025 (command search), 020. Still waiting for the owner or the tester: ISS-002, 005 (range), 008, 016, 023, 024 (retest), 027, 030. Large: ISS-034, Phase 5.
 
+Third PR: ISS-034 (mitred wall corners, snapping to wall faces).
+
 ## Phase 1: View and zoom (start here)
 
 Why first: every other check depends on a stable camera.

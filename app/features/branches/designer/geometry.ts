@@ -412,3 +412,63 @@ export function constrainAngle(from: Point, point: Point, step: number = SNAP_CM
   const reach = snap((Math.abs(dx) + Math.abs(dy)) / 2, step)
   return { x: from.x + Math.sign(dx) * reach, y: from.y + Math.sign(dy) * reach }
 }
+
+/** A straight piece of wall, from one end to the other. */
+export interface WallSegment {
+  from: Point
+  to: Point
+}
+
+/** Where the line through `p` along `d` meets the line through `q` along `e`; null if parallel. */
+function meet(p: Point, d: Point, q: Point, e: Point): Point | null {
+  const cross = d.x * e.y - d.y * e.x
+  if (Math.abs(cross) < 1e-9) return null
+  const t = ((q.x - p.x) * e.y - (q.y - p.y) * e.x) / cross
+  return { x: p.x + d.x * t, y: p.y + d.y * t }
+}
+
+const unit = (from: Point, to: Point): Point => {
+  const length = Math.hypot(to.x - from.x, to.y - from.y) || 1
+  return { x: (to.x - from.x) / length, y: (to.y - from.y) / length }
+}
+
+/**
+ * A wall drawn as a band (ISS-034): between `near` and `far`, its sides' distances along its left
+ * normal (outline walls 0 and the thickness outwards, inside walls ± half). Each end is mitred to
+ * the wall joined there, `before` ending where this one starts and `after` starting where it ends,
+ * so a corner is clean at any angle; with none, or a corner sharper than about 30°, the end is
+ * square. The band's four corners, in order.
+ */
+export function wallStrip(wall: WallSegment, near: number, far: number, before?: WallSegment, after?: WallSegment): Point[] {
+  const d = unit(wall.from, wall.to)
+  const n = { x: -d.y, y: d.x }
+  const limit = 4 * Math.max(Math.abs(near), Math.abs(far))
+  const side = (offset: number, at: Point, other: WallSegment | undefined): Point => {
+    const square = { x: at.x + n.x * offset, y: at.y + n.y * offset }
+    if (!other) return square
+    const e = unit(other.from, other.to)
+    const m = { x: -e.y, y: e.x }
+    const mitre = meet(square, d, { x: other.from.x + m.x * offset, y: other.from.y + m.y * offset }, e)
+    return mitre && Math.hypot(mitre.x - square.x, mitre.y - square.y) <= limit ? mitre : square
+  }
+  return [side(near, wall.from, before), side(near, wall.to, after), side(far, wall.to, after), side(far, wall.from, before)]
+}
+
+/**
+ * The outline's wall bands (ISS-034): one per edge, null where the edge is not a wall. The band
+ * runs outwards from the outline by `thickness`, mitred where the next edge is a wall too.
+ */
+export function outlineWallBands(outline: readonly Point[], isWall: readonly boolean[], thickness: number = WALL_THICKNESS_CM): (Point[] | null)[] {
+  const count = outline.length
+  const segment = (index: number): WallSegment => ({ from: outline[(index + count) % count]!, to: outline[(index + 1) % count]! })
+  return outline.map((_, index) => {
+    if (!isWall[index]) return null
+    const wall = segment(index)
+    const d = unit(wall.from, wall.to)
+    const outward = outwardNormal(outline, index)
+    const sign = -d.y * outward.x + d.x * outward.y >= 0 ? 1 : -1
+    const before = isWall[(index - 1 + count) % count] ? segment(index - 1) : undefined
+    const after = isWall[(index + 1) % count] ? segment(index + 1) : undefined
+    return wallStrip(wall, 0, sign * thickness, before, after)
+  })
+}

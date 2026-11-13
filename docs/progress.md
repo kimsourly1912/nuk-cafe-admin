@@ -3,6 +3,14 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio follows Figma QA, third PR: clean wall corners and flush snapping (ISS-034, 2026-11-13)
+
+Branch `claude/bold-hypatia-sx8nkl`, from main after PR #308 merged. A large step, its own PR (work plan 3.1).
+
+- **Built:** walls drawn as mitred bands (`wallStrip`, `outlineWallBands`): square line caps left a notch at every outside corner. Solid inside walls joined end to end are mitred too. Snap targets use wall bands, not centre lines, so pieces sit flush against wall faces.
+- **How to verify:** on staging, look at the four corners of a floor (also an angled one from Room or Edit points) and at two inside walls drawn as an L; drag the stairs or a plant to a wall and to an inside wall: it stops flush, with a guide line; two pieces can touch.
+- **Evidence (local):** `pnpm lint` and `pnpm typecheck` clean; `pnpm test:unit` passed (new wall-corner tests in `designer-geometry`); `test/e2e/shop-designer.test.ts` 29 passed, with a flush-to-wall drag. No staging check yet.
+
 ### Studio follows Figma QA, second PR: the owner's answers (D278, 2026-11-13)
 
 Branch `claude/bold-hypatia-sx8nkl` again, from main after PR #307 merged. The owner answered the first PR's questions (1–3: follow Figma; 4–7: Claude decides) and asked that every small and medium step go in one PR, one commit each.
