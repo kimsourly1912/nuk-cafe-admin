@@ -790,20 +790,24 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Control+0')
     await expect.poll(() => zoom.textContent()).toBe('100%')
     // A typed percentage in the zoom menu (ISS-003): clamped to 800 %, letters are ignored.
-    const typeZoom = async (text: string) => {
-      if (!(await page.getByTestId('zoom-input').isVisible())) await zoom.click()
-      const field = page.getByTestId('zoom-input')
-      await field.fill(text)
-      await field.press('Enter')
+    // Each time from a closed menu: a number closes it (wait until it is gone, it animates out),
+    // letters leave it open.
+    const zoomField = page.getByTestId('zoom-input')
+    const typeZoom = async (text: string, closes: boolean) => {
+      await zoom.click()
+      await zoomField.fill(text)
+      await zoomField.press('Enter')
+      if (closes) await zoomField.waitFor({ state: 'detached' })
     }
-    await typeZoom('150')
+    await typeZoom('150', true)
     await expect.poll(() => zoom.textContent()).toBe('150%')
-    await typeZoom('99999')
+    await typeZoom('99999', true)
     await expect.poll(() => zoom.textContent()).toBe('800%')
-    await typeZoom('abc')
-    await expect.poll(() => page.getByTestId('zoom-input').inputValue()).toBe('800')
+    await typeZoom('abc', false)
+    await expect.poll(() => zoomField.inputValue()).toBe('800')
     expect(await zoom.textContent()).toBe('800%')
     await page.keyboard.press('Escape')
+    await zoomField.waitFor({ state: 'detached' })
     await page.keyboard.press('Shift+1')
 
     // Tab on the plan selects the next piece, Shift+Tab goes back (ISS-007); Escape twice lets Tab leave it.
