@@ -14,13 +14,14 @@ import { edgeLength, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKi
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
-import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
+import type { AlignEdge } from '../designer/group'
+import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
 import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, placementExtent, snap } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
-import { duplicateSelected, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
 import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
@@ -487,9 +488,9 @@ function placeShape(bounds: Bounds) {
     return
   }
   const id = newLayoutId('item')
+  // A round block may be an ellipse, as drawn (ISS-017); Shift draws a circle.
   const kind = roundShape.value ? 'block-round' : 'block'
-  const size = kind === 'block-round' ? { width, depth: width } : { width, depth }
-  changeFloor(target => target.items.push({ id, kind, x: Math.round((bounds.minX + bounds.maxX) / 2), y: Math.round((bounds.minY + bounds.maxY) / 2), rotation: 0, ...size, finishes: {} }))
+  changeFloor(target => target.items.push({ id, kind, x: Math.round((bounds.minX + bounds.maxX) / 2), y: Math.round((bounds.minY + bounds.maxY) / 2), rotation: 0, width, depth, finishes: {} }))
   finishTool()
   selection.value = { kind: 'item', id }
 }
@@ -530,6 +531,30 @@ function turnGroup() {
   draft.change(next => turnSelected(next, floorId, group.value, center))
 }
 
+/** Align (ISS-026, Figma): each selected one lines up with the set's edge, as drawn; one undo step. */
+function alignGroup(edge: AlignEdge) {
+  const plan = canvas.value
+  const floorId = floor.value?.id
+  if (!plan || !floorId) return
+  const boxes = group.value.flatMap((target) => {
+    const bounds = plan.boxOf(target)
+    return bounds ? [{ target, bounds }] : []
+  })
+  const moves = alignOffsets(boxes, edge)
+  if (!moves.length) return
+  draft.change((next) => {
+    for (const { target, delta } of moves) shiftSelected(next, floorId, [target], delta)
+  })
+}
+const ALIGN_BUTTONS: { edge: AlignEdge, label: string, icon: string }[] = [
+  { edge: 'left', label: 'Align left', icon: 'i-lucide-align-start-vertical' },
+  { edge: 'center', label: 'Align centres', icon: 'i-lucide-align-center-vertical' },
+  { edge: 'right', label: 'Align right', icon: 'i-lucide-align-end-vertical' },
+  { edge: 'top', label: 'Align top', icon: 'i-lucide-align-start-horizontal' },
+  { edge: 'middle', label: 'Align middles', icon: 'i-lucide-align-center-horizontal' },
+  { edge: 'bottom', label: 'Align bottom', icon: 'i-lucide-align-end-horizontal' },
+]
+
 function removeGroup() {
   const targets = [...group.value]
   draft.change(next => removeSelected(next, targets))
@@ -550,6 +575,24 @@ function selectBox(targets: PlanSelection[], additive: boolean) {
 }
 
 /** Ctrl/⌘+A: every table, piece and inside wall on the floor shown. */
+const planFocused = () => !!document.activeElement?.closest('[data-testid="floor-plan"]')
+
+/** The floor's tables, pieces and inside walls in the Floors list's order. */
+function floorOrder(): PlanSelection[] {
+  const current = floor.value
+  if (!current) return []
+  return [
+    ...tablesOn(current.id).map(placement => ({ kind: 'table' as const, id: placement.tableId })),
+    ...current.items.map(item => ({ kind: 'item' as const, id: item.id })),
+    ...current.walls.map(wall => ({ kind: 'wall' as const, id: wall.id })),
+  ]
+}
+
+function selectNext(step: 1 | -1) {
+  const next = cycleSelection(floorOrder(), selection.value, step)
+  if (next) props.editor.selectMany([next])
+}
+
 function selectAll() {
   const current = floor.value
   if (!current) return
@@ -722,6 +765,33 @@ async function placeLook(lookId: string, at: Point) {
  * Duplicate look (2B): the same look, size and turn for another real table, beside this one. It
  * asks which table, as a look from the library does; it never copies this table or its QR code.
  */
+/**
+ * Ctrl/⌘+V (ISS-022): new copies of what Ctrl/⌘+C copied, 50 cm on, one undo step. One table alone
+ * asks which table the copy is, as Duplicate look does; tables in a set are not copied (each has
+ * its own QR code). Pasting on another floor is not offered yet.
+ */
+function pasteCopied() {
+  const clipboard = props.editor.clipboard.value
+  const current = floor.value
+  if (!clipboard || !current) return
+  if (clipboard.floorId !== current.id) {
+    const source = layout.value.floors.find(candidate => candidate.id === clipboard.floorId)
+    toast.add({ title: 'Not pasted', description: source ? `Show the ${source.name} floor to paste what you copied there.` : 'The floor you copied from is gone.', color: 'neutral', icon: 'i-lucide-info' })
+    return
+  }
+  if (!clipboard.items.length && !clipboard.walls.length) {
+    const [tableId] = clipboard.tableIds
+    if (clipboard.tableIds.length === 1 && tableId && placedIds.value.has(tableId)) void duplicateLook(tableId)
+    else toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
+    return
+  }
+  const offset = props.editor.nextPasteOffset()
+  let copies: PlanSelection[] = []
+  draft.change(next => void (copies = pasteClipboard(next, clipboard, offset)))
+  if (clipboard.tableIds.length) toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
+  props.editor.selectMany(copies)
+}
+
 async function duplicateLook(tableId: string, to?: Point) {
   const source = layout.value.placements.find(placement => placement.tableId === tableId)
   if (!source) return
@@ -936,6 +1006,8 @@ onBeforeUnmount(clearLibraryDrag)
 // --- Studio's keys (D278) ---
 
 const shortcutsHelp = overlay.create(ShortcutsHelp)
+/** Studio's keys and drag keys, one list (`STUDIO_SHORTCUTS`): by `?` or the plan's right-click menu. */
+const showShortcuts = () => void shortcutsHelp.open({ shortcuts: [...STUDIO_SHORTCUTS, ...STUDIO_DRAG_KEYS] })
 
 /**
  * A dialog, menu or open select is on screen: Studio's keys must not act behind it. One that is
@@ -987,9 +1059,14 @@ function onStudioKey(event: KeyboardEvent) {
   if (command && !event.altKey) {
     const key = event.key.toLowerCase()
     if (key === 'd' && !event.shiftKey) return run(duplicateSelection)
+    // Copy and paste (ISS-022): in memory, on the floor copied from.
+    if (key === 'c' && !event.shiftKey && mode.value === 'select' && props.editor.selected.value.length) return run(() => props.editor.copy())
+    if (key === 'v' && !event.shiftKey && mode.value === 'select' && props.editor.clipboard.value) return run(pasteCopied)
     if (key === 'a' && !event.shiftKey && mode.value === 'select') return run(selectAll)
     if (key === '=' || key === '+') return run(() => plan?.zoom(1))
     if (key === '-') return run(() => plan?.zoom(-1))
+    // Ctrl/⌘+0 (ISS-006): 100 %, and the browser's own page zoom does not reset.
+    if (key === '0' && !event.shiftKey) return run(() => plan?.zoomTo(100))
     return
   }
   if (event.altKey) return
@@ -997,10 +1074,15 @@ function onStudioKey(event: KeyboardEvent) {
   if (event.shiftKey && event.code === 'Digit1') return run(() => plan?.fit())
   if (event.shiftKey && event.code === 'Digit2') return run(() => plan?.zoomToSelection())
   if (event.shiftKey && event.code === 'Digit0') return run(() => plan?.zoomTo(100))
-  if (event.key === '?') return run(() => void shortcutsHelp.open({ shortcuts: [...STUDIO_SHORTCUTS, ...STUDIO_DRAG_KEYS] }))
+  if (event.key === '?') return run(showShortcuts)
+  // Tab and Shift+Tab while the plan has the focus (ISS-007, Figma): the next or previous piece, in
+  // the Floors list's order. Anywhere else Tab moves the focus as usual.
+  if (event.key === 'Tab' && mode.value === 'select' && !pending.value && planFocused()) return run(() => selectNext(event.shiftKey ? -1 : 1))
   if (event.key === 'Escape') {
     if (pending.value) return run(() => pending.value = null)
     if (mode.value !== 'select') return run(finishTool)
+    // Nothing selected: the page gets the focus back, so Tab leaves the plan (no keyboard trap).
+    if (!selection.value && planFocused()) return run(() => (document.activeElement as HTMLElement).blur())
     return
   }
   // Enter opens Edit points on the floor (Figma's Enter into a shape's points), and closes it again.
@@ -1096,11 +1178,14 @@ const contextItems = computed((): ContextMenuItem[][] => {
   }
   return [[
     { label: 'Fit to screen', icon: 'i-lucide-scan', kbds: ['shift', '1'], onSelect: () => plan?.fit() },
-    { label: 'Zoom to 100%', icon: 'i-lucide-search', kbds: ['shift', '0'], onSelect: () => plan?.zoomTo(100) },
+    { label: 'Zoom to 100%', icon: 'i-lucide-search', kbds: ['meta', '0'], onSelect: () => plan?.zoomTo(100) },
   ], [
     { label: 'Room', icon: 'i-lucide-square-plus', kbds: ['r'], onSelect: () => startTool('room') },
     { label: 'Edit points', icon: 'i-lucide-pen-tool', kbds: ['p'], onSelect: () => startTool('outline') },
     { label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'], onSelect: () => startTool('wall') },
+  ], [
+    // The shortcut list from a menu too (ISS-025), not only by its key.
+    { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   ]]
 })
 
@@ -1705,6 +1790,27 @@ const pendingLabel = computed(() => {
       <p class="text-sm text-muted">
         Drag any of them, or use the arrow keys, to move them together. Shift+click adds or removes one.
       </p>
+      <!-- Figma's align row (ISS-026): to the set's own edges. -->
+      <div
+        role="group"
+        aria-label="Align"
+        class="flex flex-wrap gap-1"
+      >
+        <UTooltip
+          v-for="button in ALIGN_BUTTONS"
+          :key="button.edge"
+          :text="button.label"
+        >
+          <UButton
+            :icon="button.icon"
+            color="neutral"
+            variant="ghost"
+            :aria-label="button.label"
+            :data-testid="`align-${button.edge}`"
+            @click="alignGroup(button.edge)"
+          />
+        </UTooltip>
+      </div>
       <div class="grid grid-cols-2 gap-2">
         <UButton
           label="Rotate 90°"
@@ -1721,13 +1827,20 @@ const pendingLabel = computed(() => {
           :disabled="group.every(member => member.kind === 'table')"
           @click="duplicateGroup()"
         />
-        <UButton
-          label="Zoom to selection"
-          icon="i-lucide-scan-search"
-          color="neutral"
-          variant="outline"
-          @click="canvas?.zoomToSelection()"
-        />
+        <!-- A short label: the grid's half width cut "Zoom to selection" off (ISS-010). -->
+        <UTooltip
+          text="Zoom to selection"
+          :kbds="['shift', '2']"
+        >
+          <UButton
+            label="Zoom"
+            icon="i-lucide-scan-search"
+            color="neutral"
+            variant="outline"
+            aria-label="Zoom to selection"
+            @click="canvas?.zoomToSelection()"
+          />
+        </UTooltip>
         <UButton
           label="Delete"
           icon="i-lucide-trash-2"
@@ -1939,7 +2052,7 @@ const pendingLabel = computed(() => {
             :min="10"
             :max="2000"
             :step="5"
-            @update:model-value="value => setNumber(value, selectedItem!.width, width => updateItem(selectedItem!.id, { width, ...(ITEM_SPECS[selectedItem!.kind].footprint === 'round' ? { depth: width } : {}) }))"
+            @update:model-value="value => setNumber(value, selectedItem!.width, width => updateItem(selectedItem!.id, { width, ...(keepsCircle(selectedItem!.kind) ? { depth: width } : {}) }))"
           />
         </UFormField>
         <UFormField label="Depth (cm)">
@@ -1948,7 +2061,7 @@ const pendingLabel = computed(() => {
             :min="10"
             :max="2000"
             :step="5"
-            :disabled="ITEM_SPECS[selectedItem.kind].footprint === 'round'"
+            :disabled="keepsCircle(selectedItem.kind)"
             @update:model-value="value => setNumber(value, selectedItem!.depth, depth => updateItem(selectedItem!.id, { depth }))"
           />
         </UFormField>
@@ -2667,21 +2780,21 @@ const pendingLabel = computed(() => {
               <span>Click the first corner, double-click or press Enter to close the shape.</span>
             </template>
             <template v-else-if="mode === 'outline'">
-              <span>Drag a corner to move it (right angles kept unless you hold Alt), or drag a side to move it.</span>
+              <span>Drag a corner to move it (Shift: in a straight line, Alt: keep right angles), or drag a side to move it.</span>
               <span>Double-click a side or click its round handle to add a corner. Click a corner, then Delete to remove it.</span>
               <span>Click an edge to make it a wall, railing or open, or to add doors and windows. Escape or Enter when done.</span>
             </template>
             <template v-else-if="mode === 'shape'">
               <span>Drag to draw a {{ roundShape ? 'round block' : 'block' }} for anything the library doesn't have: a stage, a planter box, a platform.</span>
-              <span>Name it, set its height and finish in Properties. S draws rectangles, O circles; Shift keeps the sides equal.</span>
+              <span>Name it, set its height and finish in Properties. S draws rectangles, O ellipses; Shift keeps the sides equal, Alt draws from the middle.</span>
             </template>
             <template v-else-if="mode === 'room'">
               <span>Drag a rectangle: the floor, or a room added to it.</span>
               <span>Hold Alt while you let go to cut it out instead. Ctrl or ⌘ for 5 cm steps.</span>
             </template>
             <template v-else>
-              <span>Click where the wall starts, then where it ends.</span>
-              <span>Walls carry on from the last end; Escape or a double-click stops.</span>
+              <span>Click where the wall starts, then where it ends: any angle, Shift for 45° steps.</span>
+              <span>Walls carry on from the last end; click the first point to close the loop. Enter or a double-click stops; Escape stops and leaves.</span>
             </template>
           </div>
 

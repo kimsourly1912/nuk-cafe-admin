@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ShopLayout } from '#shared/contracts/shop-layout'
-import { duplicateSelected, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, copySelected, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
 import type { PlanSelection } from '../designer/plan'
 
@@ -93,5 +93,59 @@ describe('smart guides and gaps (D278)', () => {
     expect(segmentTouches(box(0, 0, 100, 100), { x: -50, y: 50 }, { x: 200, y: 50 })).toBe(true)
     expect(segmentTouches(box(0, 0, 100, 100), { x: 150, y: -50 }, { x: 150, y: 200 })).toBe(false)
     expect(segmentTouches(box(0, 0, 100, 100), { x: -10, y: 150 }, { x: 150, y: -10 })).toBe(true)
+  })
+})
+
+describe('copy and paste (ISS-022)', () => {
+  it('copies pieces and walls as they are, and tables by id only', () => {
+    const clipboard = copySelected(layout(), 'g', set)!
+    expect(clipboard.items.map(item => item.id)).toEqual(['plant'])
+    expect(clipboard.walls.map(wall => wall.id)).toEqual(['w1'])
+    expect(clipboard.tableIds).toEqual(['t1'])
+    expect(copySelected(layout(), 'g', [])).toBeNull()
+    expect(copySelected(layout(), 'other', set)).toBeNull()
+  })
+
+  it('pastes new copies even after the originals were deleted, never a table', () => {
+    const before = layout()
+    const clipboard = copySelected(before, 'g', set)!
+    const next = layout()
+    removeSelected(next, set)
+    const copies = pasteClipboard(next, clipboard, { x: 50, y: 50 })
+    expect(copies.map(copy => copy.kind)).toEqual(['item', 'wall'])
+    expect(next.floors[0]!.items.find(item => item.id === copies[0]!.id)).toMatchObject({ kind: 'plant', x: 150, y: 150 })
+    expect(next.floors[0]!.walls.find(wall => wall.id === copies[1]!.id)).toMatchObject({ from: { x: 650, y: 450 }, to: { x: 950, y: 450 } })
+    expect(next.placements).toHaveLength(0)
+    // The clipboard is its own copy: changing the pasted piece leaves it as it was.
+    next.floors[0]!.items[0]!.x = 999
+    expect(clipboard.items[0]!.x).toBe(100)
+  })
+})
+
+describe('Tab through the floor (ISS-007)', () => {
+  it('goes to the next or previous one, round the end, and starts at an end', () => {
+    expect(cycleSelection(set, null, 1)).toEqual(set[0])
+    expect(cycleSelection(set, null, -1)).toEqual(set[2])
+    expect(cycleSelection(set, set[0]!, 1)).toEqual(set[1])
+    expect(cycleSelection(set, set[2]!, 1)).toEqual(set[0])
+    expect(cycleSelection(set, set[0]!, -1)).toEqual(set[2])
+    expect(cycleSelection(set, { kind: 'edge', id: '0' }, 1)).toEqual(set[0])
+    expect(cycleSelection([], null, 1)).toBeNull()
+  })
+})
+
+describe('align (ISS-026)', () => {
+  const boxes = [
+    { target: { kind: 'item' as const, id: 'a' }, bounds: { minX: 0, minY: 0, maxX: 100, maxY: 50 } },
+    { target: { kind: 'item' as const, id: 'b' }, bounds: { minX: 200, minY: 100, maxX: 260, maxY: 300 } },
+  ]
+  it('lines each one up with the set\'s edge, centre or middle; already there does not move', () => {
+    expect(alignOffsets(boxes, 'left')).toEqual([{ target: boxes[1]!.target, delta: { x: -200, y: 0 } }])
+    expect(alignOffsets(boxes, 'right')).toEqual([{ target: boxes[0]!.target, delta: { x: 160, y: 0 } }])
+    expect(alignOffsets(boxes, 'center')).toEqual([{ target: boxes[0]!.target, delta: { x: 80, y: 0 } }, { target: boxes[1]!.target, delta: { x: -100, y: 0 } }])
+    expect(alignOffsets(boxes, 'top')).toEqual([{ target: boxes[1]!.target, delta: { x: 0, y: -100 } }])
+    expect(alignOffsets(boxes, 'bottom')).toEqual([{ target: boxes[0]!.target, delta: { x: 0, y: 250 } }])
+    expect(alignOffsets(boxes, 'middle')).toEqual([{ target: boxes[0]!.target, delta: { x: 0, y: 125 } }, { target: boxes[1]!.target, delta: { x: 0, y: -50 } }])
+    expect(alignOffsets([boxes[0]!], 'left')).toEqual([])
   })
 })

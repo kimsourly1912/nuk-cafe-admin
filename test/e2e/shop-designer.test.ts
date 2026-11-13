@@ -257,13 +257,24 @@ describe('the shop designer on saved layouts', () => {
     expect(await panel.getByRole('button', { name: 'Window' }).isDisabled()).toBe(true)
     await shot(page, 'edge-railing-gate')
 
-    // Draw wall (9A): two clicks make a wall; Escape ends the chain.
+    // Draw wall (9A): two clicks make a wall; Enter ends the chain.
     await drawWith(page, 'Draw wall')
     await page.getByTestId('tool-bar').getByText('Draw wall').waitFor()
     await clickPlan(page, { x: 300, y: 100 })
     await clickPlan(page, { x: 300, y: 400 })
+    await page.keyboard.press('Enter')
+    // Any angle by default; a click on the chain's first point closes the loop and ends it (ISS-018).
+    for (const point of [{ x: 500, y: 100 }, { x: 700, y: 175 }, { x: 550, y: 350 }, { x: 500, y: 100 }]) await clickPlan(page, point)
+    await expect.poll(() => plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(4)
+    await clickPlan(page, { x: 800, y: 400 })
+    await clickPlan(page, { x: 800, y: 400 })
+    expect(await plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(4)
+    await page.keyboard.press('Control+z')
+    await page.keyboard.press('Control+z')
+    await page.keyboard.press('Control+z')
+    // Escape ends the chain and leaves the tool.
     await page.keyboard.press('Escape')
-    await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
+    await page.getByTestId('tool-bar').waitFor({ state: 'detached' })
     await expect.poll(() => plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(1)
     await save(page)
 
@@ -389,17 +400,17 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('tool-bar').getByText('24 m²').waitFor()
     await shot(page, 'blank-outline')
 
-    // A corner picked, then the arrow key: the corner next to it keeps the right angle.
+    // A corner picked, then the arrow key: only that corner moves, like Figma's point nudge (ISS-019).
     await plan(page).getByTestId('plan-corner-1').click()
     await page.keyboard.press('Shift+ArrowRight')
     await expect.poll(() => plan(page).getByTestId('plan-edge-length-0').textContent()).toBe('625 cm')
-    await expect.poll(() => plan(page).getByTestId('plan-edge-length-1').textContent()).toBe('400 cm')
+    await expect.poll(() => plan(page).getByTestId('plan-edge-length-1').textContent()).not.toBe('400 cm')
     await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
 
     await placeTable(page, 'A1')
     await save(page)
     const layout = await savedLayout(page, lab.annexBranchId)
-    expect(layout.floors[0]!.outline).toEqual([{ x: 0, y: 0 }, { x: 625, y: 0 }, { x: 625, y: 400 }, { x: 0, y: 400 }])
+    expect(layout.floors[0]!.outline).toEqual([{ x: 0, y: 0 }, { x: 625, y: 0 }, { x: 600, y: 400 }, { x: 0, y: 400 }])
     expect(layout.floors[0]!.edges.every(edge => edge.kind === 'wall')).toBe(true)
   })
 
@@ -527,6 +538,16 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('table-card').getByRole('button', { name: 'Edit in 2D' }).click()
     expect(await plan(page).getAttribute('viewBox')).toBe(zoom)
     await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+    // A piece stays selected too, from 3D back to 2D by the toolbar's 2D (ISS-024).
+    const piece = plan(page).locator('g[data-kind="item"]').first()
+    const pieceId = await piece.getAttribute('data-id')
+    await piece.click()
+    await page.getByRole('button', { name: '3D', exact: true }).click()
+    await drawn(page)
+    await page.getByRole('button', { name: '2D', exact: true }).click()
+    await plan(page).waitFor()
+    await plan(page).locator(`#plan-piece-item-${pieceId}`).waitFor()
+    await expect.poll(() => page.getByRole('complementary', { name: 'Properties' }).getByText('no QR code').count()).toBe(1)
     await page.getByRole('button', { name: 'Back to admin' }).click()
     await page.waitForURL(address => address.pathname.endsWith(`/admin/branches/${lab.branchId}`) && address.searchParams.get('tab') === 'tables')
   })
@@ -539,13 +560,25 @@ describe('the shop designer on saved layouts', () => {
     // A mark on the plan's element: it is still there only if the plan was never mounted again.
     await plan(page).evaluate(svg => svg.setAttribute('data-kept', 'yes'))
     const width = (await plan(page).boundingBox())!.width
+    // Like Figma (ISS-028): hiding or showing the sidebar keeps the zoom, and the plan stays where it is on the screen.
+    const zoomLevel = page.getByTestId('zoom-level')
+    const zoomBefore = await zoomLevel.textContent()
+    const tableAt = async () => {
+      const box = (await plan(page).getByTestId('plan-table-L1').boundingBox())!
+      return { x: Math.round(box.x), y: Math.round(box.y) }
+    }
+    const tableBefore = await tableAt()
     const sidebar = page.getByTestId('studio-sidebar')
     await page.getByRole('button', { name: 'Hide sidebar' }).click()
     await sidebar.waitFor({ state: 'detached' })
     await expect.poll(async () => (await plan(page).boundingBox())!.width).toBeGreaterThan(width)
+    await expect.poll(tableAt).toEqual(tableBefore)
+    expect(await zoomLevel.textContent()).toBe(zoomBefore)
     await shot(page, 'sidebar-hidden')
     await page.getByRole('button', { name: 'Show sidebar' }).click()
     await sidebar.waitFor()
+    await expect.poll(tableAt).toEqual(tableBefore)
+    expect(await zoomLevel.textContent()).toBe(zoomBefore)
     expect(await plan(page).getAttribute('data-kept')).toBe('yes')
     await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
 
@@ -695,6 +728,28 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Shift+R')
     await expect.poll(() => l1.getAttribute('transform')).toMatch(/rotate\((90|180|270|0)\)/)
 
+    // Shift+drag on the selected table (ISS-011): it stays selected and moves straight across.
+    const before = await positionOf(page, 'L1')
+    await dragPlan(page, before, { x: before.x + 100, y: before.y + 30 }, ['Shift'])
+    await expect.poll(async () => (await positionOf(page, 'L1')).x).not.toBe(before.x)
+    expect((await positionOf(page, 'L1')).y).toBe(before.y)
+    await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+    // Escape before the release puts it back (ISS-012).
+    const held = await positionOf(page, 'L1')
+    const from = await onScreen(page, held)
+    const away = await onScreen(page, { x: held.x + 150, y: held.y + 100 })
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(away.x, away.y, { steps: 6 })
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    expect(await positionOf(page, 'L1')).toEqual(held)
+    await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+    // Shift+click on it without a move takes it out of the selection.
+    await l1.click({ modifiers: ['Shift'] })
+    await page.getByTestId('selected-table').waitFor({ state: 'detached' })
+    await l1.click()
+
     // The wheel pans and keeps the zoom; Ctrl+wheel zooms; Shift+0 is 100 %, Shift+1 fits.
     const zoom = page.getByTestId('zoom-level')
     const viewBox = () => plan(page).getAttribute('viewBox')
@@ -713,6 +768,45 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => zoom.textContent()).toBe('100%')
     await page.keyboard.press('Shift+1')
     await expect.poll(() => zoom.textContent()).not.toBe('100%')
+    // Ctrl+0 is 100 % too (ISS-006), without the browser's page zoom.
+    await page.keyboard.press('Control+0')
+    await expect.poll(() => zoom.textContent()).toBe('100%')
+    // A typed percentage in the zoom menu (ISS-003): clamped to 800 %, letters are ignored.
+    const typeZoom = async (text: string) => {
+      if (!(await page.getByTestId('zoom-input').isVisible())) await zoom.click()
+      const field = page.getByTestId('zoom-input')
+      await field.fill(text)
+      await field.press('Enter')
+    }
+    await typeZoom('150')
+    await expect.poll(() => zoom.textContent()).toBe('150%')
+    await typeZoom('99999')
+    await expect.poll(() => zoom.textContent()).toBe('800%')
+    await typeZoom('abc')
+    await expect.poll(() => page.getByTestId('zoom-input').inputValue()).toBe('800')
+    expect(await zoom.textContent()).toBe('800%')
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Shift+1')
+
+    // Tab on the plan selects the next piece, Shift+Tab goes back (ISS-007); Escape twice lets Tab leave it.
+    await l1.click()
+    const selectedNow = () => page.getByRole('complementary', { name: 'Properties' }).textContent()
+    const first = await selectedNow()
+    await page.keyboard.press('Tab')
+    await expect.poll(selectedNow).not.toBe(first)
+    await page.keyboard.press('Shift+Tab')
+    await expect.poll(selectedNow).toBe(first)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Tab')
+    expect(await plan(page).evaluate(svg => svg.contains(document.activeElement))).toBe(false)
+
+    // ? lists the shortcuts (ISS-025), the new ones included.
+    await page.keyboard.press('Shift+Slash')
+    const list = page.getByRole('dialog').filter({ hasText: 'Copy the selection' })
+    await list.waitFor()
+    await page.keyboard.press('Escape')
+    await list.waitFor({ state: 'detached' })
 
     // Tool keys: W opens Draw wall, Escape goes back to Select; V and H switch too.
     await page.keyboard.press('w')
@@ -777,6 +871,15 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Enter')
     await expect.poll(mode).toBe('outline')
     await dragPlan(page, { x: right + 200, y: top + 50 }, { x: right + 300, y: top + 50 })
+    // A double-click on a side adds a corner there (ISS-019); undone again.
+    const corners = () => plan(page).locator('[data-kind="corner"]').count()
+    const cornersBefore = await corners()
+    // Off the side's middle: its round handle there adds a corner on a single click.
+    const onSide = await onScreen(page, { x: right + 300, y: top + 40 })
+    await page.mouse.dblclick(onSide.x, onSide.y)
+    await expect.poll(corners).toBe(cornersBefore + 1)
+    await page.keyboard.press('Control+z')
+    await expect.poll(corners).toBe(cornersBefore)
     await page.keyboard.press('Escape')
     await expect.poll(mode).toBe('select')
     await save(page)
@@ -787,7 +890,6 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('w')
     await clickPlan(page, { x: right + 25, y: top + 100 })
     await clickPlan(page, { x: right + 225, y: top + 100 })
-    await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
     await expect.poll(mode).toBe('select')
     await clickPlan(page, { x: right + 125, y: top + 100 })
@@ -808,7 +910,14 @@ describe('the shop designer on saved layouts', () => {
     // Shape (S): a block drawn on the floor (over whatever is there), named Stage and 40 cm high.
     await page.keyboard.press('s')
     await expect.poll(mode).toBe('shape')
-    await dragPlan(page, { x: right - 400, y: top + 400 }, { x: right - 200, y: top + 500 })
+    // While drawing, the size shows under the shape (ISS-029).
+    const shapeStart = await onScreen(page, { x: right - 400, y: top + 400 })
+    const shapeEnd = await onScreen(page, { x: right - 200, y: top + 500 })
+    await page.mouse.move(shapeStart.x, shapeStart.y)
+    await page.mouse.down()
+    await page.mouse.move(shapeEnd.x, shapeEnd.y, { steps: 8 })
+    await expect.poll(() => plan(page).getByTestId('draw-size').textContent()).toBe('200 × 100 cm')
+    await page.mouse.up()
     await expect.poll(mode).toBe('select')
     const name = properties.getByLabel('Name')
     await name.fill('Stage')
@@ -871,6 +980,14 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => positionOf(page, 'L1')).toEqual(tableBefore)
     expect(await plantAt()).toEqual(plantBefore)
 
+    // Align (ISS-026): the tops line up (the plant, smaller than L1 and its chairs, moves up), one undo step.
+    await page.getByTestId('align-top').click()
+    await expect.poll(async () => (await plantAt()).y).toBeLessThan(plantBefore.y)
+    expect(await positionOf(page, 'L1')).toEqual(tableBefore)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => positionOf(page, 'L1')).toEqual(tableBefore)
+    expect(await plantAt()).toEqual(plantBefore)
+
     // Delete on the set: L1 back to Unplaced tables, the plant gone; Undo brings both back.
     const plantCount = await plants.count()
     await page.keyboard.press('Delete')
@@ -913,6 +1030,42 @@ describe('the shop designer on saved layouts', () => {
     await shot(page, 'alt-distances')
     await page.keyboard.up('Alt')
     await expect.poll(() => plan(page).getByTestId('plan-gap').count()).toBe(0)
+
+    // Alt during a drag (ISS-014): the original stays and a copy follows the pointer; letting go of
+    // Alt moves it again; Alt held at the release leaves a copy, one undo step.
+    const count = await plants.count()
+    // By id: the copy is drawn after it, so `last()` would become the copy.
+    const original = plan(page).locator(`#plan-piece-item-${await plant.getAttribute('data-id')}`)
+    const originalAt = () => original.getAttribute('transform')
+    const originalRest = await originalAt()
+    const plantBox = (await original.boundingBox())!
+    await page.mouse.move(plantBox.x + plantBox.width / 2, plantBox.y + plantBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(plantBox.x + plantBox.width / 2 + 80, plantBox.y + plantBox.height / 2 + 40, { steps: 6 })
+    await expect.poll(originalAt).not.toBe(originalRest)
+    await page.keyboard.down('Alt')
+    await plan(page).getByTestId('copy-preview').waitFor()
+    await expect.poll(originalAt).toBe(originalRest)
+    await page.keyboard.up('Alt')
+    await plan(page).getByTestId('copy-preview').waitFor({ state: 'detached' })
+    await page.keyboard.down('Alt')
+    await page.mouse.up()
+    await page.keyboard.up('Alt')
+    await expect.poll(() => plants.count()).toBe(count + 1)
+    expect(await originalAt()).toBe(originalRest)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => plants.count()).toBe(count)
+
+    // Ctrl+C, then Ctrl+V twice (ISS-022): two copies, each one undo step.
+    await original.click()
+    await page.keyboard.press('Control+c')
+    await page.keyboard.press('Control+v')
+    await expect.poll(() => plants.count()).toBe(count + 1)
+    await page.keyboard.press('Control+v')
+    await expect.poll(() => plants.count()).toBe(count + 2)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => plants.count()).toBe(count)
   })
 
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {
@@ -1108,6 +1261,8 @@ describe('the shop designer on saved layouts', () => {
     await page.mouse.move(start.x, start.y)
     await page.mouse.down()
     await page.mouse.move(start.x + 40 * scale, start.y + 40 * scale, { steps: 5 })
+    // The size beside the pointer while resizing (ISS-029).
+    await expect.poll(() => plan(page).getByTestId('live-label').textContent()).toBe(`${before + 40} × ${before + 40} cm`)
     await page.mouse.up()
     await expect.poll(width).toBe(String(before + 40))
     expect(await panel.getByLabel('Depth (cm)').inputValue()).toBe(String(before + 40))
@@ -1115,6 +1270,30 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(width).toBe(String(before))
     await page.getByRole('button', { name: 'Redo' }).click()
     await expect.poll(width).toBe(String(before + 40))
+
+    // No turn handle above the table (ISS-033): a drag just outside a corner turns it, with the angle beside the pointer.
+    expect(await plan(page).getByTestId('rotate-handle').count()).toBe(0)
+    const table = (await l1.boundingBox())!
+    const center = { x: table.x + table.width / 2, y: table.y + table.height / 2 }
+    const zone = (await plan(page).getByTestId('rotate-zone-1').boundingBox())!
+    const from = { x: zone.x + zone.width / 2, y: zone.y + zone.height / 2 }
+    // A quarter turn clockwise around the centre (y points down).
+    const to = { x: center.x - (from.y - center.y), y: center.y + (from.x - center.x) }
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move((from.x + to.x) / 2 + (to.x - center.x) / 2, (from.y + to.y) / 2 + (to.y - center.y) / 2, { steps: 4 })
+    // Free by default (ISS-013): a few pixels past the quarter turn give an odd angle; Shift snaps to 15°.
+    await page.mouse.move(to.x - 6, to.y, { steps: 4 })
+    await expect.poll(async () => Number((await plan(page).getByTestId('live-label').textContent())?.replace('°', ''))).not.toBe(90)
+    await page.keyboard.down('Shift')
+    await page.mouse.move(to.x, to.y, { steps: 2 })
+    await expect.poll(() => plan(page).getByTestId('live-label').textContent()).toBe('90°')
+    await page.mouse.up()
+    await page.keyboard.up('Shift')
+    await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(90)')
+    expect(await plan(page).getByTestId('live-label').count()).toBe(0)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(0)')
 
     await fromMenu(l1, 'Rotate 90°')
     await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(90)')
@@ -1272,8 +1451,9 @@ describe('the shop designer on saved layouts', () => {
     await drawWith(page, 'Draw wall')
     await clickPlan(page, { x: right + 80, y: top })
     await clickPlan(page, { x: right + 80, y: top + 200 })
+    // Escape ends the chain and leaves Draw wall (ISS-018).
     await page.keyboard.press('Escape')
-    await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
+    await page.getByTestId('tool-bar').waitFor({ state: 'detached' })
     await expect.poll(walls).toBe(before + 1)
     await clickPlan(page, { x: right + 80, y: top + 100 })
     await page.keyboard.press('Delete')

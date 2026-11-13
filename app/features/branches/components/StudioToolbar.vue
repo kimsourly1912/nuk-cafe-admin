@@ -7,6 +7,8 @@
  * - undo and redo
  * The toolbar keeps no state. Each button tells the view it sits in, and the view acts.
  */
+import { parseZoomPercent } from '../designer/camera'
+
 type StudioView = 'design' | '3d'
 
 const { zoomLevel, fitLabel, canFit = true } = defineProps<{
@@ -39,9 +41,39 @@ const zoomMenu = computed(() => [[
   { label: 'Zoom to selection', kbds: ['shift', '2'], onSelect: () => emit('zoomToSelection') },
 ], [
   { label: 'Zoom to 50%', onSelect: () => emit('zoomTo', 50) },
-  { label: 'Zoom to 100%', kbds: ['shift', '0'], onSelect: () => emit('zoomTo', 100) },
+  { label: 'Zoom to 100%', kbds: ['meta', '0'], onSelect: () => emit('zoomTo', 100) },
   { label: 'Zoom to 200%', onSelect: () => emit('zoomTo', 200) },
 ]])
+
+/** The typed percentage at the top of the zoom menu (ISS-003). Not a number: the zoom stays. */
+const typedZoom = ref('')
+const zoomMenuOpen = ref(false)
+watch(() => zoomLevel, (level) => {
+  typedZoom.value = level === undefined ? '' : String(level)
+}, { immediate: true })
+
+/** Enter: the typed zoom, and the menu closes like Figma's. Not a number: the field shows the zoom again. */
+function applyTypedZoom(event: Event) {
+  const percent = parseZoomPercent(typedZoom.value)
+  if (percent === null) {
+    typedZoom.value = String(zoomLevel ?? '')
+    return
+  }
+  emit('zoomTo', percent)
+  leaveZoomField(event)
+  zoomMenuOpen.value = false
+}
+
+/** The field lets go of the focus as the menu closes, so Studio's keys work again at once. */
+function leaveZoomField(event: Event) {
+  (event.target as HTMLElement | null)?.closest('form')?.querySelector('input')?.blur()
+}
+
+function onZoomFieldKey(event: KeyboardEvent) {
+  if (event.key === 'Escape') return leaveZoomField(event)
+  // Keys stay in the field: the menu would read them as type-to-find.
+  event.stopPropagation()
+}
 
 const views = [
   { value: 'design', label: '2D' },
@@ -103,10 +135,33 @@ const views = [
       </UTooltip>
       <UDropdownMenu
         v-if="zoomLevel !== undefined"
+        v-model:open="zoomMenuOpen"
         :items="zoomMenu"
         :modal="false"
         :content="{ side: 'top' }"
       >
+        <template #content-top>
+          <form
+            class="p-1"
+            @submit.prevent="applyTypedZoom"
+          >
+            <UInput
+              v-model="typedZoom"
+              inputmode="decimal"
+              size="sm"
+              aria-label="Zoom percentage"
+              class="w-full"
+              data-testid="zoom-input"
+              :ui="{ trailing: 'pointer-events-none text-xs text-muted' }"
+              @keydown="onZoomFieldKey"
+              @blur="typedZoom = String(zoomLevel ?? '')"
+            >
+              <template #trailing>
+                %
+              </template>
+            </UInput>
+          </form>
+        </template>
         <UButton
           color="neutral"
           variant="ghost"

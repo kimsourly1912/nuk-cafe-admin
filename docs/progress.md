@@ -3,6 +3,20 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio follows Figma QA: the small and medium steps in one PR (D278, 2026-11-13)
+
+Branch `claude/bold-hypatia-sx8nkl`. The owner asked to collect every small and medium step of the [Studio vs Figma work plan](qa/studio-figma/PLAN.md) into one PR, one commit each. The QA folder `docs/qa/studio-figma` is copied from branch `qa-studio-figma-evidence` (main did not have it). Each issue file has a "Work" note and its new status.
+
+- **Built (fixed, needs retest):** ISS-028 (camera: the view stays when a panel toggles), ISS-001 (wheel zoom speed), ISS-006 (Ctrl/⌘+0), ISS-003 (typed zoom), ISS-031 (10 cm grid apart from snap), ISS-032 (frames on the real edge), ISS-033 (turn from outside a corner, live angle), ISS-009 and ISS-010, ISS-029 (live size), ISS-011 (Shift+drag a selected piece), ISS-012 (Escape cancels a held gesture), ISS-013 (free turn, Shift 15°), ISS-015 (Shift ratio, Alt centre), ISS-014 (Alt copy live; modifier keys replay the last pointer move), ISS-017 (Shape and Room Shift/Alt live; round block as an ellipse), ISS-018 (free walls, Shift 45°, close the loop, Esc leaves), ISS-019 (free corners; a side's double-click adds a corner again), ISS-022 (copy and paste), ISS-025 (shortcut list from the menu), ISS-007 (Tab through the floor), ISS-026 (align).
+- **Not built here:** ISS-024 not reproduced (an e2e now covers it). ISS-020 deferred (21 fields in 6 components; the Shift step is the owner's). ISS-023 needs the owner's description. ISS-002, 004, 005 (range), 008, 016, 021, 027, 030 wait for the owner or the tester; ISS-034 and Phase 5 are large and get their own PRs.
+- **Owner questions recorded in the issue files:** the 10 cm grid (ISS-031) and the snap step (ISS-004); Shift+drag on an unselected piece (ISS-011); the Room cut key (ISS-017); paste across floors (ISS-022); distribute (ISS-026); command search (ISS-025); the inspector's Shift step (ISS-020).
+- **How to verify:** on staging, Studio 2D with a mouse, each issue file's "How to verify". In short: hide and show the sidebar at 77 % and 196 %; Ctrl+wheel one notch (about 10 %); Ctrl+0; type 150 in the zoom menu; turn a table from outside a corner (Shift for 15°), resize with Shift and Alt; Shift+drag a selected table; Escape mid-drag; Alt mid-drag; draw a Shape with Shift and Alt, an oval with O; draw walls at an angle and close a loop; Edit points: drag a corner, double-click a side; Ctrl+C, Ctrl+V; Tab and Shift+Tab; select two pieces and align them; press ?.
+- **Evidence (local):** `pnpm lint` clean; `pnpm typecheck` clean (with `NODE_OPTIONS=--max-old-space-size=6144`: the default heap ran out); `pnpm test:unit`: 194 files, 2,971 passed, 1 skipped (new in `designer-camera`, `designer-geometry`, `designer-group`). `test/e2e/shop-designer.test.ts` (Playwright's Chromium): 29 passed, with new steps for each built item. With the follow step removed, the sidebar check fails. No real mouse wheel, trackpad or touch device was used; no hand check on staging yet. The blank strip in ISS-028 was not seen in the test browser.
+
+### Studio vs Figma QA folder (2026-11-13)
+
+Documentation only. [docs/qa/studio-figma](qa/studio-figma/README.md) holds the standard test flow, an issue template, issue files ISS-001 to ISS-036 from manual testing of Figma and staging Studio, evidence images and the ordered [work plan](qa/studio-figma/PLAN.md). Values marked "from memory" are unverified.
+
 ### Studio canvas like Figma, PR 3: several at once (D278, 2026-11-12)
 
 Branch `claude/practical-heisenberg-lixhue`, after PR #304 (PR 2). The last part of D278, one PR (owner, 2026-11-12). [Plan → PR 3](plans/shop-designer.md#pr-3-several-at-once-smart-guides-and-alt-distances-built-2026-11-12).

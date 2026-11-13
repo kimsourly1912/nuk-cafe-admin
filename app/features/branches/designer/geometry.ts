@@ -49,6 +49,32 @@ export function rotatePoint(point: Point, degrees: number): Point {
   return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos }
 }
 
+/** The angle of a point around a centre, in degrees clockwise from straight up. */
+function bearing(center: Point, point: Point): number {
+  return (Math.atan2(point.y - center.y, point.x - center.x) * 180) / Math.PI + 90
+}
+
+export interface RotateDragOptions {
+  center: Point
+  /** Where the drag started and where the pointer is now, in plan centimetres. */
+  start: Point
+  current: Point
+  /** The piece's rotation when the drag started. */
+  origin: number
+  /** Snap the result to this many degrees (Shift, ISS-013); none turns freely. */
+  step?: number
+}
+
+/**
+ * A rotate drag from anywhere around a piece (ISS-033: just outside a corner, like Figma): the
+ * piece turns by as much as the pointer turned around its centre.
+ */
+export function rotationFromDrag(options: RotateDragOptions): number {
+  const { center, start, current, origin, step } = options
+  const turned = origin + bearing(center, current) - bearing(center, start)
+  return normalizeRotation(step ? Math.round(turned / step) * step : turned)
+}
+
 export interface Pose {
   x: number
   y: number
@@ -134,6 +160,10 @@ export interface ResizeOptions {
   round: boolean
   min: number
   max: number
+  /** Shift (ISS-015, Figma): width and depth keep their ratio. */
+  keepRatio?: boolean
+  /** Alt (ISS-015, Figma): the centre stays, so both sides grow or shrink. */
+  fromCenter?: boolean
 }
 
 /**
@@ -142,17 +172,29 @@ export interface ResizeOptions {
  * centre is rounded to whole centimetres, as the layout stores it.
  */
 export function resizeFromCorner(start: Sized, options: ResizeOptions): Sized {
-  const { corner, delta, min, max } = options
+  const { corner, delta, min, max, keepRatio, fromCenter } = options
   const sx = corner === 1 || corner === 2 ? 1 : -1
   const sy = corner >= 2 ? 1 : -1
-  // The pointer's move in the piece's own (unturned) directions, outwards from the centre.
+  // The pointer's move in the piece's own (unturned) directions, outwards from the centre; from
+  // the centre, the far side moves as much, so the size changes twice as much.
   const local = rotatePoint(delta, -start.rotation)
-  const along = { x: sx * local.x, y: sy * local.y }
+  const reach = fromCenter ? 2 : 1
+  const along = { x: sx * local.x * reach, y: sy * local.y * reach }
   const fit = (value: number) => Math.min(max, Math.max(min, snap(value, FINE_GRID_CM)))
   let width = fit(start.width + along.x)
   let depth = fit(start.depth + along.y)
   if (options.round) width = depth = fit(start.width + (Math.abs(along.x) >= Math.abs(along.y) ? along.x : along.y))
-  const shift = rotatePoint({ x: (sx * (width - start.width)) / 2, y: (sy * (depth - start.depth)) / 2 }, start.rotation)
+  else if (keepRatio) {
+    // The axis the pointer moved most along leads; the other follows at the same scale, within the limits.
+    const kx = (start.width + along.x) / start.width
+    const ky = (start.depth + along.y) / start.depth
+    const lowest = Math.max(min / start.width, min / start.depth)
+    const highest = Math.min(max / start.width, max / start.depth)
+    const k = Math.min(highest, Math.max(lowest, Math.abs(kx - 1) >= Math.abs(ky - 1) ? kx : ky))
+    width = fit(start.width * k)
+    depth = fit(start.depth * k)
+  }
+  const shift = fromCenter ? { x: 0, y: 0 } : rotatePoint({ x: (sx * (width - start.width)) / 2, y: (sy * (depth - start.depth)) / 2 }, start.rotation)
   return { x: Math.round(start.x + shift.x), y: Math.round(start.y + shift.y), rotation: start.rotation, width, depth }
 }
 
@@ -324,4 +366,41 @@ export function findOpening(edges: readonly Edge[], kind: Opening['kind'], longe
 /** A new id for a floor, wall or item: unique enough within one layout. */
 export function newLayoutId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+export interface DrawBoundsOptions {
+  /** Where the drag started and where the pointer is, both already on the grid. */
+  start: Point
+  end: Point
+  /** Shift (ISS-017, Figma): a square. */
+  keepRatio?: boolean
+  /** Alt (ISS-017, Figma): the start is the middle, not a corner. */
+  fromCenter?: boolean
+}
+
+/** The rectangle a Shape or Room drag draws, with Figma's Shift and Alt. */
+export function drawBounds(options: DrawBoundsOptions): Bounds {
+  const { start, end, keepRatio, fromCenter } = options
+  let dx = end.x - start.x
+  let dy = end.y - start.y
+  if (keepRatio) {
+    const side = Math.max(Math.abs(dx), Math.abs(dy))
+    dx = Math.sign(dx || 1) * side
+    dy = Math.sign(dy || 1) * side
+  }
+  if (fromCenter) return { minX: start.x - Math.abs(dx), minY: start.y - Math.abs(dy), maxX: start.x + Math.abs(dx), maxY: start.y + Math.abs(dy) }
+  return { minX: Math.min(start.x, start.x + dx), minY: Math.min(start.y, start.y + dy), maxX: Math.max(start.x, start.x + dx), maxY: Math.max(start.y, start.y + dy) }
+}
+
+/**
+ * Shift while drawing a wall or a corner (ISS-018, ISS-019, Figma): the point moves to the nearest
+ * 45° direction from `from`, staying on the grid (a diagonal goes as far across as down).
+ */
+export function constrainAngle(from: Point, point: Point, step: number = GRID_CM): Point {
+  const dx = point.x - from.x
+  const dy = point.y - from.y
+  const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4))
+  if (octant % 2 === 0) return Math.abs(octant) % 4 === 0 ? { x: point.x, y: from.y } : { x: from.x, y: point.y }
+  const reach = snap((Math.abs(dx) + Math.abs(dy)) / 2, step)
+  return { x: from.x + Math.sign(dx) * reach, y: from.y + Math.sign(dy) * reach }
 }

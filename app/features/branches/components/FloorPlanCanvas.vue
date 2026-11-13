@@ -5,10 +5,11 @@
  * - **select:** tap or click selects a table, furniture, an inside wall or an outline edge (pieces
  *   win over the edge behind them; the pointer's target gets a hover outline); a drag past a few
  *   pixels moves the selected piece, snapped to the 25 cm grid (5 cm with Ctrl/⌘, straight across
- *   or down with Shift); the round handle turns it in 15° steps (free with Shift); a corner handle
- *   resizes it in 5 cm steps with the opposite corner staying put (2B).
+ *   or down with Shift); a drag just outside a corner turns it freely (15° steps with Shift, like
+ *   Figma); a corner handle resizes it in 5 cm steps with the opposite corner staying put (2B).
  * - **outline** (frame 3A): with no outline yet, clicks add corners and clicking the first corner,
- *   a double-click or Enter closes the shape; otherwise corners drag (keeping right angles unless
+ *   a double-click or Enter closes the shape; otherwise corners drag freely (ISS-019: Shift on a
+ *   straight or 45° line, Alt keeping the corners beside it at right angles; was: right angles unless
  *   Alt is held), a round edge handle adds a corner, a clicked corner moves with the arrow keys and
  *   goes with Delete. Furniture fades back.
  * - **wall** (frame 9A): click where an inside wall starts and where it ends; walls chain from the
@@ -19,12 +20,14 @@
  * `keydown`, so they work without focusing the plan. Nothing changes the layout until a
  * gesture ends: then one event is emitted, one undo step.
  */
-import { useElementSize, useEventListener } from '@vueuse/core'
+import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
-import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
-import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
+import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
+import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
+import type { Camera, ScreenSize } from '../designer/camera'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
 import { moveWall, moveWallEnd, moveWalls } from '../designer/walls'
 import { cornerBounds, distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
@@ -82,41 +85,66 @@ const emit = defineEmits<{
 }>()
 
 const svg = useTemplateRef<SVGSVGElement>('svg')
-const { width: screenWidth, height: screenHeight } = useElementSize(svg)
+/** Where the canvas is on the page and how big: a panel hiding or showing changes these (ISS-028). */
+const { left: screenLeft, top: screenTop, width: screenWidth, height: screenHeight } = useElementBounding(svg)
 const floorIndex = computed(() => props.layout.floors.findIndex(floor => floor.id === props.floorId))
 const floor = computed(() => props.layout.floors[floorIndex.value] ?? props.layout.floors[0]!)
 const below = computed(() => (props.showBelow ? props.layout.floors[floorIndex.value - 1] : undefined))
 
-/** The narrowest and widest view, in centimetres, and the zoom range the menu and keys allow. */
-const MIN_VIEW_CM = 200
-const MAX_VIEW_CM = 8000
-const MIN_ZOOM = 0.05
-const MAX_ZOOM = 8
+/** The smallest plan span Fit and Zoom to selection show, in centimetres. */
+const MIN_FIT_SPAN_CM = 200
 
+/**
+ * The camera (ISS-028): the zoom and the plan point at the canvas's top-left corner. The canvas
+ * size only decides how much is visible, so hiding a panel or resizing the window never changes
+ * the zoom or moves the plan on the screen, like Figma.
+ */
+const camera = ref<Camera>({ x: -100, y: -100, scale: 0.75 })
+const screenSize = computed((): ScreenSize => ({ width: Math.max(1, screenWidth.value || 800), height: Math.max(1, screenHeight.value || 600) }))
 // The visible part of the plan, in centimetres.
-const view = ref({ x: -100, y: -100, width: 1200, height: 1100 })
-/** Screen pixels per centimetre (the viewBox fitted whole: xMidYMid meet). */
-const scale = computed(() => Math.min((screenWidth.value || 800) / view.value.width, (screenHeight.value || 600) / view.value.height))
+const view = computed(() => visibleRect(camera.value, screenSize.value))
+/** Screen pixels per centimetre. */
+const scale = computed(() => camera.value.scale)
 /** The zoom as a percentage, like Figma's: 100 % draws a centimetre as one screen pixel (D278). */
 const zoomLevel = computed(() => Math.round(scale.value * 100))
 const viewBox = computed(() => `${view.value.x} ${view.value.y} ${view.value.width} ${view.value.height}`)
 /** Centimetres per screen pixel: labels and handles keep their size on screen at every zoom. */
-const perPixel = computed(() => view.value.width / Math.max(1, screenWidth.value || 800))
+const perPixel = computed(() => 1 / scale.value)
+/** The canvas's size to fit to: none while hidden (3D), nor while the splitter lays out its first frame (a few pixels wide). */
+const MEASURED_MIN_PX = 100
+/** The fine grid fades out when its lines get close on screen (ISS-031). */
+const minorOpacity = computed(() => minorGridOpacity(scale.value))
+const measured = computed(() => screenWidth.value >= MEASURED_MIN_PX && screenHeight.value >= MEASURED_MIN_PX)
+
+// The canvas moved on the page (the sidebar hid, showed or was resized): every plan point stays
+// where it was on the screen. Not while hidden (3D) or not yet laid out: those positions mean nothing.
+watch([screenLeft, screenTop, measured], ([left, top, shown], [oldLeft, oldTop, wasShown]) => {
+  if (shown && wasShown) camera.value = followCanvas(camera.value, { x: oldLeft, y: oldTop }, { x: left, y: top })
+})
+
+/** Fit waits for the canvas's first real size: before it, there is nothing to fit to. */
+let fitWhenMeasured = false
+watch(measured, (shown) => {
+  if (shown && fitWhenMeasured) fit()
+})
 
 function fit() {
+  if (!measured.value) {
+    fitWhenMeasured = true
+    return
+  }
+  fitWhenMeasured = false
   const points = floor.value.outline.length ? floor.value.outline : below.value?.outline ?? []
   if (!points.length) {
-    view.value = { x: -100, y: -100, width: 1200, height: 1100 }
+    frame({ minX: -100, minY: -100, maxX: 1100, maxY: 1000 }, 0)
     return
   }
   frame(boundsOf(points), 160)
 }
 
-/** Shows these bounds whole, with a margin around them, at the plan's own aspect ratio. */
-function frame(bounds: { minX: number, minY: number, maxX: number, maxY: number }, margin: number) {
-  const width = Math.max(MIN_VIEW_CM, bounds.maxX - bounds.minX + margin * 2)
-  const height = Math.max(MIN_VIEW_CM, bounds.maxY - bounds.minY + margin * 2)
-  view.value = { x: (bounds.minX + bounds.maxX - width) / 2, y: (bounds.minY + bounds.maxY - height) / 2, width, height }
+/** Shows these bounds whole and centred, with a margin around them. */
+function frame(bounds: Bounds, margin: number) {
+  camera.value = fitBounds(bounds, screenSize.value, { margin, minSpan: MIN_FIT_SPAN_CM })
 }
 
 /** Shift+2: the selection fills the plan; nothing selected fits the floor (D278). */
@@ -128,15 +156,29 @@ function zoomToSelection() {
 
 /** A zoom percentage (Shift+0 is 100 %), around the middle of the plan. */
 function zoomTo(percent: number) {
-  const target = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, percent / 100))
-  zoomAround(viewMiddle(), scale.value / target)
+  zoomAround(viewMiddle(), percent / 100 / scale.value)
 }
 
 const viewMiddle = () => ({ x: view.value.x + view.value.width / 2, y: view.value.y + view.value.height / 2 })
 watch(() => props.floorId, fit, { immediate: true })
 
+/** The live number beside the pointer while turning, resizing or drawing (ISS-029, ISS-033), like Figma's. */
+const liveLabel = shallowRef<{ at: Point, text: string } | null>(null)
+
 /** A gesture's live result, drawn instead of the stored position until the gesture ends. */
-const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number } | null>(null)
+const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number, copy?: boolean } | null>(null)
+/** Alt+drag (ISS-014): the piece drawn again where the copy will land, moved by the drag. */
+const copyPreview = computed(() => {
+  const live = preview.value
+  if (!live?.copy) return null
+  const origin = live.selection.kind === 'table'
+    ? props.layout.placements.find(placement => placement.tableId === live.selection.id)
+    : floor.value.items.find(item => item.id === live.selection.id)
+  return origin ? { href: `#${pieceId(live.selection)}`, dx: live.x - origin.x, dy: live.y - origin.y } : null
+})
+/** A table's or piece's element id, for the copy's `<use>`. */
+const pieceId = (target: PlanSelection) => `plan-piece-${target.kind}-${target.id}`
+
 /** Two or more selected (D278): they drag, turn and go together; no handles. */
 const multi = computed(() => (props.group?.length ?? 0) > 1)
 /** How far the whole selection is dragged so far (D278). */
@@ -193,8 +235,22 @@ const drawn = shallowRef<Point[]>([])
 const hover = shallowRef<Point | null>(null)
 /** The corner picked in Draw outline: arrow keys move it, Delete removes it. */
 const corner = ref<number | null>(null)
-/** Where the inside wall being drawn starts. */
+/** Where the inside wall being drawn starts, and where its chain began (a click there closes it). */
 const wallStart = shallowRef<Point | null>(null)
+const chainStart = shallowRef<Point | null>(null)
+
+function endWallChain() {
+  wallStart.value = null
+  chainStart.value = null
+}
+
+/** Within 12 px of the chain's first point, after at least one wall, the point is that point. */
+function snapToChainStart(point: Point): Point {
+  const first = chainStart.value
+  const start = wallStart.value
+  if (props.mode !== 'wall' || !first || !start || (start.x === first.x && start.y === first.y)) return point
+  return Math.hypot(point.x - first.x, point.y - first.y) <= perPixel.value * 12 ? first : point
+}
 /** What a click would pick, under the pointer in the select tool (D278). */
 const hovered = shallowRef<PlanSelection | null>(null)
 
@@ -203,7 +259,7 @@ watch(() => [props.mode, props.floorId], () => {
   drawn.value = []
   hover.value = null
   corner.value = null
-  wallStart.value = null
+  endWallChain()
 })
 
 const edges = computed(() => shape.value.edges.map((edge, index) => {
@@ -238,7 +294,8 @@ function posed<T extends Sized>(selection: PlanSelection, object: T): T {
   const delta = groupDelta.value
   if (delta && multi.value && isSelected(selection.kind, selection.id)) return { ...object, x: object.x + delta.x, y: object.y + delta.y }
   const live = preview.value
-  if (!live || live.selection.kind !== selection.kind || live.selection.id !== selection.id) return object
+  // Alt+drag (ISS-014): the original stays where it is; the copy is drawn at the pointer instead.
+  if (!live || live.copy || live.selection.kind !== selection.kind || live.selection.id !== selection.id) return object
   return { ...object, x: live.x, y: live.y, rotation: live.rotation, width: live.width ?? object.width, depth: live.depth ?? object.depth }
 }
 
@@ -335,14 +392,14 @@ const measurements = computed((): Gap[] => {
 /** Tables and furniture take part in the select tool only; the other tools draw over them. */
 const piecesActive = computed(() => props.mode === 'select')
 
-/** A selected table's or piece's outline on the plan, its turn handle included (the selection's drawing). */
+/** A selected table's or piece's outline on the plan (the selection's drawing). */
 const selectionFrames = computed(() => {
   const selection = props.selection
   if (props.mode !== 'select' || !selection || multi.value) return null
   const table = selection.kind === 'table' ? placed.value.find(candidate => candidate.tableId === selection.id) : undefined
-  if (table) return { pose: table, width: table.extent.width + 12, depth: table.extent.depth + 12, handle: 56 }
+  if (table) return { pose: table, width: table.extent.width, depth: table.extent.depth }
   const item = selection.kind === 'item' ? items.value.find(candidate => candidate.id === selection.id) : undefined
-  return item ? { pose: item, width: item.width + 16, depth: item.depth + 16, handle: 50 } : null
+  return item ? { pose: item, width: item.width, depth: item.depth } : null
 })
 
 /** The hovered piece's outline, or the hovered wall's or edge's line; none for the selection itself. */
@@ -351,11 +408,11 @@ const hoverOutline = computed(() => {
   if (props.mode !== 'select' || !target || isSelected(target.kind, target.id)) return null
   if (target.kind === 'table') {
     const table = placed.value.find(candidate => candidate.tableId === target.id)
-    return table ? { kind: 'frame' as const, pose: table, width: table.extent.width + 12, depth: table.extent.depth + 12 } : null
+    return table ? { kind: 'frame' as const, pose: table, width: table.extent.width, depth: table.extent.depth } : null
   }
   if (target.kind === 'item') {
     const item = items.value.find(candidate => candidate.id === target.id)
-    return item ? { kind: 'frame' as const, pose: item, width: item.width + 16, depth: item.depth + 16 } : null
+    return item ? { kind: 'frame' as const, pose: item, width: item.width, depth: item.depth } : null
   }
   if (target.kind === 'wall') {
     const wall = walls.value.find(candidate => candidate.id === target.id)
@@ -365,7 +422,7 @@ const hoverOutline = computed(() => {
   return edge ? { kind: 'line' as const, from: edge.from, to: edge.to } : null
 })
 
-/** The plan points a selection covers: a piece's frame and turn handle, a wall's or an edge's ends. */
+/** The plan points a selection covers: a piece's frame, a wall's or an edge's ends. */
 const selectionPoints = computed((): Point[] | null => {
   const selection = props.selection
   if (props.mode !== 'select' || !selection) return null
@@ -375,9 +432,8 @@ const selectionPoints = computed((): Point[] | null => {
   }
   const frame = selectionFrames.value
   if (frame) {
-    const { pose, width, depth, handle } = frame
-    const turnHandle = rotatePoint({ x: 0, y: -depth / 2 - handle - 8 }, pose.rotation)
-    return [...rectCorners(pose, width, depth, pose.rotation), { x: pose.x + turnHandle.x, y: pose.y + turnHandle.y }]
+    const { pose, width, depth } = frame
+    return rectCorners(pose, width, depth, pose.rotation)
   }
   const reach = WALL_THICKNESS_CM
   const ends = (from: Point, to: Point) => [from, to].flatMap(point => [{ x: point.x - reach, y: point.y - reach }, { x: point.x + reach, y: point.y + reach }])
@@ -402,14 +458,9 @@ const selectionBox = computed(() => {
   return { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y }
 })
 
-/** Plan centimetres → pixels from the plan's top-left corner (the viewBox fitted whole: xMidYMid meet). */
+/** Plan centimetres → pixels from the canvas's top-left corner. */
 function toScreen(point: Point): Point {
-  const { x, y, width, height } = view.value
-  const scale = Math.min(screenWidth.value / width, screenHeight.value / height)
-  return {
-    x: (screenWidth.value - width * scale) / 2 + (point.x - x) * scale,
-    y: (screenHeight.value - height * scale) / 2 + (point.y - y) * scale,
-  }
+  return planToScreen(camera.value, point)
 }
 
 /**
@@ -418,6 +469,23 @@ function toScreen(point: Point): Point {
  * of moving it.
  */
 const handleCorners = (width: number, depth: number) => (Math.min(width, depth) / perPixel.value >= 56 ? rectCorners({ x: 0, y: 0 }, width, depth, 0) : [])
+
+/** Rotate zones' size and how far they sit out from the corner, in screen pixels (ISS-033): past the resize handle's 16 px reach. */
+const ROTATE_ZONE_PX = 20
+const ROTATE_ZONE_OFFSET_PX = 12
+/**
+ * The square just outside each corner of a frame, in its own (unturned) directions, where a drag
+ * turns the piece (Figma's rotate area). Behind the resize handles, so a corner still resizes.
+ */
+function rotateZones(width: number, depth: number) {
+  const size = ROTATE_ZONE_PX * perPixel.value
+  const gap = ROTATE_ZONE_OFFSET_PX * perPixel.value
+  return rectCorners({ x: 0, y: 0 }, width, depth, 0).map(corner => ({
+    x: corner.x > 0 ? corner.x + gap : corner.x - gap - size,
+    y: corner.y > 0 ? corner.y + gap : corner.y - gap - size,
+    size,
+  }))
+}
 
 /** Screen → plan centimetres; null when the pointer is outside the plan. */
 function toPlan(clientX: number, clientY: number, inside = false): Point | null {
@@ -440,27 +508,26 @@ function viewCenter(): Point {
 /** Ctrl or ⌘ held: 5 cm steps instead of the 25 cm grid while dragging or drawing (D278). */
 const fineSnap = (event: { ctrlKey: boolean, metaKey: boolean }) => event.ctrlKey || event.metaKey
 
-/** Snapped to the grid; with `from`, straight across or down from it unless `free`. */
-function drawPoint(plan: Point, from: Point | undefined, free: boolean, fine: boolean): Point {
+/** Snapped to the grid; any angle from `from`, or 45° steps when `constrain` (Shift, like Figma: ISS-018). */
+function drawPoint(plan: Point, from: Point | undefined, constrain: boolean, fine: boolean): Point {
   const step = fine ? FINE_GRID_CM : GRID_CM
   const point = { x: snap(plan.x, step), y: snap(plan.y, step) }
-  if (!from || free) return point
-  return Math.abs(point.x - from.x) >= Math.abs(point.y - from.y) ? { x: point.x, y: from.y } : { x: from.x, y: point.y }
+  return from && constrain ? constrainAngle(from, point, step) : point
 }
 
 type Gesture
-  = | { type: 'drag', selection: PlanSelection, startPlan: Point, origin: { x: number, y: number, rotation: number }, startClient: Point, moved: boolean }
-    | { type: 'rotate', selection: PlanSelection, center: Point, rotation: number }
+  = | { type: 'drag', selection: PlanSelection, startPlan: Point, origin: { x: number, y: number, rotation: number }, startClient: Point, moved: boolean, toggle?: PlanSelection }
+    | { type: 'rotate', selection: PlanSelection, center: Point, start: Point, origin: number, rotation: number }
     | { type: 'resize', selection: PlanSelection, corner: number, startPlan: Point, origin: Sized, round: boolean, min: number, max: number }
     | { type: 'corner', index: number, startPlan: Point, origin: Point, startClient: Point, moved: boolean }
     | { type: 'wall-end', id: string, end: 'from' | 'to', startClient: Point, moved: boolean }
-    | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean }
+    | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'room', start: Point }
     | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
-    | { type: 'group', startPlan: Point, startClient: Point, moved: boolean }
+    | { type: 'group', startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'marquee', startPlan: Point, startClient: Point, moved: boolean, additive: boolean }
-    | { type: 'pan', startClient: Point, startView: typeof view.value, moved: boolean, plan: Point | null, event: { altKey: boolean, fine: boolean }, navigateOnly?: boolean }
-    | { type: 'pinch', distance: number, startView: typeof view.value, middle: Point }
+    | { type: 'pan', startClient: Point, startCamera: Camera, moved: boolean, plan: Point | null, event: { shiftKey: boolean, fine: boolean }, navigateOnly?: boolean }
+    | { type: 'pinch', distance: number, startCamera: Camera, middle: Point }
 
 const pointers = new Map<number, Point>()
 let gesture: Gesture | null = null
@@ -479,7 +546,7 @@ function sizeRules(selection: PlanSelection): { round: boolean, min: number, max
     return { round: !!placement && findLook(props.looks, placement.lookId).shape === 'round', min: TABLE_SIZE_MIN_CM, max: TABLE_SIZE_MAX_CM }
   }
   const item = floor.value.items.find(candidate => candidate.id === selection.id)
-  return { round: !!item && ITEM_SPECS[item.kind].footprint === 'round', min: ITEM_SIZE_MIN_CM, max: ITEM_SIZE_MAX_CM }
+  return { round: !!item && keepsCircle(item.kind), min: ITEM_SIZE_MIN_CM, max: ITEM_SIZE_MAX_CM }
 }
 
 // --- Space or the middle button pans from any tool (D278) ---
@@ -548,7 +615,7 @@ function onPointerDown(event: PointerEvent) {
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
     hovered.value = null
     panning.value = true
-    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startView: { ...view.value }, moved: false, plan: null, event: { altKey: false, fine: false }, navigateOnly: true }
+    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan: null, event: { shiftKey: false, fine: false }, navigateOnly: true }
     return
   }
   svg.value?.setPointerCapture(event.pointerId)
@@ -563,13 +630,13 @@ function onPointerDown(event: PointerEvent) {
     marquee.value = null
     groupDelta.value = null
     guides.value = []
-    gesture = { type: 'pinch', distance: Math.hypot(a.x - b.x, a.y - b.y), startView: { ...view.value }, middle: toPlan((a.x + b.x) / 2, (a.y + b.y) / 2) ?? { x: 0, y: 0 } }
+    gesture = { type: 'pinch', distance: Math.hypot(a.x - b.x, a.y - b.y), startCamera: { ...camera.value }, middle: toPlan((a.x + b.x) / 2, (a.y + b.y) / 2) ?? { x: 0, y: 0 } }
     return
   }
   const target = (event.target as Element).closest<SVGElement>('[data-kind]')
   const plan = toPlan(event.clientX, event.clientY)
   const startPan = () => {
-    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startView: { ...view.value }, moved: false, plan, event: { altKey: event.altKey, fine: fineSnap(event) } }
+    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan, event: { shiftKey: event.shiftKey, fine: fineSnap(event) } }
   }
   if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
@@ -608,13 +675,15 @@ function onPointerDown(event: PointerEvent) {
     return
   }
   const pickable = props.mode === 'select' && (kind === 'table' || kind === 'item' || kind === 'wall') && !target.dataset.handle
-  if (pickable && event.shiftKey && event.pointerType !== 'touch') {
-    // Shift+click (D278): in or out of the selection, no drag.
-    emit('toggle', { kind, id })
+  // Shift on a selected piece (ISS-011, like Figma): a drag moves it in a straight line, a click
+  // without a move takes it out of the selection on release. An unselected piece joins at once.
+  const shiftToggle = pickable && event.shiftKey && event.pointerType !== 'touch' ? { kind: kind as PlanSelection['kind'], id } : undefined
+  if (shiftToggle && !isSelected(shiftToggle.kind, id)) {
+    emit('toggle', shiftToggle)
     return
   }
   if (pickable && multi.value && isSelected(kind, id)) {
-    gesture = { type: 'group', startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+    gesture = { type: 'group', startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false, toggle: shiftToggle }
     return
   }
   if (kind === 'wall-end') {
@@ -625,7 +694,7 @@ function onPointerDown(event: PointerEvent) {
   if (kind === 'wall') {
     // Pressed and dragged, a wall moves at once (Figma); its joined neighbours stretch to follow.
     if (!isSelected('wall', id)) emit('select', { kind, id })
-    gesture = { type: 'wall', id, startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+    gesture = { type: 'wall', id, startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false, toggle: shiftToggle }
     return
   }
   if (kind === 'edge' && props.mode === 'outline') {
@@ -641,7 +710,7 @@ function onPointerDown(event: PointerEvent) {
   const origin = stored(selection)
   if (!origin) return
   if (target.dataset.handle === 'rotate') {
-    gesture = { type: 'rotate', selection, center: { x: origin.x, y: origin.y }, rotation: origin.rotation }
+    gesture = { type: 'rotate', selection, center: { x: origin.x, y: origin.y }, start: plan, origin: origin.rotation, rotation: origin.rotation }
     return
   }
   if (target.dataset.handle === 'resize') {
@@ -649,38 +718,59 @@ function onPointerDown(event: PointerEvent) {
     return
   }
   if (!isSelected(selection.kind, selection.id)) emit('select', selection)
-  gesture = { type: 'drag', selection, startPlan: plan, origin: { ...origin }, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+  gesture = { type: 'drag', selection, startPlan: plan, origin: { ...origin }, startClient: { x: event.clientX, y: event.clientY }, moved: false, toggle: shiftToggle }
 }
 
+/** What a pointer move needs: a real event, or the last one replayed when a key changes (ISS-014, ISS-017). */
+type PointerMove = Pick<PointerEvent, 'clientX' | 'clientY' | 'pointerId' | 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>
+let lastMove: PointerMove | null = null
+
+/**
+ * Shift, Alt, Ctrl or ⌘ pressed or let go during a gesture, without moving the pointer: the
+ * gesture follows at once, like Figma (a straight line, a copy, a square, from the centre).
+ */
+function replayKeys(event: KeyboardEvent) {
+  if (!lastMove || !pointerInside || !['Shift', 'Alt', 'Control', 'Meta'].includes(event.key)) return
+  if (!gesture && !drawing.value && props.mode !== 'wall') return
+  // Alt alone would focus the browser's menu bar on Windows.
+  if (event.key === 'Alt') event.preventDefault()
+  followPointer({ ...lastMove, shiftKey: event.shiftKey, altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey })
+}
+useEventListener('keydown', replayKeys)
+useEventListener('keyup', replayKeys)
+
 function onPointerMove(event: PointerEvent) {
+  lastMove = { clientX: event.clientX, clientY: event.clientY, pointerId: event.pointerId, shiftKey: event.shiftKey, altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey }
+  if (!gesture) hovered.value = hoverTarget(event)
+  followPointer(event)
+}
+
+/** The pointer's move, or the last one again with new keys: the gesture's or the drawing's preview. */
+function followPointer(event: PointerMove) {
   if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
   if (!gesture) {
-    hovered.value = hoverTarget(event)
     // Hovering while drawing: where the next corner or wall end would go.
     if (drawing.value || props.mode === 'wall') {
       const plan = toPlan(event.clientX, event.clientY)
       const from = drawing.value ? drawn.value.at(-1) : wallStart.value ?? undefined
-      hover.value = plan ? drawPoint(plan, from, event.altKey, fineSnap(event)) : null
+      hover.value = plan ? snapToChainStart(drawPoint(plan, from, event.shiftKey, fineSnap(event))) : null
     }
     return
   }
   if (gesture.type === 'pinch') {
     const [a, b] = [...pointers.values()] as [Point, Point]
     if (!a || !b) return
-    const scale = gesture.distance / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))
-    zoomAround(gesture.middle, scale, gesture.startView)
+    const factor = Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, gesture.distance)
+    zoomAround(gesture.middle, factor, gesture.startCamera)
     return
   }
   if (gesture.type === 'pan') {
-    const element = svg.value
-    if (!element) return
     const dx = event.clientX - gesture.startClient.x
     const dy = event.clientY - gesture.startClient.y
     if (Math.hypot(dx, dy) > DRAG_SLOP_PX) gesture.moved = true
     if (!gesture.moved) return
     panning.value = true
-    const scale = gesture.startView.width / Math.max(1, element.getBoundingClientRect().width)
-    view.value = { ...gesture.startView, x: gesture.startView.x - dx * scale, y: gesture.startView.y - dy * scale }
+    camera.value = panBy(gesture.startCamera, -dx, -dy)
     return
   }
   const plan = toPlan(event.clientX, event.clientY)
@@ -688,26 +778,25 @@ function onPointerMove(event: PointerEvent) {
   if (gesture.type === 'room') {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
     const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
-    const { start } = gesture
-    // A circle (or Shift, like Figma) keeps both sides equal.
-    if (props.mode === 'shape' && (props.roundShape || event.shiftKey)) {
-      const side = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y))
-      end.x = start.x + Math.sign(end.x - start.x || 1) * side
-      end.y = start.y + Math.sign(end.y - start.y || 1) * side
-    }
-    roomPreview.value = { bounds: { minX: Math.min(start.x, end.x), minY: Math.min(start.y, end.y), maxX: Math.max(start.x, end.x), maxY: Math.max(start.y, end.y) }, cut: props.mode === 'room' && event.altKey }
+    // Like Figma (ISS-017): Shift keeps both sides equal while held (a round block too); Alt
+    // draws a shape from its middle. In Room, Alt cuts instead (its own meaning, D278).
+    const shapeTool = props.mode === 'shape'
+    const bounds = drawBounds({ start: gesture.start, end, keepRatio: event.shiftKey, fromCenter: shapeTool && event.altKey })
+    roomPreview.value = { bounds, cut: props.mode === 'room' && event.altKey }
     return
   }
   if (gesture.type === 'rotate') {
-    const angle = (Math.atan2(plan.y - gesture.center.y, plan.x - gesture.center.x) * 180) / Math.PI + 90
-    const rotation = normalizeRotation(event.shiftKey ? angle : Math.round(angle / 15) * 15)
+    const rotation = rotationFromDrag({ center: gesture.center, start: gesture.start, current: plan, origin: gesture.origin, step: event.shiftKey ? 15 : undefined })
     gesture.rotation = rotation
     preview.value = { selection: gesture.selection, x: gesture.center.x, y: gesture.center.y, rotation }
+    liveLabel.value = { at: plan, text: `${rotation}°` }
     return
   }
   if (gesture.type === 'resize') {
     const delta = { x: plan.x - gesture.startPlan.x, y: plan.y - gesture.startPlan.y }
-    preview.value = { selection: gesture.selection, ...resizeFromCorner(gesture.origin, { corner: gesture.corner, delta, round: gesture.round, min: gesture.min, max: gesture.max }) }
+    const resized = resizeFromCorner(gesture.origin, { corner: gesture.corner, delta, round: gesture.round, min: gesture.min, max: gesture.max, keepRatio: event.shiftKey, fromCenter: event.altKey })
+    preview.value = { selection: gesture.selection, ...resized }
+    liveLabel.value = { at: plan, text: `${resized.width} × ${resized.depth} cm` }
     return
   }
   if (!gesture.moved && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
@@ -748,7 +837,7 @@ function onPointerMove(event: PointerEvent) {
     const wall = floor.value.walls.find(candidate => candidate.id === id)
     if (!wall) return
     const other = end === 'from' ? wall.to : wall.from
-    liveWalls.value = moveWallEnd(floor.value.walls, id, end, drawPoint(plan, other, event.altKey, fineSnap(event)))
+    liveWalls.value = moveWallEnd(floor.value.walls, id, end, drawPoint(plan, other, event.shiftKey, fineSnap(event)))
     return
   }
   if (gesture.type === 'wall') {
@@ -780,10 +869,13 @@ function onPointerMove(event: PointerEvent) {
     }
   }
   if (gesture.type === 'corner') {
-    liveShape.value = moveCorner({ outline: floor.value.outline, edges: floor.value.edges }, gesture.index, to, !event.altKey)
+    // Like Figma (ISS-019): the corner moves freely, Shift keeps it on a straight or 45° line from
+    // where it was; Alt keeps the corners beside it at right angles.
+    const at = event.shiftKey ? constrainAngle(gesture.origin, to, step) : to
+    liveShape.value = moveCorner({ outline: floor.value.outline, edges: floor.value.edges }, gesture.index, at, event.altKey)
     return
   }
-  preview.value = { selection: gesture.selection, ...to, rotation: gesture.origin.rotation }
+  preview.value = { selection: gesture.selection, ...to, rotation: gesture.origin.rotation, copy: gesture.type === 'drag' && event.altKey }
 }
 
 const overlaps = (a: Bounds, b: Bounds) => a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
@@ -815,6 +907,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     return
   }
   gesture = null
+  liveLabel.value = null
   const live = preview.value
   const liveOutline = liveShape.value
   const movedWalls = liveWalls.value
@@ -831,9 +924,14 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   if (!finished || cancelled) return
   if (finished.type === 'pan' && !finished.moved && !finished.navigateOnly) return tap(finished.plan, finished.event)
   if (finished.type === 'marquee') {
-    if (!finished.moved || !box) return tap(finished.startPlan, { altKey: event.altKey, fine: fineSnap(event) })
+    if (!finished.moved || !box) return tap(finished.startPlan, { shiftKey: event.shiftKey, fine: fineSnap(event) })
     const touched = pieceBoxes.value.filter(piece => piece.from && piece.to ? segmentTouches(box, piece.from, piece.to) : overlaps(box, piece.bounds))
     emit('selectMany', touched.map(piece => piece.target), finished.additive)
+    return
+  }
+  // Shift+click on a selected piece, without a move: out of the selection (ISS-011).
+  if ((finished.type === 'drag' || finished.type === 'group' || finished.type === 'wall') && finished.toggle && !finished.moved) {
+    emit('toggle', finished.toggle)
     return
   }
   if (finished.type === 'group' && finished.moved && delta && (delta.x || delta.y)) emit('moveGroup', delta)
@@ -857,8 +955,29 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   }
 }
 
+/** Gestures that change something when released; Escape before the release drops them. */
+const CANCELLABLE: ReadonlySet<string> = new Set(['drag', 'group', 'wall', 'wall-end', 'side', 'corner', 'resize', 'rotate', 'room', 'marquee'])
+
+/**
+ * Escape while dragging (ISS-012, like Figma): the piece goes back, nothing is emitted and no undo
+ * step is made. The pointer's release then finds no gesture. Returns whether one was dropped.
+ */
+function cancelGesture(): boolean {
+  if (!gesture || !CANCELLABLE.has(gesture.type)) return false
+  gesture = null
+  preview.value = null
+  liveShape.value = null
+  liveWalls.value = null
+  roomPreview.value = null
+  marquee.value = null
+  groupDelta.value = null
+  guides.value = []
+  liveLabel.value = null
+  return true
+}
+
 /** A tap on empty plan: clears the selection, or adds a corner or a wall end while drawing. */
-function tap(plan: Point | null, keys: { altKey: boolean, fine: boolean }) {
+function tap(plan: Point | null, keys: { shiftKey: boolean, fine: boolean }) {
   if (props.mode === 'hand') return
   if (props.placing) {
     if (plan) emit('place', plan)
@@ -866,25 +985,26 @@ function tap(plan: Point | null, keys: { altKey: boolean, fine: boolean }) {
   }
   if (drawing.value && plan) {
     const first = drawn.value[0]
-    const point = drawPoint(plan, drawn.value.at(-1), keys.altKey, keys.fine)
+    const point = drawPoint(plan, drawn.value.at(-1), keys.shiftKey, keys.fine)
     if (first && drawn.value.length >= 3 && Math.hypot(point.x - first.x, point.y - first.y) <= Math.max(CLOSE_DISTANCE_CM, perPixel.value * 12)) return closeDrawing()
     const last = drawn.value.at(-1)
     if (!last || last.x !== point.x || last.y !== point.y) drawn.value = [...drawn.value, point]
     return
   }
   if (props.mode === 'wall' && plan) {
-    const point = drawPoint(plan, wallStart.value ?? undefined, keys.altKey, keys.fine)
+    const point = snapToChainStart(drawPoint(plan, wallStart.value ?? undefined, keys.shiftKey, keys.fine))
     const start = wallStart.value
     if (!start) {
       wallStart.value = point
+      chainStart.value = point
       return
     }
     // The same point twice ends the chain.
-    if (start.x === point.x && start.y === point.y) {
-      wallStart.value = null
-      return
-    }
+    if (start.x === point.x && start.y === point.y) return endWallChain()
     emit('addWall', { from: start, to: point })
+    // Back on the chain's first point (ISS-018, Figma): the loop is closed and the chain ends.
+    const first = chainStart.value
+    if (first && first.x === point.x && first.y === point.y) return endWallChain()
     wallStart.value = point
     return
   }
@@ -909,11 +1029,11 @@ function closeDrawing() {
  */
 function onDoubleClick(event: MouseEvent) {
   if (drawing.value) return closeDrawing()
-  if (props.mode === 'wall') {
-    wallStart.value = null
-    return
-  }
-  const target = (event.target as Element).closest<SVGElement>('[data-kind]')
+  if (props.mode === 'wall') return endWallChain()
+  // What is under the pointer, not the event's target: the press captured the pointer, so the
+  // double-click is sent to the plan itself (ISS-019: a side's double-click added no corner).
+  const under = document.elementFromPoint(event.clientX, event.clientY)
+  const target = under && svg.value?.contains(under) ? under.closest<SVGElement>('[data-kind]') : null
   const plan = toPlan(event.clientX, event.clientY)
   if (props.mode === 'outline' && target?.dataset.kind === 'edge' && plan) {
     emit('shape', insertCorner(shape.value, Number(target.dataset.id), plan))
@@ -923,15 +1043,9 @@ function onDoubleClick(event: MouseEvent) {
   if (props.mode === 'select' && !props.placing && (target?.dataset.kind === 'edge' || onFloor)) emit('editPoints')
 }
 
-function zoomAround(point: Point, scale: number, from = view.value) {
-  const width = Math.min(MAX_VIEW_CM, Math.max(MIN_VIEW_CM, from.width * scale))
-  const factor = width / from.width
-  view.value = {
-    x: point.x - (point.x - from.x) * factor,
-    y: point.y - (point.y - from.y) * factor,
-    width,
-    height: from.height * factor,
-  }
+/** Zooms by `factor` (above 1 zooms in), keeping this plan point where it is on screen. */
+function zoomAround(point: Point, factor: number, from = camera.value) {
+  camera.value = zoomAt(from, point, factor)
 }
 
 /**
@@ -943,19 +1057,18 @@ function onWheel(event: WheelEvent) {
   const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? (screenHeight.value || 600) : 1
   if (event.ctrlKey || event.metaKey) {
     const point = toPlan(event.clientX, event.clientY)
-    if (point) zoomAround(point, 1.01 ** (event.deltaY * unit))
+    if (point) zoomAround(point, wheelZoomFactor(event.deltaY * unit))
     return
   }
-  const perScreenPixel = 1 / scale.value
-  const dx = (event.shiftKey ? event.deltaY : event.deltaX) * unit * perScreenPixel
-  const dy = (event.shiftKey ? 0 : event.deltaY) * unit * perScreenPixel
-  view.value = { ...view.value, x: view.value.x + dx, y: view.value.y + dy }
+  const dx = (event.shiftKey ? event.deltaY : event.deltaX) * unit
+  const dy = (event.shiftKey ? 0 : event.deltaY) * unit
+  camera.value = panBy(camera.value, dx, dy)
 }
 
 function zoom(direction: 1 | -1) {
-  zoomAround(viewMiddle(), direction > 0 ? 0.8 : 1.25)
+  zoomAround(viewMiddle(), direction > 0 ? 1.25 : 0.8)
 }
-defineExpose({ toPlan, viewCenter, fit, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, warnings, keydown, focus: () => svg.value?.focus() })
+defineExpose({ toPlan, viewCenter, fit, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, boxOf, warnings, keydown, focus: () => svg.value?.focus() })
 
 const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }
 
@@ -965,14 +1078,15 @@ const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x
  * leaving a tool, the tool keys).
  * - Arrows move the selection or the picked corner 5 cm, 25 cm with Shift (Figma's small and big
  *   nudge); Shift+R turns the selection 90°; Delete or Backspace removes it.
- * - Escape cancels in steps: a placement, the last corner drawn, the wall being drawn, the picked
- *   corner, then the selection.
+ * - Escape cancels in steps: a drag, turn, resize or box still held (ISS-012), a placement, the
+ *   last corner drawn, the wall being drawn, the picked corner, then the selection.
  */
 function keydown(event: KeyboardEvent): boolean {
   const done = () => {
     event.preventDefault()
     return true
   }
+  if (event.key === 'Escape' && cancelGesture()) return done()
   if (props.placing) {
     if (event.key !== 'Escape') return false
     emit('cancelPlace')
@@ -1001,7 +1115,8 @@ function keydown(event: KeyboardEvent): boolean {
     }
     const at = shape.value.outline[index]
     if (arrow && at) {
-      emit('shape', moveCorner(shape.value, index, { x: at.x + arrow.x * step, y: at.y + arrow.y * step }, !event.altKey))
+      // A nudge moves only this corner (ISS-019, Figma's point nudge).
+      emit('shape', moveCorner(shape.value, index, { x: at.x + arrow.x * step, y: at.y + arrow.y * step }, false))
       return done()
     }
     if ((event.key === 'Delete' || event.key === 'Backspace') && shape.value.outline.length > 3) {
@@ -1012,9 +1127,14 @@ function keydown(event: KeyboardEvent): boolean {
     return false
   }
   if (props.mode === 'wall') {
-    if (event.key !== 'Escape' || !wallStart.value) return false
-    wallStart.value = null
-    return done()
+    if (!wallStart.value) return false
+    // Enter ends the chain; Escape ends it and, by Studio, leaves the tool too (ISS-018).
+    if (event.key === 'Enter') {
+      endWallChain()
+      return done()
+    }
+    if (event.key === 'Escape') endWallChain()
+    return false
   }
   const selection = props.selection
   if (!selection) return false
@@ -1079,16 +1199,19 @@ function chairRect(chair: TableLook['chair']) {
 }
 const metres = (cm: number) => `${Math.round(cm)} cm`
 /** A label's box around its text, in plan centimetres at the current zoom. */
+/** A drawn rectangle's size, as the live label shows it (ISS-029). */
+const sizeText = (bounds: Bounds) => `${bounds.maxX - bounds.minX} × ${bounds.maxY - bounds.minY} cm`
 const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.value, height: 22 * perPixel.value, font: 12 * perPixel.value })
 </script>
 
 <template>
+  <!-- No focus ring around the plan (ISS-009, owner): like Figma, the selection's frame shows where keys go. -->
   <svg
     ref="svg"
     :viewBox="viewBox"
-    preserveAspectRatio="xMidYMid meet"
-    class="size-full touch-none select-none outline-none data-panning:**:cursor-[inherit] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-    :class="panning ? 'cursor-grabbing' : spaceHeld || mode === 'hand' ? 'cursor-grab' : mode !== 'select' && 'cursor-crosshair'"
+    preserveAspectRatio="xMinYMin meet"
+    class="size-full touch-none select-none outline-none data-panning:**:cursor-[inherit]"
+    :class="preview?.copy ? 'cursor-copy' : panning ? 'cursor-grabbing' : spaceHeld || mode === 'hand' ? 'cursor-grab' : mode !== 'select' && 'cursor-crosshair'"
     :data-panning="spaceHeld || panning ? 'yes' : undefined"
     role="application"
     tabindex="0"
@@ -1108,31 +1231,33 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
     <defs>
       <pattern
         id="plan-grid-minor"
-        :width="GRID_CM"
-        :height="GRID_CM"
+        :width="GRID_MINOR_CM"
+        :height="GRID_MINOR_CM"
         patternUnits="userSpaceOnUse"
       >
         <path
-          :d="`M${GRID_CM} 0H0V${GRID_CM}`"
+          :d="`M${GRID_MINOR_CM} 0H0V${GRID_MINOR_CM}`"
           fill="none"
           stroke="var(--ui-border)"
+          :stroke-opacity="minorOpacity"
           stroke-width="1"
           vector-effect="non-scaling-stroke"
         />
       </pattern>
       <pattern
         id="plan-grid"
-        width="100"
-        height="100"
+        :width="GRID_MAJOR_CM"
+        :height="GRID_MAJOR_CM"
         patternUnits="userSpaceOnUse"
       >
         <rect
-          width="100"
-          height="100"
+          v-if="minorOpacity > 0"
+          :width="GRID_MAJOR_CM"
+          :height="GRID_MAJOR_CM"
           fill="url(#plan-grid-minor)"
         />
         <path
-          d="M100 0H0V100"
+          :d="`M${GRID_MAJOR_CM} 0H0V${GRID_MAJOR_CM}`"
           fill="none"
           stroke="var(--ui-border-accented)"
           stroke-width="1"
@@ -1290,6 +1415,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       <!-- Furniture and fixtures (grey: no QR). -->
       <g
         v-for="item in items"
+        :id="pieceId({ kind: 'item', id: item.id })"
         :key="item.id"
         :transform="transform(item)"
         data-kind="item"
@@ -1384,9 +1510,10 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         </g>
         <!-- A shape (D278): its finish's colour and its name. -->
         <g v-else-if="isShapeKind(item.kind)">
-          <circle
+          <ellipse
             v-if="item.kind === 'block-round'"
-            :r="item.width / 2"
+            :rx="item.width / 2"
+            :ry="item.depth / 2"
             :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
             stroke="var(--ui-text-muted)"
             stroke-width="3"
@@ -1595,6 +1722,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
     >
       <g
         v-for="table in placed"
+        :id="pieceId({ kind: 'table', id: table.tableId })"
         :key="table.tableId"
         :transform="transform(table)"
         data-kind="table"
@@ -1714,14 +1842,25 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         stroke-dasharray="8 6"
         vector-effect="non-scaling-stroke"
       />
+      <!-- The size under the shape, like Figma's (ISS-029). -->
+      <rect
+        :x="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2 - chipSize(sizeText(roomPreview.bounds)).width / 2"
+        :y="roomPreview.bounds.maxY + 8 * perPixel"
+        :width="chipSize(sizeText(roomPreview.bounds)).width"
+        :height="chipSize('').height"
+        :rx="4 * perPixel"
+        fill="var(--ui-text-highlighted)"
+      />
       <text
         :x="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2"
-        :y="(roomPreview.bounds.minY + roomPreview.bounds.maxY) / 2"
+        :y="roomPreview.bounds.maxY + 8 * perPixel + chipSize('').height / 2"
         text-anchor="middle"
         dominant-baseline="central"
-        :font-size="12 * perPixel"
-        fill="var(--ui-text-highlighted)"
-      >{{ roomPreview.bounds.maxX - roomPreview.bounds.minX }} × {{ roomPreview.bounds.maxY - roomPreview.bounds.minY }} cm</text>
+        :font-size="chipSize('').font"
+        fill="var(--ui-bg)"
+        class="tabular-nums"
+        data-testid="draw-size"
+      >{{ sizeText(roomPreview.bounds) }}</text>
     </g>
 
     <!-- What a click would pick (D278). -->
@@ -1766,10 +1905,10 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       >
         <rect
           v-if="boxOf(member)"
-          :x="boxOf(member)!.minX - 4"
-          :y="boxOf(member)!.minY - 4"
-          :width="boxOf(member)!.maxX - boxOf(member)!.minX + 8"
-          :height="boxOf(member)!.maxY - boxOf(member)!.minY + 8"
+          :x="boxOf(member)!.minX"
+          :y="boxOf(member)!.minY"
+          :width="boxOf(member)!.maxX - boxOf(member)!.minX"
+          :height="boxOf(member)!.maxY - boxOf(member)!.minY"
           fill="none"
           stroke="var(--ui-primary)"
           stroke-width="1.5"
@@ -1778,14 +1917,13 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       </template>
       <rect
         v-if="selectedBounds"
-        :x="selectedBounds.minX - 12"
-        :y="selectedBounds.minY - 12"
-        :width="selectedBounds.maxX - selectedBounds.minX + 24"
-        :height="selectedBounds.maxY - selectedBounds.minY + 24"
+        :x="selectedBounds.minX"
+        :y="selectedBounds.minY"
+        :width="selectedBounds.maxX - selectedBounds.minX"
+        :height="selectedBounds.maxY - selectedBounds.minY"
         fill="none"
         stroke="var(--ui-primary)"
-        stroke-width="2"
-        stroke-dasharray="6 4"
+        stroke-width="1.5"
         vector-effect="non-scaling-stroke"
       />
     </g>
@@ -1867,39 +2005,33 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :transform="transform(table)"
         >
           <rect
-            :x="-table.extent.width / 2 - 6"
-            :y="-table.extent.depth / 2 - 6"
-            :width="table.extent.width + 12"
-            :height="table.extent.depth + 12"
+            :x="-table.extent.width / 2"
+            :y="-table.extent.depth / 2"
+            :width="table.extent.width"
+            :height="table.extent.depth"
             fill="none"
             stroke="var(--ui-primary)"
-            stroke-width="3"
+            stroke-width="1.5"
             vector-effect="non-scaling-stroke"
             pointer-events="none"
           />
-          <line
-            x1="0"
-            x2="0"
-            :y1="-table.extent.depth / 2 - 6"
-            :y2="-table.extent.depth / 2 - 44"
-            stroke="var(--ui-primary)"
-            stroke-width="3"
-            pointer-events="none"
-          />
-          <circle
-            :cy="-table.extent.depth / 2 - 56"
-            r="14"
-            fill="var(--ui-bg)"
-            stroke="var(--ui-primary)"
-            stroke-width="4"
+          <!-- Just outside each corner: drag to turn (ISS-033, Figma has no turn handle). -->
+          <rect
+            v-for="(zone, place) in rotateZones(table.extent.width, table.extent.depth)"
+            :key="`rotate-${place}`"
+            :x="zone.x"
+            :y="zone.y"
+            :width="zone.size"
+            :height="zone.size"
+            fill="transparent"
             data-kind="table"
             :data-id="table.tableId"
             data-handle="rotate"
-            data-testid="rotate-handle"
+            :data-testid="`rotate-zone-${place}`"
             class="cursor-alias"
           />
           <g
-            v-for="(point, handle) in handleCorners(table.extent.width + 12, table.extent.depth + 12)"
+            v-for="(point, handle) in handleCorners(table.extent.width, table.extent.depth)"
             :key="handle"
           >
             <rect
@@ -1938,29 +2070,32 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :transform="transform(item)"
         >
           <rect
-            :x="-item.width / 2 - 8"
-            :y="-item.depth / 2 - 8"
-            :width="item.width + 16"
-            :height="item.depth + 16"
+            :x="-item.width / 2"
+            :y="-item.depth / 2"
+            :width="item.width"
+            :height="item.depth"
             fill="none"
             stroke="var(--ui-primary)"
-            stroke-width="3"
+            stroke-width="1.5"
             vector-effect="non-scaling-stroke"
             pointer-events="none"
           />
-          <circle
-            :cy="-item.depth / 2 - 50"
-            r="14"
-            fill="var(--ui-bg)"
-            stroke="var(--ui-primary)"
-            stroke-width="4"
+          <rect
+            v-for="(zone, place) in rotateZones(item.width, item.depth)"
+            :key="`rotate-${place}`"
+            :x="zone.x"
+            :y="zone.y"
+            :width="zone.size"
+            :height="zone.size"
+            fill="transparent"
             data-kind="item"
             :data-id="item.id"
             data-handle="rotate"
+            :data-testid="`rotate-zone-${place}`"
             class="cursor-alias"
           />
           <g
-            v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width + 16, item.depth + 16))"
+            v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width, item.depth))"
             :key="handle"
           >
             <rect
@@ -2223,6 +2358,41 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         fill="var(--ui-bg-elevated)"
         stroke-width="3"
       />
+    </g>
+
+    <!-- Alt+drag (ISS-014): the copy at the pointer, while the original stays. -->
+    <use
+      v-if="copyPreview"
+      :href="copyPreview.href"
+      :transform="`translate(${copyPreview.dx} ${copyPreview.dy})`"
+      opacity="0.85"
+      pointer-events="none"
+      data-testid="copy-preview"
+    />
+
+    <!-- The live angle or size beside the pointer (ISS-029, ISS-033), on top of everything. -->
+    <g
+      v-if="liveLabel"
+      pointer-events="none"
+      data-testid="live-label"
+    >
+      <rect
+        :x="liveLabel.at.x + 16 * perPixel"
+        :y="liveLabel.at.y + 16 * perPixel"
+        :width="chipSize(liveLabel.text).width"
+        :height="chipSize('').height"
+        :rx="4 * perPixel"
+        fill="var(--ui-text-highlighted)"
+      />
+      <text
+        :x="liveLabel.at.x + 16 * perPixel + chipSize(liveLabel.text).width / 2"
+        :y="liveLabel.at.y + 16 * perPixel + chipSize('').height / 2"
+        text-anchor="middle"
+        dominant-baseline="central"
+        :font-size="chipSize('').font"
+        fill="var(--ui-bg)"
+        class="tabular-nums"
+      >{{ liveLabel.text }}</text>
     </g>
   </svg>
   <span

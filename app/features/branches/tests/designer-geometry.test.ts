@@ -2,9 +2,9 @@ import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
-import { BUILT_IN_LOOKS, findLook } from '../designer/catalog'
+import { BUILT_IN_LOOKS, findLook, keepsCircle } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { besideOf, chairPoses, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, constrainAngle, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import { fitDistance } from '../designer/scene/units'
@@ -236,6 +236,19 @@ describe('corner handles and Duplicate (2B)', () => {
     expect(corner(fromTopLeft, 2)).toEqual(corner(table, 2))
   })
 
+  it('Shift keeps the ratio, led by the axis moved most, within the limits (ISS-015)', () => {
+    // 120 x 80, the corner dragged 60 cm out: 1.5 times both ways.
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 60, y: 5 }, keepRatio: true })).toMatchObject({ width: 180, depth: 120 })
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 0, y: -40 }, keepRatio: true })).toMatchObject({ width: 60, depth: 40 })
+    // The limit stops both sides at the same scale: depth may not go under 40 cm.
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: -100, y: 0 }, keepRatio: true })).toMatchObject({ width: 60, depth: 40 })
+  })
+
+  it('Alt resizes around the centre: both sides move, the centre stays (ISS-015)', () => {
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 20, y: 10 }, fromCenter: true })).toEqual({ x: 100, y: 100, rotation: 0, width: 160, depth: 100 })
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 30, y: 0 }, fromCenter: true, keepRatio: true })).toEqual({ x: 100, y: 100, rotation: 0, width: 180, depth: 120 })
+  })
+
   it('follows the piece\'s turn: on a table turned 90°, dragging down the screen widens it', () => {
     const turned = { ...table, rotation: 90 }
     const grown = resizeFromCorner(turned, { ...limits, corner: 2, delta: { x: 0, y: 40 } })
@@ -268,5 +281,57 @@ describe('building fit', () => {
     expect(Math.asin(radius / distance)).toBeLessThan(horizontal)
     expect(distance).toBeGreaterThan(fitDistance(radius, 32, 1))
     expect(fitDistance(radius, 32, 2)).toBe(fitDistance(radius, 32, 1))
+  })
+})
+
+describe('rotating from a corner (ISS-033)', () => {
+  const center = { x: 0, y: 0 }
+  it('turns by as much as the pointer turned around the centre', () => {
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current: { x: 50, y: 50 }, origin: 0 })).toBe(90)
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current: { x: -50, y: -50 }, origin: 30 })).toBe(300)
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current: { x: 50, y: -50 }, origin: 45 })).toBe(45)
+  })
+
+  it('snaps to the step when asked, and turns freely otherwise', () => {
+    const current = rotatePoint({ x: 50, y: -50 }, 20)
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current, origin: 0 })).toBe(20)
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current, origin: 0, step: 15 })).toBe(15)
+  })
+})
+
+describe('drawing a Shape or Room rectangle (ISS-017)', () => {
+  const start = { x: 100, y: 100 }
+  it('draws from corner to corner, in any direction', () => {
+    expect(drawBounds({ start, end: { x: 300, y: 150 } })).toEqual({ minX: 100, minY: 100, maxX: 300, maxY: 150 })
+    expect(drawBounds({ start, end: { x: 0, y: 50 } })).toEqual({ minX: 0, minY: 50, maxX: 100, maxY: 100 })
+  })
+
+  it('Shift makes a square on the longer side, toward the pointer', () => {
+    expect(drawBounds({ start, end: { x: 300, y: 150 }, keepRatio: true })).toEqual({ minX: 100, minY: 100, maxX: 300, maxY: 300 })
+    expect(drawBounds({ start, end: { x: 50, y: -100 }, keepRatio: true })).toEqual({ minX: -100, minY: -100, maxX: 100, maxY: 100 })
+  })
+
+  it('Alt draws from the middle; with Shift a square around it', () => {
+    expect(drawBounds({ start, end: { x: 150, y: 125 }, fromCenter: true })).toEqual({ minX: 50, minY: 75, maxX: 150, maxY: 125 })
+    expect(drawBounds({ start, end: { x: 150, y: 125 }, fromCenter: true, keepRatio: true })).toEqual({ minX: 50, minY: 50, maxX: 150, maxY: 150 })
+  })
+})
+
+describe('round pieces (ISS-017)', () => {
+  it('a round block may be an ellipse; other round pieces stay circles; square ones are free', () => {
+    expect(keepsCircle('block-round')).toBe(false)
+    expect(keepsCircle('plant')).toBe(true)
+    expect(keepsCircle('block')).toBe(false)
+  })
+})
+
+describe('Shift while drawing walls and corners (ISS-018)', () => {
+  const from = { x: 0, y: 0 }
+  it('goes to the nearest 45° direction, on the grid', () => {
+    expect(constrainAngle(from, { x: 300, y: 50 })).toEqual({ x: 300, y: 0 })
+    expect(constrainAngle(from, { x: -40, y: -275 })).toEqual({ x: 0, y: -275 })
+    expect(constrainAngle(from, { x: 200, y: 150 })).toEqual({ x: 175, y: 175 })
+    expect(constrainAngle(from, { x: -200, y: 175 })).toEqual({ x: -200, y: 200 })
+    expect(constrainAngle(from, { x: -300, y: 25 })).toEqual({ x: -300, y: 0 })
   })
 })
