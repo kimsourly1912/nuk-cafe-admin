@@ -904,6 +904,27 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   }
 }
 
+/** Gestures that change something when released; Escape before the release drops them. */
+const CANCELLABLE: ReadonlySet<string> = new Set(['drag', 'group', 'wall', 'wall-end', 'side', 'corner', 'resize', 'rotate', 'room', 'marquee'])
+
+/**
+ * Escape while dragging (ISS-012, like Figma): the piece goes back, nothing is emitted and no undo
+ * step is made. The pointer's release then finds no gesture. Returns whether one was dropped.
+ */
+function cancelGesture(): boolean {
+  if (!gesture || !CANCELLABLE.has(gesture.type)) return false
+  gesture = null
+  preview.value = null
+  liveShape.value = null
+  liveWalls.value = null
+  roomPreview.value = null
+  marquee.value = null
+  groupDelta.value = null
+  guides.value = []
+  liveLabel.value = null
+  return true
+}
+
 /** A tap on empty plan: clears the selection, or adds a corner or a wall end while drawing. */
 function tap(plan: Point | null, keys: { altKey: boolean, fine: boolean }) {
   if (props.mode === 'hand') return
@@ -1005,14 +1026,15 @@ const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x
  * leaving a tool, the tool keys).
  * - Arrows move the selection or the picked corner 5 cm, 25 cm with Shift (Figma's small and big
  *   nudge); Shift+R turns the selection 90°; Delete or Backspace removes it.
- * - Escape cancels in steps: a placement, the last corner drawn, the wall being drawn, the picked
- *   corner, then the selection.
+ * - Escape cancels in steps: a drag, turn, resize or box still held (ISS-012), a placement, the
+ *   last corner drawn, the wall being drawn, the picked corner, then the selection.
  */
 function keydown(event: KeyboardEvent): boolean {
   const done = () => {
     event.preventDefault()
     return true
   }
+  if (event.key === 'Escape' && cancelGesture()) return done()
   if (props.placing) {
     if (event.key !== 'Escape') return false
     emit('cancelPlace')

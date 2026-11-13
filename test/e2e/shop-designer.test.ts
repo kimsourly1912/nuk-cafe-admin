@@ -713,6 +713,17 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(async () => (await positionOf(page, 'L1')).x).not.toBe(before.x)
     expect((await positionOf(page, 'L1')).y).toBe(before.y)
     await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+    // Escape before the release puts it back (ISS-012).
+    const held = await positionOf(page, 'L1')
+    const from = await onScreen(page, held)
+    const away = await onScreen(page, { x: held.x + 150, y: held.y + 100 })
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(away.x, away.y, { steps: 6 })
+    await page.keyboard.press('Escape')
+    await page.mouse.up()
+    expect(await positionOf(page, 'L1')).toEqual(held)
+    await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
     // Shift+click on it without a move takes it out of the selection.
     await l1.click({ modifiers: ['Shift'] })
     await page.getByTestId('selected-table').waitFor({ state: 'detached' })
