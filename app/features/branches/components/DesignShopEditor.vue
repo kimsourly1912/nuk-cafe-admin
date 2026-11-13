@@ -21,7 +21,7 @@ import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
-import { alignOffsets, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
 import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
@@ -533,6 +533,14 @@ function turnGroup() {
 
 /** Align (ISS-026, Figma): each selected one lines up with the set's edge, as drawn; one undo step. */
 function alignGroup(edge: AlignEdge) {
+  moveEach(boxes => alignOffsets(boxes, edge))
+}
+/** Distribute (owner, 2026-11-13): equal gaps across or down; the outer two stay. */
+function distributeGroup(axis: 'x' | 'y') {
+  moveEach(boxes => distributeOffsets(boxes, axis))
+}
+/** Moves each selected one by its own offset, from their boxes as drawn; one undo step. */
+function moveEach(offsets: (boxes: { target: PlanSelection, bounds: Bounds }[]) => { target: PlanSelection, delta: Point }[]) {
   const plan = canvas.value
   const floorId = floor.value?.id
   if (!plan || !floorId) return
@@ -540,12 +548,16 @@ function alignGroup(edge: AlignEdge) {
     const bounds = plan.boxOf(target)
     return bounds ? [{ target, bounds }] : []
   })
-  const moves = alignOffsets(boxes, edge)
+  const moves = offsets(boxes)
   if (!moves.length) return
   draft.change((next) => {
     for (const { target, delta } of moves) shiftSelected(next, floorId, [target], delta)
   })
 }
+const DISTRIBUTE_BUTTONS: { axis: 'x' | 'y', label: string, icon: string }[] = [
+  { axis: 'x', label: 'Distribute across', icon: 'i-lucide-align-horizontal-space-between' },
+  { axis: 'y', label: 'Distribute down', icon: 'i-lucide-align-vertical-space-between' },
+]
 const ALIGN_BUTTONS: { edge: AlignEdge, label: string, icon: string }[] = [
   { edge: 'left', label: 'Align left', icon: 'i-lucide-align-start-vertical' },
   { edge: 'center', label: 'Align centres', icon: 'i-lucide-align-center-vertical' },
@@ -1810,6 +1822,21 @@ const pendingLabel = computed(() => {
             :aria-label="button.label"
             :data-testid="`align-${button.edge}`"
             @click="alignGroup(button.edge)"
+          />
+        </UTooltip>
+        <UTooltip
+          v-for="button in DISTRIBUTE_BUTTONS"
+          :key="button.axis"
+          :text="group.length < 3 ? `${button.label} (three or more)` : button.label"
+        >
+          <UButton
+            :icon="button.icon"
+            color="neutral"
+            variant="ghost"
+            :aria-label="button.label"
+            :disabled="group.length < 3"
+            :data-testid="`distribute-${button.axis}`"
+            @click="distributeGroup(button.axis)"
           />
         </UTooltip>
       </div>

@@ -183,3 +183,26 @@ export function alignOffsets(boxes: readonly { target: PlanSelection, bounds: Bo
     return { target, delta }
   }).filter(({ delta }) => delta.x || delta.y)
 }
+
+/**
+ * Distribute (owner, 2026-11-13, Figma's tidy spacing): three or more along `axis` get equal gaps;
+ * the first and last stay where they are. Whole centimetres, so a gap may differ by 1 cm.
+ */
+export function distributeOffsets(boxes: readonly { target: PlanSelection, bounds: Bounds }[], axis: 'x' | 'y'): { target: PlanSelection, delta: Point }[] {
+  if (boxes.length < 3) return []
+  const min = axis === 'x' ? 'minX' : 'minY'
+  const max = axis === 'x' ? 'maxX' : 'maxY'
+  const sorted = [...boxes].sort((a, b) => a.bounds[min] - b.bounds[min])
+  const first = sorted[0]!
+  const last = sorted.at(-1)!
+  const sizes = sorted.reduce((sum, box) => sum + box.bounds[max] - box.bounds[min], 0)
+  const gap = (last.bounds[max] - first.bounds[min] - sizes) / (sorted.length - 1)
+  let at = first.bounds[min]
+  const moves: { target: PlanSelection, delta: Point }[] = []
+  for (const box of sorted) {
+    const shift = Math.round(at - box.bounds[min])
+    if (shift && box !== first && box !== last) moves.push({ target: box.target, delta: axis === 'x' ? { x: shift, y: 0 } : { x: 0, y: shift } })
+    at += box.bounds[max] - box.bounds[min] + gap
+  }
+  return moves
+}

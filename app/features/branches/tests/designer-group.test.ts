@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ShopLayout } from '#shared/contracts/shop-layout'
-import { alignOffsets, copySelected, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, copySelected, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
 import type { PlanSelection } from '../designer/plan'
 
@@ -158,5 +158,15 @@ describe('paste on another floor (ISS-022)', () => {
     expect(next.floors[1]!.items).toEqual([expect.objectContaining({ id: copies[0]!.id, kind: 'plant', x: 100, y: 100 })])
     expect(next.floors[1]!.walls).toHaveLength(1)
     expect(next.floors[0]!.items).toHaveLength(2)
+  })
+})
+
+describe('distribute (owner, 2026-11-13)', () => {
+  const box = (id: string, minX: number, width: number) => ({ target: { kind: 'item' as const, id }, bounds: { minX, minY: 0, maxX: minX + width, maxY: 50 } })
+  it('gives three or more equal gaps, the outer two staying put', () => {
+    // 0–100, 120–170, 400–500: 300 cm of room minus 50 cm in the middle, so 125 cm each side.
+    expect(distributeOffsets([box('c', 400, 100), box('a', 0, 100), box('b', 120, 50)], 'x')).toEqual([{ target: { kind: 'item', id: 'b' }, delta: { x: 105, y: 0 } }])
+    expect(distributeOffsets([box('a', 0, 100), box('b', 225, 50), box('c', 400, 100)], 'x')).toEqual([])
+    expect(distributeOffsets([box('a', 0, 100), box('b', 300, 50)], 'x')).toEqual([])
   })
 })
