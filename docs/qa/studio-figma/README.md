@@ -52,4 +52,6 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-010](issues/ISS-010.md) | Low | Bug | "Zoom to s…" label cut off |
 | [ISS-011](issues/ISS-011.md) | Medium | Bug | Shift + drag deselects the piece, no straight-line move |
 | [ISS-012](issues/ISS-012.md) | Medium | Gap | Esc during a drag does not cancel it |
-| [ISS-013](issues/ISS-013.md) | Low | Improvement | Rotate snapping is the opposite of Figma |
+| [ISS-013](issues/ISS-013.md) | Low | Improvement | Rotate: free by default, Shift snaps 15° (owner: follow Figma) |
+| [ISS-014](issues/ISS-014.md) | Medium | Bug | Alt + drag copy does not work well (needs details) |
+| [ISS-015](issues/ISS-015.md) | Medium | Gap | Shift and Alt do nothing while resizing |
