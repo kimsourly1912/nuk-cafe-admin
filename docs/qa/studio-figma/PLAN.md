@@ -23,6 +23,8 @@ Third PR: ISS-034 (mitred wall corners, snapping to wall faces).
 
 Fourth PR (Phase 5 in one PR, owner): ISS-021 layers with hide and lock, ISS-035 floor frames, floor order, ISS-036 pages and several frames on one canvas, ISS-027 autosave and history (D279). Still waiting for the owner or the tester: ISS-002, 005 (range), 008, 016, 023, 024 (retest), 030; pages without floors hold nothing else yet.
 
+Fifth PR (small items in one PR, owner): ISS-016 Shape click, ISS-008 fuller right-click menu (Claude decided the scope), ISS-030 cursors, ISS-005 zoom 2 % to 25,600 %; also the root cause of the menu panel's timing-sensitive height test (D268). Still waiting for the tester: ISS-002, 023, 024 (retest).
+
 ## Phase 1: View and zoom (start here)
 
 Why first: every other check depends on a stable camera.
@@ -86,9 +88,9 @@ Owner answers are in ISS-035 and ISS-036. Build in this order:
 ## Owner decisions still open
 
 - ISS-004: which toggles to add and the snap step.
-- ISS-008: how far the context menu should go.
+- ISS-008: decided by Claude in the fifth PR (Copy, Paste here, order, Hide, Lock); the owner can ask for more.
 - ISS-017: the key for Room "cut".
-- ISS-018, ISS-019, ISS-023, ISS-030: details to collect from hand tests.
+- ISS-018, ISS-019, ISS-023: details to collect from hand tests (ISS-030 built from a code read).
 - ISS-027: autosave meaning.
 - ISS-036 step 4: what pages without frames contain.
 

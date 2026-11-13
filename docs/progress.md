@@ -3,6 +3,16 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio follows Figma QA, fifth PR: the remaining small items (D278, 2026-11-13)
+
+Branch `claude/bold-hypatia-sx8nkl`, from main after PR #310. Owner: merge #310 when green, then the next step, small and medium items in one PR.
+
+- **Built:** ISS-016 a Shape click makes a 100 x 100 cm shape; ISS-008 the right-click menu has Copy, Paste here, Bring to front, Send to back, Hide and Lock (scope decided by Claude, see the issue); ISS-030 cursors like Figma's (arrow on pieces, resize arrows turned with the piece, a rotate cursor); ISS-005 zoom 2 % to 25,600 % (Figma users' figure; not in Figma's docs), metre grid fades far out.
+- **Test root cause (D268):** "the panel's height travels with the rows" failed on CI by chance. It removed a line as soon as "12 items" showed, while the panel was still sliding open from the empty state, so it measured that slide. It now waits until nothing in the panel moves and reads the height animation's own start and end. Reading the animation without the wait failed 3 of 3 local runs (it found the opening slide); with the wait, 3 of 3 passed.
+- **How to verify:** on staging, Studio 2D: Shape, click once (a 1 m square, selected); right-click a plant: Copy, then right-click elsewhere on the plan, Paste here; Bring to front over a table; Hide, Lock from the menu; hover a turned table's corners (arrows follow the turn) and just outside them (curved arrow); zoom out to 2 % and in to 25,600 %.
+- **Evidence (local):** `pnpm lint` and `pnpm typecheck` clean; `pnpm test:unit`: 196 files, 2,998 passed, 1 skipped; `test/e2e/shop-designer.test.ts` 30 passed; `test/e2e/shop-menu.test.ts` 33 passed three runs in a row. No staging check yet.
+- **Open:** ISS-002, 023, 024 wait for the tester's retest.
+
 ### Studio follows Figma QA, Phase 5 in one PR: layers, frames, pages, autosave (D278, D279, 2026-11-13)
 
 Branch `claude/bold-hypatia-sx8nkl`, from main after PR #309. Owner: start Phase 5, hide and lock like Figma, the other steps too, in one PR; autosave: real, with history (D279).
