@@ -3,6 +3,10 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Position inspector Figma reference (2026-11-13)
+
+[Position inspector](qa/studio-editor-evidence/inspector/position.md) verifies the six align actions, X/Y editing, frame constraints, rotation, Rotate 90° right and flips against Figma's live panel and official help. GUIDE-01 was corrected: blue dotted lines visualize frame constraints; the red Alt and drag guidance is separate. Studio comparison and product mapping are pending; no app code changed.
+
 ### Studio position and alignment reference (GUIDE-01, 2026-11-13)
 
 [GUIDE-01](qa/studio-editor-evidence/checks/GUIDE-01.md) records selected blue dotted guides, Alt distance labels to elements and frame edges, and red alignment guides during dragging. One consolidated image is published under `evidence/GUIDE-01/`. Compare with the existing D278 PR 3 smart guides and Alt distances; the Studio run and the blue guide frame condition remain open. No app code changed.

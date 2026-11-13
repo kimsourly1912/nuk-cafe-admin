@@ -8,6 +8,10 @@ This folder records how Figma's editing tools behave and gives Claude Code steps
 | [CIRC-01](checks/CIRC-01.md) | Circle | [Final mockup](evidence/CIRC-01/circle-tool-states.png) | Needs test |
 | [GUIDE-01](checks/GUIDE-01.md) | Position and alignment guides | [Final mockup](evidence/GUIDE-01/line-guides-states.png) | Needs test |
 
+## Inspector reference
+
+- [Position: alignment, X/Y, constraints, rotation and flips](inspector/position.md)
+
 ## Workflow
 
 1. Copy [TEMPLATE.md](TEMPLATE.md) for the next tool. Use one check file per interaction or group of closely related interactions.
