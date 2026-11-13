@@ -12,7 +12,7 @@ import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery
 import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
 import { edgeLength, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
-import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
+import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
 import type { AlignEdge } from '../designer/group'
@@ -33,6 +33,7 @@ import ExploreLayoutSettings from './ExploreLayoutSettings.vue'
 import ItemLookFormModal from './ItemLookFormModal.vue'
 import type { ItemLookSource } from './ItemLookFormModal.vue'
 import FloorPlanCanvas from './FloorPlanCanvas.vue'
+import StudioLayerRow from './StudioLayerRow.vue'
 import StudioCommands from './StudioCommands.vue'
 import LayoutStarterPicker from './LayoutStarterPicker.vue'
 import LookFormModal from './LookFormModal.vue'
@@ -150,7 +151,7 @@ const foundPieces = computed(() => {
   return [
     ...tablesOn(current.id).map(placement => ({ selection: { kind: 'table' as const, id: placement.tableId }, label: tableLabel(placement.tableId) ?? 'Unavailable table', icon: 'i-lucide-table-2' })),
     ...current.items.map(item => ({ selection: { kind: 'item' as const, id: item.id }, label: pieceLabel(item), icon: ITEM_ICONS[item.kind] })),
-    ...current.walls.map((wall, index) => ({ selection: { kind: 'wall' as const, id: wall.id }, label: `Interior wall ${index + 1}`, icon: 'i-lucide-brick-wall' })),
+    ...current.walls.map((wall, index) => ({ selection: { kind: 'wall' as const, id: wall.id }, label: wallLabel(wall, index), icon: 'i-lucide-brick-wall' })),
   ].filter(piece => findMatches(piece.label))
 })
 
@@ -602,18 +603,85 @@ function floorOrder(): PlanSelection[] {
   ]
 }
 
+// --- Layers (ISS-021, like Figma's): hide, lock, rename, range select, hover ---
+
+type LayerFlag = 'hidden' | 'locked'
+type Layer = { hidden?: true, locked?: true }
+/** The draft's own table, piece or inside wall for a target on a floor. */
+function layerIn(next: ShopLayout, target: PlanSelection, floorId: string): (Layer & { name?: string }) | undefined {
+  if (target.kind === 'table') return next.placements.find(placement => placement.tableId === target.id)
+  const on = next.floors.find(candidate => candidate.id === floorId)
+  if (target.kind === 'item') return on?.items.find(item => item.id === target.id)
+  if (target.kind === 'wall') return on?.walls.find(wall => wall.id === target.id)
+}
+const setFlag = (layer: Layer | undefined, flag: LayerFlag, on: boolean) => {
+  if (!layer) return
+  // Left out when off, as the contract saves it.
+  if (flag === 'hidden') {
+    if (on) layer.hidden = true
+    else delete layer.hidden
+  }
+  else if (on) layer.locked = true
+  else delete layer.locked
+}
+/** The eye or the lock of a row: one undo step, saved with the layout. */
+function setLayerFlag(target: PlanSelection, floorId: string, flag: LayerFlag, on: boolean) {
+  draft.change(next => setFlag(layerIn(next, target, floorId), flag, on))
+}
+function setFloorFlag(floorId: string, flag: LayerFlag, on: boolean) {
+  draft.change(next => setFlag(next.floors.find(candidate => candidate.id === floorId), flag, on))
+}
+/** A double-click rename of a piece or an inside wall; a table's name is its own record (Edit table). */
+function renameLayer(target: PlanSelection, floorId: string, name: string) {
+  draft.change((next) => {
+    const layer = layerIn(next, target, floorId)
+    if (layer && target.kind !== 'table') layer.name = name
+  })
+}
+function renameFloorLayer(floorId: string, name: string) {
+  draft.change((next) => {
+    const renamed = next.floors.find(candidate => candidate.id === floorId)
+    if (renamed) renamed.name = name
+  })
+}
+/** A row clicked: Shift selects the range from the last picked, Ctrl/⌘ adds or takes it out. */
+function clickLayer(target: PlanSelection, floorId: string, event: MouseEvent) {
+  if (floor.value?.id !== floorId) {
+    selectPlaced(target, floorId)
+    return
+  }
+  const order = floorOrder()
+  const anchor = selection.value ? order.findIndex(entry => entry.kind === selection.value!.kind && entry.id === selection.value!.id) : -1
+  const at = order.findIndex(entry => entry.kind === target.kind && entry.id === target.id)
+  if (event.shiftKey && anchor >= 0 && at >= 0) {
+    const [from, to] = anchor <= at ? [anchor, at] : [at, anchor]
+    // The anchor stays the last picked, so a second Shift+click spans from it again.
+    props.editor.selectMany([...order.slice(from, to + 1).filter(entry => entry.id !== order[anchor]!.id), order[anchor]!])
+    return
+  }
+  if (event.metaKey || event.ctrlKey) return toggleSelected(target)
+  selectPlaced(target, floorId)
+}
+/** The row pointed at in Layers: outlined on the plan. */
+const layerHover = ref<PlanSelection | null>(null)
+/** In the selection: the one, or one of the set. */
+const isPicked = (kind: PlanSelection['kind'], id: string) => props.editor.selected.value.some(member => member.kind === kind && member.id === id)
+const wallLabel = (wall: InnerWall, index: number) => wall.name ?? `Interior wall ${index + 1}`
+
 function selectNext(step: 1 | -1) {
   const next = cycleSelection(floorOrder(), selection.value, step)
   if (next) props.editor.selectMany([next])
 }
 
+/** Ctrl/⌘+A: everything on the floor that is shown and not locked (Figma's). */
 function selectAll() {
   const current = floor.value
   if (!current) return
+  const free = (layer: Layer) => !layer.hidden && !layer.locked
   props.editor.selectMany([
-    ...layout.value.placements.filter(placement => placement.floorId === current.id).map(placement => ({ kind: 'table' as const, id: placement.tableId })),
-    ...current.items.map(item => ({ kind: 'item' as const, id: item.id })),
-    ...current.walls.map(wall => ({ kind: 'wall' as const, id: wall.id })),
+    ...layout.value.placements.filter(placement => placement.floorId === current.id && free(placement)).map(placement => ({ kind: 'table' as const, id: placement.tableId })),
+    ...current.items.filter(free).map(item => ({ kind: 'item' as const, id: item.id })),
+    ...current.walls.filter(free).map(wall => ({ kind: 'wall' as const, id: wall.id })),
   ])
 }
 
@@ -1428,52 +1496,77 @@ const pendingLabel = computed(() => {
           @keydown.esc.stop.prevent="renaming = null"
           @blur="commitRename(candidate.id)"
         />
-        <UButton
+        <!-- Layers (ISS-021): the floor as a frame, then what is on it, like Figma's layers list. -->
+        <StudioLayerRow
           v-else
           :label="candidate.name"
-          :color="candidate.id === floor?.id ? 'primary' : 'neutral'"
-          :variant="candidate.id === floor?.id ? 'soft' : 'ghost'"
-          :aria-pressed="candidate.id === floor?.id"
-          :data-testid="`floor-tab-${candidate.name}`"
-          icon="i-lucide-layers"
-          block
-          class="justify-start"
-          @click="selectFloor(candidate.id); sheet = null"
+          icon="i-lucide-frame"
+          :current="candidate.id === floor?.id"
+          :hidden="candidate.hidden"
+          :locked="candidate.locked"
+          :testid="`floor-tab-${candidate.name}`"
+          @select="selectFloor(candidate.id); sheet = null"
+          @rename="name => renameFloorLayer(candidate.id, name)"
+          @hidden="on => setFloorFlag(candidate.id, 'hidden', on)"
+          @locked="on => setFloorFlag(candidate.id, 'locked', on)"
         >
           <template #trailing>
-            <span class="ml-auto text-xs text-muted">{{ tablesOn(candidate.id).length }} {{ tablesOn(candidate.id).length === 1 ? 'table' : 'tables' }}</span>
+            <span class="text-xs text-muted">{{ tablesOn(candidate.id).length }} {{ tablesOn(candidate.id).length === 1 ? 'table' : 'tables' }}</span>
           </template>
-        </UButton>
+        </StudioLayerRow>
         <div
           v-if="candidate.id === floor?.id"
-          class="mt-1 ml-3 flex flex-col gap-1 border-l border-default pl-2"
+          class="mt-0.5 flex flex-col"
+          role="group"
+          :aria-label="`On ${candidate.name}`"
         >
-          <UButton
+          <StudioLayerRow
             v-for="table in tablesOn(candidate.id)"
             :key="table.tableId"
+            :depth="1"
             :label="tableLabel(table.tableId) ?? 'Unavailable table'"
             icon="i-lucide-table-2"
-            :color="selection?.kind === 'table' && selection.id === table.tableId ? 'primary' : 'neutral'"
-            variant="ghost"
-            @click="selectPlaced({ kind: 'table', id: table.tableId }, candidate.id)"
+            :selected="isPicked('table', table.tableId)"
+            :hidden="table.hidden"
+            :locked="table.locked"
+            :renameable="false"
+            :testid="`layer-table-${tableLabel(table.tableId)}`"
+            @select="event => clickLayer({ kind: 'table', id: table.tableId }, candidate.id, event)"
+            @hidden="on => setLayerFlag({ kind: 'table', id: table.tableId }, candidate.id, 'hidden', on)"
+            @locked="on => setLayerFlag({ kind: 'table', id: table.tableId }, candidate.id, 'locked', on)"
+            @hover="on => layerHover = on ? { kind: 'table', id: table.tableId } : null"
           />
-          <UButton
+          <StudioLayerRow
             v-for="item in candidate.items"
             :key="item.id"
+            :depth="1"
             :label="pieceLabel(item)"
             :icon="ITEM_ICONS[item.kind]"
-            :color="selection?.kind === 'item' && selection.id === item.id ? 'primary' : 'neutral'"
-            variant="ghost"
-            @click="selectPlaced({ kind: 'item', id: item.id }, candidate.id)"
+            :selected="isPicked('item', item.id)"
+            :hidden="item.hidden"
+            :locked="item.locked"
+            :testid="`layer-item-${item.id}`"
+            @select="event => clickLayer({ kind: 'item', id: item.id }, candidate.id, event)"
+            @rename="name => renameLayer({ kind: 'item', id: item.id }, candidate.id, name)"
+            @hidden="on => setLayerFlag({ kind: 'item', id: item.id }, candidate.id, 'hidden', on)"
+            @locked="on => setLayerFlag({ kind: 'item', id: item.id }, candidate.id, 'locked', on)"
+            @hover="on => layerHover = on ? { kind: 'item', id: item.id } : null"
           />
-          <UButton
+          <StudioLayerRow
             v-for="(wall, index) in candidate.walls"
             :key="wall.id"
-            :label="`Interior wall ${index + 1}`"
+            :depth="1"
+            :label="wallLabel(wall, index)"
             icon="i-lucide-brick-wall"
-            :color="selection?.kind === 'wall' && selection.id === wall.id ? 'primary' : 'neutral'"
-            variant="ghost"
-            @click="selectPlaced({ kind: 'wall', id: wall.id }, candidate.id)"
+            :selected="isPicked('wall', wall.id)"
+            :hidden="wall.hidden"
+            :locked="wall.locked"
+            :testid="`layer-wall-${wall.id}`"
+            @select="event => clickLayer({ kind: 'wall', id: wall.id }, candidate.id, event)"
+            @rename="name => renameLayer({ kind: 'wall', id: wall.id }, candidate.id, name)"
+            @hidden="on => setLayerFlag({ kind: 'wall', id: wall.id }, candidate.id, 'hidden', on)"
+            @locked="on => setLayerFlag({ kind: 'wall', id: wall.id }, candidate.id, 'locked', on)"
+            @hover="on => layerHover = on ? { kind: 'wall', id: wall.id } : null"
           />
         </div>
       </div>
@@ -2556,6 +2649,7 @@ const pendingLabel = computed(() => {
                 :mode="mode"
                 :round-shape="roundShape"
                 :room-cut="roomCut"
+                :list-hover="layerHover"
                 :group="group"
                 :placing="!!pending"
                 @place="placePending"

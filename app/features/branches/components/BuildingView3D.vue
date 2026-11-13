@@ -131,7 +131,7 @@ const selectedPiece = computed(() => {
   return {
     item,
     floor,
-    name: look?.name ?? spec.label,
+    name: item.name ?? look?.name ?? spec.label,
     details: [what, size, isItemLookKind(item.kind) && spec.footprint === 'round' ? `${pieceHeight(item)} cm high` : null, `${floor.name} floor`].filter(Boolean).join(' · '),
     photo: look?.photo?.url ?? spec.photo,
   }

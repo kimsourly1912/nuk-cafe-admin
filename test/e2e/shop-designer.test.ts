@@ -1122,6 +1122,36 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Undo' }).click()
     await page.getByRole('button', { name: 'Undo' }).click()
     await expect.poll(() => plants.count()).toBe(count)
+
+    // Layers (ISS-021, Figma): pointing at a row outlines it on the plan; the eye hides it from the
+    // plan; the lock stops picks on the plan while Layers still selects it; a double-click renames;
+    // Shift+click selects the range.
+    await page.keyboard.press('Escape')
+    await showPanel(page, 'Floors')
+    const plantId = (await original.getAttribute('id'))!.replace('plan-piece-item-', '')
+    const plantRow = page.getByTestId(`layer-item-${plantId}-row`)
+    await plantRow.hover()
+    await plan(page).getByTestId('plan-hover').waitFor()
+    await plantRow.getByTestId('layer-eye').click()
+    await expect.poll(() => original.count()).toBe(0)
+    await plantRow.getByTestId('layer-eye').click()
+    await expect.poll(() => original.count()).toBe(1)
+    const l1Row = page.getByTestId('layer-table-L1-row')
+    await l1Row.hover()
+    await l1Row.getByTestId('layer-lock').click()
+    await expect.poll(() => l1.getAttribute('pointer-events')).toBe('none')
+    await page.getByTestId('layer-table-L1').click()
+    await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+    await l1Row.getByTestId('layer-lock').click()
+    await expect.poll(() => l1.getAttribute('pointer-events')).toBeNull()
+    await page.getByTestId(`layer-item-${plantId}`).dblclick()
+    const nameField = plantRow.getByRole('textbox')
+    await nameField.fill('Fern')
+    await nameField.press('Enter')
+    await expect.poll(() => plantRow.textContent()).toContain('Fern')
+    await page.getByTestId('layer-table-L1').click()
+    await page.getByTestId(`layer-item-${plantId}`).click({ modifiers: ['Shift'] })
+    await expect.poll(() => group.textContent()).toMatch(/\d+ selected/)
   })
 
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {

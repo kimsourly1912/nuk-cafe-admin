@@ -46,6 +46,8 @@ const props = defineProps<{
   showBelow: boolean
   mode: PlanMode
   placing?: boolean
+  /** The row pointed at in Studio's Layers list (ISS-021): outlined like a hovered piece. */
+  listHover?: PlanSelection | null
   /** The Shape tool draws a circle (a round block) rather than a rectangle (D278). */
   roundShape?: boolean
   /** Room cuts the rectangle out instead of adding it (the tool bar's Cut, owner: Alt is Figma's "from the middle"). */
@@ -198,6 +200,20 @@ const roomPreview = shallowRef<{ bounds: Bounds, cut: boolean } | null>(null)
 /** The inside walls while an end or a whole wall is dragged (D278). */
 const liveWalls = shallowRef<InnerWall[] | null>(null)
 const walls = computed(() => liveWalls.value ?? floor.value.walls)
+/** The inside walls drawn: a hidden one (ISS-021) is not, but still stays joined to the others. */
+const shownWalls = computed(() => walls.value.filter(wall => !wall.hidden))
+
+/**
+ * Locked in Layers (ISS-021, like Figma): drawn, but not picked, dragged or boxed on the plan; a
+ * locked or hidden floor locks everything on it. Layers and Properties still select and edit it.
+ */
+function isLocked(kind: PlanSelection['kind'], id: string): boolean {
+  if (floor.value.locked || floor.value.hidden) return true
+  if (kind === 'table') return !!props.layout.placements.find(placement => placement.tableId === id)?.locked
+  if (kind === 'item') return !!floor.value.items.find(item => item.id === id)?.locked
+  if (kind === 'wall') return !!floor.value.walls.find(wall => wall.id === id)?.locked
+  return false
+}
 /** Each inside wall as drawn: its solid spans, its doors (gaps with a swing) and windows. */
 /** An inside wall's thickness as built in 3D: glass is thin, the others a full wall's. */
 const innerThickness = (wall: InnerWall) => (innerWallKind(wall) === 'glass' ? GLASS_THICKNESS_CM : INNER_WALL_THICKNESS_CM)
@@ -206,7 +222,7 @@ const innerThickness = (wall: InnerWall) => (innerWallKind(wall) === 'glass' ? G
 const pointKey = (point: Point) => `${point.x},${point.y}`
 const solidEnds = computed(() => {
   const ends = new Map<string, InnerWall[]>()
-  for (const wall of walls.value) {
+  for (const wall of shownWalls.value) {
     if (innerWallKind(wall) !== 'wall') continue
     for (const point of [wall.from, wall.to]) ends.set(pointKey(point), [...(ends.get(pointKey(point)) ?? []), wall])
   }
@@ -221,7 +237,7 @@ function joinedAt(wall: InnerWall, point: Point, into: boolean) {
   return into === endsHere ? { from: other.from, to: other.to } : { from: other.to, to: other.from }
 }
 
-const innerWalls = computed(() => walls.value.map((wall) => {
+const innerWalls = computed(() => shownWalls.value.map((wall) => {
   const length = innerWallLength(wall)
   const along = (offset: number) => ({ x: wall.from.x + (wall.to.x - wall.from.x) * offset / Math.max(length, 1), y: wall.from.y + (wall.to.y - wall.from.y) * offset / Math.max(length, 1) })
   // A door swings to the wall's right as drawn (start to end), one width long.
@@ -336,10 +352,11 @@ function posed<T extends Sized>(selection: PlanSelection, object: T): T {
   return { ...object, x: live.x, y: live.y, rotation: live.rotation, width: live.width ?? object.width, depth: live.depth ?? object.depth }
 }
 
-const items = computed(() => floor.value.items.map(item => posed({ kind: 'item', id: item.id }, item)))
+// Hidden in Layers (ISS-021): not drawn, picked or snapped to on the plan.
+const items = computed(() => floor.value.items.filter(item => !item.hidden).map(item => posed({ kind: 'item', id: item.id }, item)))
 
 const posedPlacements = computed(() => props.layout.placements
-  .filter(placement => placement.floorId === floor.value.id)
+  .filter(placement => placement.floorId === floor.value.id && !placement.hidden)
   .map(placement => posed({ kind: 'table', id: placement.tableId }, placement)))
 
 const placed = computed(() => posedPlacements.value
@@ -396,7 +413,7 @@ const pieceBoxes = computed((): { target: PlanSelection, bounds: Bounds, from?: 
   ...items.value.map(item => ({ target: { kind: 'item' as const, id: item.id }, bounds: boundsOf(rectCorners(item, item.width, item.depth, item.rotation)) })),
   // A wall's box is its band, faces included, not its centre line (ISS-034): pieces line up with
   // its faces and can sit flush against it.
-  ...walls.value.map(wall => ({ target: { kind: 'wall' as const, id: wall.id }, bounds: boundsOf(wallStrip(wall, -innerThickness(wall) / 2, innerThickness(wall) / 2)), from: wall.from, to: wall.to })),
+  ...shownWalls.value.map(wall => ({ target: { kind: 'wall' as const, id: wall.id }, bounds: boundsOf(wallStrip(wall, -innerThickness(wall) / 2, innerThickness(wall) / 2)), from: wall.from, to: wall.to })),
 ])
 const boxOf = (target: PlanSelection) => pieceBoxes.value.find(box => box.target.kind === target.kind && box.target.id === target.id)?.bounds
 const union = (list: readonly Bounds[]): Bounds | null => (list.length ? boundsOf(list.flatMap(bounds => [{ x: bounds.minX, y: bounds.minY }, { x: bounds.maxX, y: bounds.maxY }])) : null)
@@ -445,7 +462,7 @@ const selectionFrames = computed(() => {
 
 /** The hovered piece's outline, or the hovered wall's or edge's line; none for the selection itself. */
 const hoverOutline = computed(() => {
-  const target = hovered.value
+  const target = hovered.value ?? props.listHover ?? null
   if (props.mode !== 'select' || !target || isSelected(target.kind, target.id)) return null
   if (target.kind === 'table') {
     const table = placed.value.find(candidate => candidate.tableId === target.id)
@@ -973,7 +990,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   if (finished.type === 'pan' && !finished.moved && !finished.navigateOnly) return tap(finished.plan, finished.event)
   if (finished.type === 'marquee') {
     if (!finished.moved || !box) return tap(finished.startPlan, { shiftKey: event.shiftKey, fine: fineSnap(event) })
-    const touched = pieceBoxes.value.filter(piece => piece.from && piece.to ? segmentTouches(box, piece.from, piece.to) : overlaps(box, piece.bounds))
+    const touched = pieceBoxes.value.filter(piece => !isLocked(piece.target.kind, piece.target.id) && (piece.from && piece.to ? segmentTouches(box, piece.from, piece.to) : overlaps(box, piece.bounds)))
     emit('selectMany', touched.map(piece => piece.target), finished.additive)
     return
   }
@@ -1191,6 +1208,9 @@ function keydown(event: KeyboardEvent): boolean {
     emit('select', null)
     return done()
   }
+  // Locked (ISS-021): the plan's keys don't move, turn or delete it; unlock it in Layers first.
+  const locked = (multi.value ? props.group! : [selection]).some(member => isLocked(member.kind, member.id))
+  if (locked && (arrow || event.key === 'Delete' || event.key === 'Backspace' || (event.shiftKey && event.code === 'KeyR'))) return done()
   if (event.key === 'Delete' || event.key === 'Backspace') {
     emit('remove', selection)
     return done()
@@ -1381,6 +1401,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       <g
         v-for="wall in innerWalls"
         :key="wall.id"
+        :pointer-events="isLocked('wall', wall.id) ? 'none' : undefined"
         data-kind="wall"
         :data-id="wall.id"
         :data-testid="`plan-wall-${wall.id}`"
@@ -1472,6 +1493,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         v-for="item in items"
         :id="pieceId({ kind: 'item', id: item.id })"
         :key="item.id"
+        :pointer-events="isLocked('item', item.id) ? 'none' : undefined"
         :transform="transform(item)"
         data-kind="item"
         :data-id="item.id"
@@ -1776,6 +1798,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         v-for="table in placed"
         :id="pieceId({ kind: 'table', id: table.tableId })"
         :key="table.tableId"
+        :pointer-events="isLocked('table', table.tableId) ? 'none' : undefined"
         :transform="transform(table)"
         data-kind="table"
         :data-id="table.tableId"
