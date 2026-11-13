@@ -826,6 +826,95 @@ describe('the shop designer on saved layouts', () => {
     expect(ground.items.find(item => item.kind === 'block')).toMatchObject({ name: 'Stage', height: 40, width: 200, depth: 100 })
   })
 
+  it('selects several together (D278): Ctrl/⌘+A, Shift+click, a box, arrows and Delete as one undo step, Alt distances', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    const l1 = plan(page).getByTestId('plan-table-L1')
+    await l1.waitFor()
+    const properties = page.getByRole('complementary', { name: 'Properties' })
+    const group = properties.getByTestId('selected-group')
+
+    // Ctrl/⌘+A: everything on the floor; Escape clears it.
+    await page.keyboard.press('ControlOrMeta+a')
+    await group.waitFor()
+    await plan(page).getByTestId('plan-group').waitFor()
+    await shot(page, 'group-all')
+    await page.keyboard.press('Escape')
+    await group.waitFor({ state: 'detached' })
+
+    // A plant placed beside L1, then Shift+click both: they move together, one undo step.
+    await showPanel(page, 'Assets')
+    await page.getByTestId('catalog-plant').click()
+    await page.getByRole('button', { name: 'Place at center' }).click()
+    const plants = plan(page).getByTestId('plan-item-plant')
+    const plant = plants.last()
+    const plantAt = async () => {
+      const transform = await plant.getAttribute('transform')
+      const [, x, y] = /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(transform ?? '') ?? []
+      return { x: Number(x), y: Number(y) }
+    }
+    const tableBefore = await positionOf(page, 'L1')
+    // Put the plant clear of L1, 150 cm to its right.
+    for (const [label, value] of [['X (cm)', tableBefore.x + 150], ['Y (cm)', tableBefore.y]] as const) {
+      await properties.getByLabel(label).fill(String(value))
+      await properties.getByLabel(label).press('Enter')
+    }
+    await expect.poll(plantAt).toEqual({ x: tableBefore.x + 150, y: tableBefore.y })
+    const plantBefore = await plantAt()
+    await l1.click()
+    await plant.click({ modifiers: ['Shift'] })
+    await expect.poll(() => group.textContent()).toContain('2 selected')
+    await page.keyboard.press('Shift+ArrowRight')
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: tableBefore.x + 25, y: tableBefore.y })
+    expect(await plantAt()).toEqual({ x: plantBefore.x + 25, y: plantBefore.y })
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => positionOf(page, 'L1')).toEqual(tableBefore)
+    expect(await plantAt()).toEqual(plantBefore)
+
+    // Delete on the set: L1 back to Unplaced tables, the plant gone; Undo brings both back.
+    const plantCount = await plants.count()
+    await page.keyboard.press('Delete')
+    await expect.poll(() => plants.count()).toBe(plantCount - 1)
+    expect(await l1.count()).toBe(0)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await l1.waitFor()
+    await expect.poll(() => plants.count()).toBe(plantCount)
+
+    // A box dragged on empty plan around L1 picks it (and only what the box touches).
+    await page.keyboard.press('Escape')
+    const box = (await l1.boundingBox())!
+    // Start from an empty corner beside L1 (not a piece, a wall or an edge) and drag to the opposite one.
+    const corners = [-1, 1].flatMap(sx => [-1, 1].map(sy => ({ sx, sy })))
+    const empty = await page.evaluate(([bounds, candidates]) => {
+      for (const reach of [12, 24, 36]) {
+        for (const { sx, sy } of candidates) {
+          const point = { x: bounds.x + bounds.width / 2 + sx * (bounds.width / 2 + reach), y: bounds.y + bounds.height / 2 + sy * (bounds.height / 2 + reach) }
+          const element = document.elementFromPoint(point.x, point.y)
+          if (element?.closest('[data-testid="floor-plan"]') && !element.closest('[data-kind]')) return { point, sx, sy }
+        }
+      }
+      return null
+    }, [box, corners] as const)
+    expect(empty).not.toBeNull()
+    const { point: start, sx, sy } = empty!
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 - sx * (box.width / 2 + 6), box.y + box.height / 2 - sy * (box.height / 2 + 6), { steps: 6 })
+    await plan(page).getByTestId('plan-marquee').waitFor()
+    await page.mouse.up()
+    // L1 alone, or with a piece the box also touched (pieces placed by earlier tests sit nearby).
+    await expect.poll(() => properties.textContent()).toMatch(/L1|\d selected\s*1 table/)
+
+    // Alt with L1 selected, pointing at the plant: the gap between them is measured.
+    await l1.click()
+    await plant.hover()
+    await page.keyboard.down('Alt')
+    await plan(page).getByTestId('plan-gap').first().waitFor()
+    await shot(page, 'alt-distances')
+    await page.keyboard.up('Alt')
+    await expect.poll(() => plan(page).getByTestId('plan-gap').count()).toBe(0)
+  })
+
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {
     const page = await signedIn(390, 844)
     await openDesign(page)

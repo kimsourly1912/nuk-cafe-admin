@@ -61,6 +61,29 @@ export function useLayoutEditor(branchId: string) {
 
   const floorId = ref<string | null>(null)
   const selection = ref<PlanSelection | null>(null)
+  /**
+   * Several pieces selected together (D278: Shift+click, a box drag, Ctrl/⌘+A): the whole set,
+   * `selection` being the one last picked (Properties' and 3D's). Empty for one or none. Setting
+   * `selection` to anything outside the set (a click, a floor change, a 3D pick) ends the set.
+   */
+  const group = ref<PlanSelection[]>([])
+  const inGroup = (target: PlanSelection | null) => !!target && group.value.some(member => member.kind === target.kind && member.id === target.id)
+  watch(selection, (current) => {
+    if (group.value.length && !inGroup(current)) group.value = []
+  }, { flush: 'sync' })
+  /** Everything selected: the set, or the one selection, or nothing. */
+  const selected = computed<PlanSelection[]>(() => (group.value.length ? group.value : selection.value ? [selection.value] : []))
+  /** Selects these together (one of them becomes `selection`); one or none is a plain selection. */
+  function selectMany(targets: readonly PlanSelection[]) {
+    const unique = targets.filter((target, index) => targets.findIndex(other => other.kind === target.kind && other.id === target.id) === index)
+    if (unique.length <= 1) {
+      group.value = []
+      selection.value = unique[0] ?? null
+      return
+    }
+    group.value = unique.map(target => ({ ...target }))
+    selection.value = { ...unique.at(-1)! }
+  }
 
   const state = computed(() => draft.layout.value)
   const unsaved = useUnsavedChanges(state, { onDiscard: () => applied && start(applied) })
@@ -284,6 +307,9 @@ export function useLayoutEditor(branchId: string) {
     isDirty: unsaved.isDirty,
     floorId,
     selection,
+    group: readonly(group),
+    selected,
+    selectMany,
     load,
     save,
     discard: () => applied && start(applied),

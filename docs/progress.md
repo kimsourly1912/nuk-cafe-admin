@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio canvas like Figma, PR 3: several at once (D278, 2026-11-12)
+
+Branch `claude/practical-heisenberg-lixhue`, after PR #304 (PR 2). The last part of D278, one PR (owner, 2026-11-12). [Plan → PR 3](plans/shop-designer.md#pr-3-several-at-once-smart-guides-and-alt-distances-built-2026-11-12).
+
+- **Built:** multi-select (Shift+click, box drag, Ctrl/⌘+A) with set moves, turns, deletes and duplicates as one undo step, a Properties panel and a menu for the set; smart guides while dragging; Alt distances to a hovered piece or the walls.
+- **How to verify:** on staging, Studio 2D with a mouse: Ctrl/⌘+A, then Escape; Shift+click two tables and a plant, drag one of them (all move), Shift+arrow, Shift+R, Ctrl/⌘+D (the plant is copied, the tables are not, with a note), Delete, Undo each; drag a box on empty floor; drag a table near another and watch the red guide snap it in line (hold Ctrl/⌘: no snap); select a table and hold Alt while pointing at another piece, then at nothing (distances to the walls). On a phone, one finger on empty floor still pans.
+- **Evidence (local):** `pnpm lint` and `pnpm typecheck` clean. `pnpm test:unit`: 193 files, 2,949 passed, 1 skipped (8 new in `designer-group.test.ts`). `test/e2e/shop-designer.test.ts` (Playwright's Chromium): 29 passed, one new; the 28 earlier ones pass with the box selection and the guides in place. The full `pnpm test:e2e` was not run (the changes stay in Studio); CI runs it.
+- **Not verified:** the feel of the guides' 8 px on a trackpad; a pen's box selection on a tablet.
+
 ### Studio canvas like Figma, PR 2: drawing (D278, 2026-11-12)
 
 Branch `claude/practical-heisenberg-lixhue`, after PR #303 (PR 1). A large step, its own PR. [Plan → PR 2](plans/shop-designer.md#pr-2-drawing-built-2026-11-12).
