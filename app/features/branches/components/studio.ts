@@ -25,7 +25,7 @@ export const STUDIO_SHORTCUTS = [
   { kbds: ['shift', 'arrowright'], label: 'Move the selection 25 cm' },
   { kbds: ['shift', '1'], label: 'Zoom to fit' },
   { kbds: ['shift', '2'], label: 'Zoom to the selection' },
-  { kbds: ['shift', '0'], label: 'Zoom to 100 %' },
+  { kbds: ['meta', '0'], label: 'Zoom to 100 % (Shift+0 too)' },
   { kbds: ['meta', '+'], label: 'Zoom in (or Ctrl/⌘ and the wheel, or pinch)' },
   { kbds: ['meta', '-'], label: 'Zoom out' },
   { kbds: ['meta', 'z'], label: 'Undo' },

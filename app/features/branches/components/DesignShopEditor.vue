@@ -990,6 +990,8 @@ function onStudioKey(event: KeyboardEvent) {
     if (key === 'a' && !event.shiftKey && mode.value === 'select') return run(selectAll)
     if (key === '=' || key === '+') return run(() => plan?.zoom(1))
     if (key === '-') return run(() => plan?.zoom(-1))
+    // Ctrl/⌘+0 (ISS-006): 100 %, and the browser's own page zoom does not reset.
+    if (key === '0' && !event.shiftKey) return run(() => plan?.zoomTo(100))
     return
   }
   if (event.altKey) return
@@ -1096,7 +1098,7 @@ const contextItems = computed((): ContextMenuItem[][] => {
   }
   return [[
     { label: 'Fit to screen', icon: 'i-lucide-scan', kbds: ['shift', '1'], onSelect: () => plan?.fit() },
-    { label: 'Zoom to 100%', icon: 'i-lucide-search', kbds: ['shift', '0'], onSelect: () => plan?.zoomTo(100) },
+    { label: 'Zoom to 100%', icon: 'i-lucide-search', kbds: ['meta', '0'], onSelect: () => plan?.zoomTo(100) },
   ], [
     { label: 'Room', icon: 'i-lucide-square-plus', kbds: ['r'], onSelect: () => startTool('room') },
     { label: 'Edit points', icon: 'i-lucide-pen-tool', kbds: ['p'], onSelect: () => startTool('outline') },

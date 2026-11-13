@@ -725,6 +725,10 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => zoom.textContent()).toBe('100%')
     await page.keyboard.press('Shift+1')
     await expect.poll(() => zoom.textContent()).not.toBe('100%')
+    // Ctrl+0 is 100 % too (ISS-006), without the browser's page zoom.
+    await page.keyboard.press('Control+0')
+    await expect.poll(() => zoom.textContent()).toBe('100%')
+    await page.keyboard.press('Shift+1')
 
     // Tool keys: W opens Draw wall, Escape goes back to Select; V and H switch too.
     await page.keyboard.press('w')

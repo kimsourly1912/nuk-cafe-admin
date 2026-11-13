@@ -39,7 +39,7 @@ const zoomMenu = computed(() => [[
   { label: 'Zoom to selection', kbds: ['shift', '2'], onSelect: () => emit('zoomToSelection') },
 ], [
   { label: 'Zoom to 50%', onSelect: () => emit('zoomTo', 50) },
-  { label: 'Zoom to 100%', kbds: ['shift', '0'], onSelect: () => emit('zoomTo', 100) },
+  { label: 'Zoom to 100%', kbds: ['meta', '0'], onSelect: () => emit('zoomTo', 100) },
   { label: 'Zoom to 200%', onSelect: () => emit('zoomTo', 200) },
 ]])
 
