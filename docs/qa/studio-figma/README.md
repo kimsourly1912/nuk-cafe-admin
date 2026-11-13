@@ -64,3 +64,6 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-022](issues/ISS-022.md) | Medium | Gap | Ctrl+C and Ctrl+V do nothing |
 | [ISS-023](issues/ISS-023.md) | Low | Improvement | Alt gap distances not as smooth as Figma |
 | [ISS-024](issues/ISS-024.md) | Low | Improvement | Selection lost going from 3D back to 2D |
+| [ISS-025](issues/ISS-025.md) | Low | Gap | No Ctrl+/ command search and no shortcut list |
+| [ISS-026](issues/ISS-026.md) | Low | Gap | No align and distribute buttons |
+| [ISS-027](issues/ISS-027.md) | Low | Gap | Manual Save layout, no autosave or version history |
