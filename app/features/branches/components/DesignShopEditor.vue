@@ -3228,7 +3228,7 @@ const pendingLabel = computed(() => {
               <span>Click an edge to make it a wall, railing or open, or to add doors and windows. Escape or Enter when done.</span>
             </template>
             <template v-else-if="mode === 'shape'">
-              <span>Drag to draw a {{ roundShape ? 'round block' : 'block' }} for anything the library doesn't have: a stage, a planter box, a platform.</span>
+              <span>Drag to draw a {{ roundShape ? 'round block' : 'block' }} for anything the library doesn't have: a stage, a planter box, a platform. A click makes one 100 × 100 cm.</span>
               <span>Name it, set its height and finish in Properties. S draws rectangles, O ellipses; Shift keeps the sides equal, Alt draws from the middle.</span>
             </template>
             <template v-else-if="mode === 'room'">

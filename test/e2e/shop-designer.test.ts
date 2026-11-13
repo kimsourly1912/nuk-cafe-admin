@@ -1017,6 +1017,14 @@ describe('the shop designer on saved layouts', () => {
     await properties.getByLabel('Height (cm)').fill('40')
     await properties.getByLabel('Height (cm)').press('Enter')
     await plan(page).getByText('Stage').waitFor()
+    // A click with Shape (ISS-016, like Figma's): a 100 × 100 cm block there, selected; Undo takes it away.
+    await page.keyboard.press('s')
+    await expect.poll(mode).toBe('shape')
+    await clickPlan(page, { x: right - 600, y: top + 450 })
+    await expect.poll(mode).toBe('select')
+    await expect.poll(() => properties.getByLabel('Width (cm)').inputValue()).toBe('100')
+    expect(await properties.getByLabel('Depth (cm)').inputValue()).toBe('100')
+    await page.getByRole('button', { name: 'Undo' }).click()
     await shot(page, 'shape-stage')
 
     await save(page)

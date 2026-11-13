@@ -607,6 +607,9 @@ function toScreen(point: Point): Point {
  */
 const handleCorners = (width: number, depth: number) => (Math.min(width, depth) / perPixel.value >= 56 ? rectCorners({ x: 0, y: 0 }, width, depth, 0) : [])
 
+/** A Shape tool click's shape, each way (ISS-016, Figma's 100 × 100). */
+const SHAPE_CLICK_CM = 100
+
 /** Rotate zones' size and how far they sit out from the corner, in screen pixels (ISS-033): past the resize handle's 16 px reach. */
 const ROTATE_ZONE_PX = 20
 const ROTATE_ZONE_OFFSET_PX = 12
@@ -659,7 +662,7 @@ type Gesture
     | { type: 'corner', index: number, startPlan: Point, origin: Point, startClient: Point, moved: boolean }
     | { type: 'wall-end', id: string, end: 'from' | 'to', startClient: Point, moved: boolean }
     | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
-    | { type: 'room', start: Point }
+    | { type: 'room', start: Point, startClient: Point }
     | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'group', startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'join', target: PlanSelection, startPlan: Point, startClient: Point, moved: boolean }
@@ -779,7 +782,7 @@ function onPointerDown(event: PointerEvent) {
   }
   if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
     const step = SNAP_CM
-    gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) } }
+    gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) }, startClient: { x: event.clientX, y: event.clientY } }
     return
   }
   // A drag on empty plan selects what the box touches (Figma); a finger still pans.
@@ -925,6 +928,8 @@ function followPointer(event: PointerMove) {
   const plan = toPlan(event.clientX, event.clientY)
   if (!plan) return
   if (gesture.type === 'room') {
+    // A few pixels are still a click (ISS-016): no rectangle yet.
+    if (!roomPreview.value && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
     const step = SNAP_CM
     const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
     // Like Figma (ISS-017): Shift keeps both sides equal while held (a round block too); Alt
@@ -1118,6 +1123,11 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   if (finished.type === 'room' && room) {
     if (props.mode === 'shape') emit('block', room.bounds)
     else emit('room', room.bounds, room.cut)
+  }
+  // A click with Shape (ISS-016, like Figma's): a 100 × 100 cm shape centred there.
+  else if (finished.type === 'room' && props.mode === 'shape') {
+    const half = SHAPE_CLICK_CM / 2
+    emit('block', { minX: finished.start.x - half, minY: finished.start.y - half, maxX: finished.start.x + half, maxY: finished.start.y + half })
   }
 }
 
