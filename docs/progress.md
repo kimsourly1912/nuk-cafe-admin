@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio follows Figma QA, second PR: the owner's answers (D278, 2026-11-13)
+
+Branch `claude/bold-hypatia-sx8nkl` again, from main after PR #307 merged. The owner answered the first PR's questions (1–3: follow Figma; 4–7: Claude decides) and asked that every small and medium step go in one PR, one commit each.
+
+- **Built:** snapping on whole centimetres with arrows 1 / 10 cm (ISS-004, ISS-031); Shift+drag on an unselected piece joins and moves the set (ISS-011); Room's Alt draws from the middle and cutting is an Add | Cut choice (ISS-017); paste on any floor, in the same place on another one (ISS-022); distribute (ISS-026); command search Ctrl/⌘+/ (ISS-025); `StudioNumberField` for Studio's 15 panel number fields: math, Shift+arrow 10, scrub, kept-within-limits message (ISS-020).
+- **Still open:** ISS-002, 005 (range), 008, 016, 021 (Phase 5), 023, 024 (retest), 027, 030 wait for the owner or the tester; ISS-034 and Phase 5 are large (own PRs).
+- **How to verify:** on staging, Studio 2D: drag a table (it moves by single centimetres, guides still line it up; Ctrl turns them off); arrows 1 cm, Shift 10; select a table, Shift+drag a plant: both move; Room with Cut, and with Alt from the middle; copy on Ground, show another floor, paste: same place; select three pieces, Distribute across; Ctrl+/ and type "wall"; in Properties type `900+25` in X, Shift+arrow, drag the handle left of a field, type 99999.
+- **Evidence (local):** `pnpm lint` clean; `pnpm typecheck` clean (`NODE_OPTIONS=--max-old-space-size=6144`); `pnpm test:unit`: 195 files, 2,975 passed, 1 skipped (new: `designer-expression`, more in `designer-group`, `designer-geometry`, `designer-outline`). `test/e2e/shop-designer.test.ts`: 29 passed, with new steps for Shift+drag join, Room Cut, command search and the number field. No staging or real-device check yet.
+
 ### Studio follows Figma QA: the small and medium steps in one PR (D278, 2026-11-13)
 
 Branch `claude/bold-hypatia-sx8nkl`. The owner asked to collect every small and medium step of the [Studio vs Figma work plan](qa/studio-figma/PLAN.md) into one PR, one commit each. The QA folder `docs/qa/studio-figma` is copied from branch `qa-studio-figma-evidence` (main did not have it). Each issue file has a "Work" note and its new status.
