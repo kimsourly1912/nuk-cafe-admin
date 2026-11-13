@@ -778,6 +778,13 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Shift+1')
 
+    // ? lists the shortcuts (ISS-025), the new ones included.
+    await page.keyboard.press('Shift+Slash')
+    const list = page.getByRole('dialog').filter({ hasText: 'Copy the selection' })
+    await list.waitFor()
+    await page.keyboard.press('Escape')
+    await list.waitFor({ state: 'detached' })
+
     // Tool keys: W opens Draw wall, Escape goes back to Select; V and H switch too.
     await page.keyboard.press('w')
     await page.getByTestId('tool-bar').getByText('Draw wall').waitFor()

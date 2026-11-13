@@ -963,6 +963,8 @@ onBeforeUnmount(clearLibraryDrag)
 // --- Studio's keys (D278) ---
 
 const shortcutsHelp = overlay.create(ShortcutsHelp)
+/** Studio's keys and drag keys, one list (`STUDIO_SHORTCUTS`): by `?` or the plan's right-click menu. */
+const showShortcuts = () => void shortcutsHelp.open({ shortcuts: [...STUDIO_SHORTCUTS, ...STUDIO_DRAG_KEYS] })
 
 /**
  * A dialog, menu or open select is on screen: Studio's keys must not act behind it. One that is
@@ -1029,7 +1031,7 @@ function onStudioKey(event: KeyboardEvent) {
   if (event.shiftKey && event.code === 'Digit1') return run(() => plan?.fit())
   if (event.shiftKey && event.code === 'Digit2') return run(() => plan?.zoomToSelection())
   if (event.shiftKey && event.code === 'Digit0') return run(() => plan?.zoomTo(100))
-  if (event.key === '?') return run(() => void shortcutsHelp.open({ shortcuts: [...STUDIO_SHORTCUTS, ...STUDIO_DRAG_KEYS] }))
+  if (event.key === '?') return run(showShortcuts)
   if (event.key === 'Escape') {
     if (pending.value) return run(() => pending.value = null)
     if (mode.value !== 'select') return run(finishTool)
@@ -1133,6 +1135,9 @@ const contextItems = computed((): ContextMenuItem[][] => {
     { label: 'Room', icon: 'i-lucide-square-plus', kbds: ['r'], onSelect: () => startTool('room') },
     { label: 'Edit points', icon: 'i-lucide-pen-tool', kbds: ['p'], onSelect: () => startTool('outline') },
     { label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'], onSelect: () => startTool('wall') },
+  ], [
+    // The shortcut list from a menu too (ISS-025), not only by its key.
+    { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   ]]
 })
 
