@@ -720,11 +720,14 @@ useEventListener('keydown', (event: KeyboardEvent) => {
  * A right-click picks what's under the pointer (or clears the selection on empty plan), so Studio's
  * menu acts on it (D278). Only in the select tool; the other tools keep the browser's menu off.
  */
+/** Where the plan was last right-clicked, in plan centimetres: the menu's Paste here (ISS-008). */
+const contextPoint = shallowRef<Point | null>(null)
 function onContextMenu(event: MouseEvent) {
   if (props.mode !== 'select' || props.placing) {
     event.preventDefault()
     return
   }
+  contextPoint.value = toPlan(event.clientX, event.clientY)
   const target = (event.target as Element).closest<SVGElement>('[data-kind]')
   const kind = target?.dataset.kind
   if (target && (kind === 'table' || kind === 'item' || kind === 'wall' || kind === 'edge')) {
@@ -1245,7 +1248,7 @@ function onWheel(event: WheelEvent) {
 function zoom(direction: 1 | -1) {
   zoomAround(viewMiddle(), direction > 0 ? 1.25 : 0.8)
 }
-defineExpose({ frameOffset, toPlan, viewCenter, fit: fitPage, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, boxOf, warnings, keydown, focus: () => svg.value?.focus() })
+defineExpose({ contextPoint, frameOffset, toPlan, viewCenter, fit: fitPage, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, boxOf, warnings, keydown, focus: () => svg.value?.focus() })
 
 const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }
 

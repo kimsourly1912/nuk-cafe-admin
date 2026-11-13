@@ -15,9 +15,9 @@ import { edgeLength, floorPageId, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM,
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
-import type { AlignEdge } from '../designer/group'
+import type { AlignEdge, PlanClipboard } from '../designer/group'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
-import { besideOf, newLayoutId, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
+import { besideOf, boundsOf, newLayoutId, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
@@ -662,6 +662,46 @@ function floorOrder(): PlanSelection[] {
   ]
 }
 
+/** The middle of what the clipboard holds (its pieces' and walls' points), for Paste here. */
+function clipboardMiddle(clipboard: PlanClipboard): Point | null {
+  const points = [...clipboard.items.map(item => ({ x: item.x, y: item.y })), ...clipboard.walls.flatMap(wall => [wall.from, wall.to])]
+  if (!points.length) return null
+  const box = boundsOf(points)
+  return { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
+}
+
+/** Bring to front, Send to back (ISS-008, Figma's): a piece drawn over or under the others. */
+function reorderItem(itemId: string, to: 'front' | 'back') {
+  changeFloor((target) => {
+    const at = target.items.findIndex(item => item.id === itemId)
+    if (at < 0) return
+    const [item] = target.items.splice(at, 1)
+    if (to === 'front') target.items.push(item!)
+    else target.items.unshift(item!)
+  })
+}
+
+/** The menu's edit group for what is selected (ISS-008): copy, paste here, order, hide, lock. */
+function editGroup(targets: PlanSelection[]): ContextMenuItem[][] {
+  const current = floor.value
+  if (!current || !targets.length) return []
+  const layers = targets.map(target => ({ target, layer: layerIn(layout.value, target, current.id) }))
+  const allLocked = layers.every(entry => entry.layer?.locked)
+  const items = targets.filter(target => target.kind === 'item')
+  return [[
+    { label: 'Copy', icon: 'i-lucide-copy', kbds: ['meta', 'c'], onSelect: () => void props.editor.copy() },
+    { label: 'Paste here', icon: 'i-lucide-clipboard-paste', kbds: ['meta', 'v'], disabled: !props.editor.clipboard.value, onSelect: () => pasteCopied(canvas.value?.contextPoint) },
+  ], ...(items.length === 1 && targets.length === 1
+    ? [[
+        { label: 'Bring to front', icon: 'i-lucide-bring-to-front', onSelect: () => reorderItem(items[0]!.id, 'front') },
+        { label: 'Send to back', icon: 'i-lucide-send-to-back', onSelect: () => reorderItem(items[0]!.id, 'back') },
+      ]]
+    : []), [
+    { label: 'Hide', icon: 'i-lucide-eye-off', onSelect: () => draft.change(next => layers.forEach(entry => setFlag(layerIn(next, entry.target, current.id), 'hidden', true))) },
+    { label: allLocked ? 'Unlock' : 'Lock', icon: allLocked ? 'i-lucide-lock-open' : 'i-lucide-lock', onSelect: () => draft.change(next => layers.forEach(entry => setFlag(layerIn(next, entry.target, current.id), 'locked', !allLocked))) },
+  ]]
+}
+
 // --- Layers (ISS-021, like Figma's): hide, lock, rename, range select, hover ---
 
 type LayerFlag = 'hidden' | 'locked'
@@ -958,19 +998,21 @@ async function placeLook(lookId: string, at: Point) {
  * Figma's paste into another frame). One table alone asks which table the copy is, as Duplicate
  * look does; tables in a set are not copied (each has its own QR code).
  */
-function pasteCopied() {
+function pasteCopied(at?: Point | null) {
   const clipboard = props.editor.clipboard.value
   const current = floor.value
   if (!clipboard || !current) return
   const sameFloor = clipboard.floorId === current.id
+  // Paste here (ISS-008): the copies centred on the point right-clicked.
+  const middle = clipboardMiddle(clipboard)
   if (!clipboard.items.length && !clipboard.walls.length) {
     const [tableId] = clipboard.tableIds
     const original = layout.value.placements.find(placement => placement.tableId === tableId)
-    if (clipboard.tableIds.length === 1 && tableId && original) void duplicateLook(tableId, sameFloor ? undefined : { x: original.x, y: original.y }, current.id)
+    if (clipboard.tableIds.length === 1 && tableId && original) void duplicateLook(tableId, at ? { x: Math.round(at.x), y: Math.round(at.y) } : sameFloor ? undefined : { x: original.x, y: original.y }, current.id)
     else toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
     return
   }
-  const offset = sameFloor ? props.editor.nextPasteOffset() : { x: 0, y: 0 }
+  const offset = at && middle ? { x: Math.round(at.x - middle.x), y: Math.round(at.y - middle.y) } : sameFloor ? props.editor.nextPasteOffset() : { x: 0, y: 0 }
   let copies: PlanSelection[] = []
   draft.change(next => void (copies = pasteClipboard(next, clipboard, current.id, offset)))
   if (clipboard.tableIds.length) toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
@@ -1222,7 +1264,7 @@ const commandGroups = computed<CommandPaletteGroup[]>(() => {
       { label: 'Redo', icon: 'i-lucide-redo-2', kbds: ['meta', 'shift', 'z'], disabled: !draft.canRedo.value, onSelect: () => draft.redo() },
       { label: 'Select all', icon: 'i-lucide-box-select', kbds: ['meta', 'a'], onSelect: () => (mode.value === 'select' ? selectAll() : undefined) },
       { label: 'Copy', icon: 'i-lucide-copy', kbds: ['meta', 'c'], disabled: !selected, onSelect: () => void props.editor.copy() },
-      { label: 'Paste', icon: 'i-lucide-clipboard-paste', kbds: ['meta', 'v'], disabled: !props.editor.clipboard.value, onSelect: pasteCopied },
+      { label: 'Paste', icon: 'i-lucide-clipboard-paste', kbds: ['meta', 'v'], disabled: !props.editor.clipboard.value, onSelect: () => pasteCopied() },
       { label: 'Duplicate', icon: 'i-lucide-copy-plus', kbds: ['meta', 'd'], disabled: !selected, onSelect: duplicateSelection },
       { label: 'Delete', icon: 'i-lucide-trash-2', kbds: ['delete'], disabled: !selected, onSelect: () => (multi.value ? removeGroup() : selection.value && remove(selection.value)) },
     ] },
@@ -1351,7 +1393,7 @@ const contextItems = computed((): ContextMenuItem[][] => {
     return [[
       { label: 'Rotate 90°', icon: 'i-lucide-rotate-cw', kbds: ['shift', 'r'], onSelect: turnGroup },
       { label: 'Duplicate', icon: 'i-lucide-copy', kbds: ['meta', 'd'], disabled: group.value.every(member => member.kind === 'table'), onSelect: duplicateGroup },
-    ], zoomItems, [
+    ], ...editGroup([...group.value]), zoomItems, [
       { label: `Delete ${group.value.length}`, icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: removeGroup },
     ]]
   }
@@ -1363,7 +1405,7 @@ const contextItems = computed((): ContextMenuItem[][] => {
     ], [
       { label: 'Edit table', icon: 'i-lucide-pencil', onSelect: editTable },
       { label: 'View QR', icon: 'i-lucide-qr-code', onSelect: viewQr },
-    ], zoomItems, [
+    ], ...editGroup([{ kind: 'table', id: tableId }]), zoomItems, [
       { label: 'Remove from map', icon: 'i-lucide-map-pin-off', kbds: ['delete'], onSelect: () => remove({ kind: 'table', id: tableId }) },
     ]]
   }
@@ -1372,7 +1414,7 @@ const contextItems = computed((): ContextMenuItem[][] => {
     return [[
       { label: 'Rotate 90°', icon: 'i-lucide-rotate-cw', kbds: ['shift', 'r'], onSelect: () => turn(90) },
       { label: 'Duplicate', icon: 'i-lucide-copy', kbds: ['meta', 'd'], onSelect: () => duplicateItem(itemId) },
-    ], zoomItems, [
+    ], ...editGroup([{ kind: 'item', id: itemId }]), zoomItems, [
       { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', kbds: ['delete'], onSelect: () => remove({ kind: 'item', id: itemId }) },
     ]]
   }
@@ -1386,6 +1428,7 @@ const contextItems = computed((): ContextMenuItem[][] => {
         { label: kind === 'railing' ? 'Add a gate' : kind === 'wall' ? 'Add a door' : 'Add an opening', icon: 'i-lucide-door-open', disabled: !innerOpeningFits(wall, 'door'), onSelect: () => setWalls(addInnerOpening(walls, wall.id, 'door', newLayoutId('door'))) },
         ...(kind === 'wall' ? [{ label: 'Add a window', icon: 'i-lucide-app-window', disabled: !innerOpeningFits(wall, 'window'), onSelect: () => setWalls(addInnerOpening(walls, wall.id, 'window', newLayoutId('window'))) }] : []),
       ],
+      ...editGroup([target]),
       zoomItems,
       [{ label: 'Delete wall', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => remove(target) }],
     ]
@@ -1411,7 +1454,9 @@ const contextItems = computed((): ContextMenuItem[][] => {
       kind === 'open' ? [] : [{ label: kind === 'railing' ? 'Remove railing' : 'Remove wall', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => remove(target) }],
     ].filter(group => group.length)
   }
-  return [[
+  return [...(props.editor.clipboard.value
+    ? [[{ label: 'Paste here', icon: 'i-lucide-clipboard-paste', kbds: ['meta', 'v'], onSelect: () => pasteCopied(plan?.contextPoint) }]]
+    : []), [
     { label: 'Fit to screen', icon: 'i-lucide-scan', kbds: ['shift', '1'], onSelect: () => plan?.fit() },
     { label: 'Zoom to 100%', icon: 'i-lucide-search', kbds: ['meta', '0'], onSelect: () => plan?.zoomTo(100) },
   ], [

@@ -1018,6 +1018,7 @@ describe('the shop designer on saved layouts', () => {
     await properties.getByLabel('Height (cm)').press('Enter')
     await plan(page).getByText('Stage').waitFor()
     // A click with Shape (ISS-016, like Figma's): a 100 × 100 cm block there, selected; Undo takes it away.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     await page.keyboard.press('s')
     await expect.poll(mode).toBe('shape')
     await clickPlan(page, { x: right - 600, y: top + 450 })
@@ -1179,6 +1180,25 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Undo' }).click()
     await page.getByRole('button', { name: 'Undo' }).click()
     await expect.poll(() => plants.count()).toBe(count)
+
+    // The right-click menu has Figma's edit group (ISS-008): Paste here puts the copy at the
+    // pointer; Bring to front draws it last; Lock from the menu.
+    const pasteAt = await onScreen(page, { x: tableBefore.x + 300, y: tableBefore.y + 200 })
+    await page.mouse.click(pasteAt.x, pasteAt.y, { button: 'right' })
+    await page.getByRole('menuitem', { name: 'Paste here' }).click()
+    await expect.poll(() => plants.count()).toBe(count + 1)
+    // A screen pixel rounds to a centimetre or so.
+    await expect.poll(async () => {
+      const [, x, y] = /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(await plants.last().getAttribute('transform') ?? '') ?? []
+      return Math.abs(Number(x) - tableBefore.x - 300) <= 2 && Math.abs(Number(y) - tableBefore.y - 200) <= 2
+    }).toBe(true)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => plants.count()).toBe(count)
+    await original.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Lock' }).click()
+    await expect.poll(() => original.getAttribute('pointer-events')).toBe('none')
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => original.getAttribute('pointer-events')).toBeNull()
 
     // Layers (ISS-021, Figma): pointing at a row outlines it on the plan; the eye hides it from the
     // plan; the lock stops picks on the plan while Layers still selects it; a double-click renames;
