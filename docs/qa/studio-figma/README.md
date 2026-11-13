@@ -70,3 +70,7 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-028](issues/ISS-028.md) | High | Bug | The canvas breaks when a panel hides or shows |
 | [ISS-029](issues/ISS-029.md) | Medium | Gap | No live size label while drawing or resizing |
 | [ISS-030](issues/ISS-030.md) | Low | Improvement | Cursors do not match tools and handles well |
+| [ISS-031](issues/ISS-031.md) | Low | Gap | The grid cells are bigger than Figma's |
+| [ISS-032](issues/ISS-032.md) | Medium | Bug | The yellow ring is far from the element on hover and select |
+| [ISS-033](issues/ISS-033.md) | Medium | Gap | A rotate circle floats above the element |
+| [ISS-034](issues/ISS-034.md) | High | Bug | Pieces and walls do not stick together; broken wall corners |
