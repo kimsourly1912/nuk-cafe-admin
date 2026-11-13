@@ -38,6 +38,7 @@ export const STUDIO_DRAG_KEYS = [
   { kbds: ['shift'], label: 'Click: add a piece to the selection, or take it out' },
   { kbds: ['shift'], label: 'Drag on empty plan: add what the box touches' },
   { kbds: ['shift'], label: 'Drag: straight across or down' },
+  { kbds: ['shift'], label: 'Turn from outside a corner: 15° steps (free without it)' },
   { kbds: ['meta'], label: 'Drag or draw: 5 cm steps instead of 25 cm, no snapping to other pieces' },
   { kbds: ['alt'], label: 'Drag: leave a copy behind' },
   { kbds: ['alt'], label: 'Draw: any angle' },

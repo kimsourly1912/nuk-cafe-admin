@@ -5,8 +5,8 @@
  * - **select:** tap or click selects a table, furniture, an inside wall or an outline edge (pieces
  *   win over the edge behind them; the pointer's target gets a hover outline); a drag past a few
  *   pixels moves the selected piece, snapped to the 25 cm grid (5 cm with Ctrl/⌘, straight across
- *   or down with Shift); the round handle turns it in 15° steps (free with Shift); a corner handle
- *   resizes it in 5 cm steps with the opposite corner staying put (2B).
+ *   or down with Shift); a drag just outside a corner turns it freely (15° steps with Shift, like
+ *   Figma); a corner handle resizes it in 5 cm steps with the opposite corner staying put (2B).
  * - **outline** (frame 3A): with no outline yet, clicks add corners and clicking the first corner,
  *   a double-click or Enter closes the shape; otherwise corners drag (keeping right angles unless
  *   Alt is held), a round edge handle adds a corner, a clicked corner moves with the arrow keys and
@@ -738,7 +738,7 @@ function onPointerMove(event: PointerEvent) {
     return
   }
   if (gesture.type === 'rotate') {
-    const rotation = rotationFromDrag({ center: gesture.center, start: gesture.start, current: plan, origin: gesture.origin, step: event.shiftKey ? undefined : 15 })
+    const rotation = rotationFromDrag({ center: gesture.center, start: gesture.start, current: plan, origin: gesture.origin, step: event.shiftKey ? 15 : undefined })
     gesture.rotation = rotation
     preview.value = { selection: gesture.selection, x: gesture.center.x, y: gesture.center.y, rotation }
     liveLabel.value = { at: plan, text: `${rotation}°` }
