@@ -159,9 +159,9 @@ export const branchLayoutFloors = sqliteTable('branch_layout_floors', {
   hasRoof: integer({ mode: 'boolean' }).notNull(),
   geometry: text({ mode: 'json' }).$type<FloorGeometry>().notNull(),
   // Studio's frame (ISS-035, ISS-036, ISS-021): design-only, never read by 3D, QR codes or orders.
-  /** Where the floor's (0, 0) sits on Studio's canvas. */
-  canvasXCm: integer().notNull().default(0),
-  canvasYCm: integer().notNull().default(0),
+  /** Where the floor's (0, 0) sits on Studio's canvas; null: never placed (Studio lays it out beside the others). */
+  canvasXCm: integer(),
+  canvasYCm: integer(),
   /** One of `branch_layouts.pages` (the save checks it); null: the first page. */
   pageId: text(),
   hidden: integer({ mode: 'boolean' }).notNull().default(false),

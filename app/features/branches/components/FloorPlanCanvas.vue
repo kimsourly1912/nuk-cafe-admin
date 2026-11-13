@@ -21,8 +21,8 @@
  * gesture ends: then one event is emitted, one undo step.
  */
 import { useElementBounding, useEventListener } from '@vueuse/core'
-import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
+import type { Floor, InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { edgeLength, floorPageId, innerWallKind, layoutPages, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
 import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
@@ -48,6 +48,10 @@ const props = defineProps<{
   placing?: boolean
   /** The row pointed at in Studio's Layers list (ISS-021): outlined like a hovered piece. */
   listHover?: PlanSelection | null
+  /** The other floors on this page (ISS-036): drawn as frames beside it, read only; a click opens one. */
+  frames?: Floor[]
+  /** Where each frame on the page stands (ISS-036): saved, or laid out side by side. By floor id. */
+  frameOffsets?: Record<string, Point>
   /** The Shape tool draws a circle (a round block) rather than a rectangle (D278). */
   roundShape?: boolean
   /** Room cuts the rectangle out instead of adding it (the tool bar's Cut, owner: Alt is Figma's "from the middle"). */
@@ -88,6 +92,8 @@ const emit = defineEmits<{
   editLength: [index: number, at: Point]
   /** The floor's frame dragged by its name (ISS-035): by how much, its drawing unchanged. */
   moveFrame: [delta: Point]
+  /** Another frame on the page clicked (ISS-036): show and edit that floor. */
+  openFloor: [floorId: string]
 }>()
 
 const svg = useTemplateRef<SVGSVGElement>('svg')
@@ -148,6 +154,16 @@ function fit() {
   frame(boundsOf(points), 160)
 }
 
+/**
+ * Shift+1 and Fit (ISS-036, Figma's zoom to fit): every frame on the page, this floor and the
+ * others beside it; just this floor when it is alone.
+ */
+function fitPage() {
+  const others = otherFrames.value.flatMap(other => other.outline.map(point => ({ x: point.x + other.at.x, y: point.y + other.at.y })))
+  if (!others.length || !measured.value || floor.value.outline.length < 3) return fit()
+  frame(boundsOf([...floor.value.outline, ...others]), 160)
+}
+
 /** Shows these bounds whole and centred, with a margin around them. */
 function frame(bounds: Bounds, margin: number) {
   camera.value = fitBounds(bounds, screenSize.value, { margin, minSpan: MIN_FIT_SPAN_CM })
@@ -166,7 +182,20 @@ function zoomTo(percent: number) {
 }
 
 const viewMiddle = () => ({ x: view.value.x + view.value.width / 2, y: view.value.y + view.value.height / 2 })
-watch(() => props.floorId, fit, { immediate: true })
+// Another floor shown. On the same page (ISS-036), the canvas stays still and the camera follows its
+// frame, like Figma selecting another frame; it fits when that frame is off screen, or on another page.
+watch(() => props.floorId, (id, old) => {
+  const previous = old ? props.layout.floors.find(candidate => candidate.id === old) : undefined
+  const next = floor.value
+  const pages = layoutPages(props.layout)
+  if (measured.value && previous && next.id === id && floorPageId(previous, pages) === floorPageId(next, pages)) {
+    const from = offsetOf(previous)
+    const to = offsetOf(next)
+    camera.value = { ...camera.value, x: camera.value.x + from.x - to.x, y: camera.value.y + from.y - to.y }
+    if (next.outline.length < 3 || overlaps(boundsOf(next.outline), { minX: view.value.x, minY: view.value.y, maxX: view.value.x + view.value.width, maxY: view.value.y + view.value.height })) return
+  }
+  fit()
+}, { immediate: true })
 
 // --- The floor as a frame (ISS-035, like Figma's) ---
 /**
@@ -174,7 +203,8 @@ watch(() => props.floorId, fit, { immediate: true })
  * coordinates; the frame's offset only places the grid, the other frames and the camera, so moving
  * a frame never rewrites its drawing.
  */
-const frameOffset = computed(() => ({ x: floor.value.canvasX ?? 0, y: floor.value.canvasY ?? 0 }))
+const offsetOf = (target: Pick<Floor, 'id' | 'canvasX' | 'canvasY'>): Point => props.frameOffsets?.[target.id] ?? { x: target.canvasX ?? 0, y: target.canvasY ?? 0 }
+const frameOffset = computed(() => offsetOf(floor.value))
 /** The frame being dragged by its name: drawn moved by this until let go. */
 const frameDrag = shallowRef<Point | null>(null)
 // The frame moved (a drag, a typed X or Y, an undo): the canvas around it stays where it is on the
@@ -182,6 +212,31 @@ const frameDrag = shallowRef<Point | null>(null)
 watch(() => [floor.value.id, frameOffset.value.x, frameOffset.value.y] as const, ([id, x, y], [oldId, oldX, oldY]) => {
   if (id === oldId && (x !== oldX || y !== oldY)) camera.value = { ...camera.value, x: camera.value.x - (x - oldX), y: camera.value.y - (y - oldY) }
 })
+/**
+ * The page's other frames (ISS-036), placed by their offsets from this one: their outline, walls,
+ * pieces and tables as plain shapes, their name above. Read only: a click opens the floor.
+ */
+const otherFrames = computed(() => (props.frames ?? []).filter(other => other.outline.length >= 3).map((other) => {
+  const place = offsetOf(other)
+  const at = { x: place.x - frameOffset.value.x, y: place.y - frameOffset.value.y }
+  const box = boundsOf(other.outline)
+  return {
+    id: other.id,
+    name: other.name,
+    at,
+    outline: other.outline,
+    bands: outlineWallBands(other.outline, other.edges.map(edge => edge.kind === 'wall')).filter((band): band is Point[] => !!band),
+    pieces: [
+      ...other.items.filter(item => !item.hidden).map(item => ({ id: item.id, corners: rectCorners(item, item.width, item.depth, item.rotation) })),
+      ...props.layout.placements.filter(placement => placement.floorId === other.id && !placement.hidden).map((placement) => {
+        const extent = placementExtent(placement, findLook(props.looks, placement.lookId))
+        return { id: placement.tableId, corners: rectCorners(placement, extent.width, extent.depth, placement.rotation) }
+      }),
+    ],
+    label: { x: box.minX - WALL_THICKNESS_CM, y: box.minY - WALL_THICKNESS_CM - 8 * perPixel.value },
+  }
+}))
+
 /** The frame's name tag, above its top-left corner. */
 const frameLabel = computed(() => {
   const outline = shape.value.outline
@@ -735,6 +790,10 @@ function onPointerDown(event: PointerEvent) {
   if (props.placing || props.mode === 'hand' || props.mode === 'wall' || !target || !plan) return startPan()
   const kind = target.dataset.kind!
   const id = target.dataset.id!
+  if (kind === 'other-frame') {
+    emit('openFloor', id)
+    return
+  }
   if (kind === 'frame') {
     // Its name: a click selects the floor, a drag moves the frame (not a locked one).
     gesture = { type: 'frame', startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
@@ -1176,7 +1235,7 @@ function onWheel(event: WheelEvent) {
 function zoom(direction: 1 | -1) {
   zoomAround(viewMiddle(), direction > 0 ? 1.25 : 0.8)
 }
-defineExpose({ frameOffset, toPlan, viewCenter, fit, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, boxOf, warnings, keydown, focus: () => svg.value?.focus() })
+defineExpose({ frameOffset, toPlan, viewCenter, fit: fitPage, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, boxOf, warnings, keydown, focus: () => svg.value?.focus() })
 
 const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }
 
@@ -1386,6 +1445,47 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       fill="url(#plan-grid)"
       style="background: var(--ui-bg-muted)"
     />
+
+    <!-- The page's other floors (ISS-036): frames beside this one, read only; a click opens one. -->
+    <g
+      v-for="other in otherFrames"
+      :key="other.id"
+      :transform="`translate(${other.at.x} ${other.at.y})`"
+      data-kind="other-frame"
+      :data-id="other.id"
+      :data-testid="`plan-other-frame-${other.name}`"
+      class="cursor-pointer"
+    >
+      <title>{{ other.name }}: click to edit this floor</title>
+      <polygon
+        :points="points(other.outline)"
+        fill="var(--ui-bg)"
+        stroke="var(--ui-border-accented)"
+        stroke-width="1"
+        vector-effect="non-scaling-stroke"
+      />
+      <polygon
+        v-for="(band, index) in other.bands"
+        :key="`band-${index}`"
+        :points="points(band)"
+        fill="var(--ui-text-dimmed)"
+      />
+      <polygon
+        v-for="piece in other.pieces"
+        :key="piece.id"
+        :points="points(piece.corners)"
+        fill="var(--ui-bg-elevated)"
+        stroke="var(--ui-border-accented)"
+        stroke-width="1"
+        vector-effect="non-scaling-stroke"
+      />
+      <text
+        :x="other.label.x"
+        :y="other.label.y"
+        :font-size="12 * perPixel"
+        fill="var(--ui-text-dimmed)"
+      >{{ other.name }}</text>
+    </g>
 
     <!-- The floor's frame (ISS-035): everything on it moves with its name while that is dragged. -->
     <g

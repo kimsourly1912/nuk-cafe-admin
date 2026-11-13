@@ -17,8 +17,8 @@ export interface FloorRow {
   hasRoof: boolean
   geometry: FloorGeometry
   /** Studio's frame (ISS-035, ISS-036, ISS-021): design-only; left out, the columns' defaults. */
-  canvasXCm?: number
-  canvasYCm?: number
+  canvasXCm?: number | null
+  canvasYCm?: number | null
   pageId?: string | null
   hidden?: boolean
   locked?: boolean

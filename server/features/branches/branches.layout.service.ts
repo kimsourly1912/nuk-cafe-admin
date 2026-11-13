@@ -35,8 +35,9 @@ function toLayout(rows: LayoutRows): BranchLayout {
 /** Studio's design-only fields (ISS-021, ISS-035, ISS-036), only when set, as the contract leaves them out. */
 function frameOf(row: FloorRow): Pick<Floor, 'canvasX' | 'canvasY' | 'pageId' | 'hidden' | 'locked'> {
   return {
-    ...(row.canvasXCm && { canvasX: row.canvasXCm }),
-    ...(row.canvasYCm && { canvasY: row.canvasYCm }),
+    // Null: never placed, laid out by Studio; 0 is a place like any other.
+    ...(row.canvasXCm != null && { canvasX: row.canvasXCm }),
+    ...(row.canvasYCm != null && { canvasY: row.canvasYCm }),
     ...(row.pageId && { pageId: row.pageId }),
     ...(row.hidden && { hidden: true as const }),
     ...(row.locked && { locked: true as const }),
@@ -73,7 +74,7 @@ function floorRow(floor: Floor, position: number): FloorRow {
   const { id, name, height, hasRoof, outline, edges, walls, items } = floor
   return {
     id, position, name, heightCm: height, hasRoof, geometry: { outline, edges, walls, items },
-    canvasXCm: floor.canvasX ?? 0, canvasYCm: floor.canvasY ?? 0, pageId: floor.pageId ?? null, hidden: floor.hidden ?? false, locked: floor.locked ?? false,
+    canvasXCm: floor.canvasX ?? null, canvasYCm: floor.canvasY ?? null, pageId: floor.pageId ?? null, hidden: floor.hidden ?? false, locked: floor.locked ?? false,
   }
 }
 

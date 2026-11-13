@@ -241,14 +241,40 @@ describe('the shop designer on saved layouts', () => {
     const floorSettings = page.getByTestId('floor-settings')
     await floorSettings.getByRole('switch', { name: 'Roof over this floor' }).click()
 
+    // A new floor's frame goes beside the others on its page (ISS-036), drawn there read only; a
+    // click on one opens that floor, the plan staying still.
+    // Shift+1 fits the whole page, like Figma: every frame on it.
+    await page.keyboard.press('Shift+1')
+    const ground = plan(page).getByTestId('plan-other-frame-Ground')
+    await ground.waitFor()
+    const groundBox = (await ground.boundingBox())!
+    const planBox = (await plan(page).boundingBox())!
+    expect(groundBox.x).toBeGreaterThanOrEqual(planBox.x)
+    expect(groundBox.x + groundBox.width).toBeLessThanOrEqual(planBox.x + planBox.width)
+    await page.mouse.click(groundBox.x + groundBox.width / 2, groundBox.y + groundBox.height / 2)
+    await expect.poll(() => page.getByTestId('floor-tab-Ground').getAttribute('aria-pressed')).toBe('true')
+    await page.getByTestId('floor-tab-Loft').click()
+    await expect.poll(() => page.getByTestId('floor-tab-Loft').getAttribute('aria-pressed')).toBe('true')
+    // Pages (ISS-036): a new one shows empty; a page with no floors can be deleted.
+    await page.getByRole('button', { name: 'Add page' }).click()
+    await page.getByTestId('plan-empty-page').waitFor()
+    await page.getByTestId('page-Floors').click()
+    await expect.poll(() => page.getByTestId('floor-tab-Loft').count()).toBe(1)
+    await page.getByTestId('page-Page 2-row').hover()
+    await page.getByRole('button', { name: 'Delete page Page 2' }).click()
+    await expect.poll(() => page.getByTestId('page-Page 2').count()).toBe(0)
+    await page.getByTestId('floor-tab-Loft').click()
+
     // The floor is a frame (ISS-035): dragged by its name, it moves; its drawing keeps its own coordinates.
+    const frameXBefore = Number(await floorSettings.getByLabel('Frame X (cm)').inputValue())
     const label = (await plan(page).getByTestId('plan-frame-label').boundingBox())!
     const cm = await plan(page).evaluate(svg => (svg as SVGSVGElement).getScreenCTM()!.a)
     await page.mouse.move(label.x + 10, label.y + label.height / 2)
     await page.mouse.down()
     await page.mouse.move(label.x + 10 + 120 * cm, label.y + label.height / 2, { steps: 6 })
     await page.mouse.up()
-    await expect.poll(async () => Math.abs(Number(await floorSettings.getByLabel('Frame X (cm)').inputValue()) - 120)).toBeLessThanOrEqual(1)
+    await expect.poll(async () => Math.abs(Number(await floorSettings.getByLabel('Frame X (cm)').inputValue()) - frameXBefore - 120)).toBeLessThanOrEqual(1)
+    expect(frameXBefore).toBeGreaterThan(0)
     // Floor order (owner: it matters): the new top floor goes down one and back up.
     await floorSettings.getByText('Order: 3 of 3').waitFor()
     await floorSettings.getByTestId('floor-down').click()
@@ -294,7 +320,7 @@ describe('the shop designer on saved layouts', () => {
     const saved = await savedLayout(page)
     const loft = saved.floors[2]!
     expect(loft).toMatchObject({ name: 'Loft', hasRoof: false })
-    expect(Math.abs((loft.canvasX ?? 0) - 120)).toBeLessThanOrEqual(1)
+    expect(loft.canvasX).toBeGreaterThan(120)
     expect(loft.outline).toEqual(saved.floors[1]!.outline)
     expect(loft.edges[0]).toMatchObject({ kind: 'railing', openings: [{ kind: 'door' }] })
     expect(loft.walls).toEqual([expect.objectContaining({ from: { x: 300, y: 100 }, to: { x: 300, y: 400 } })])

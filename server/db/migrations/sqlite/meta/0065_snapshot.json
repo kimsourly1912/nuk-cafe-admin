@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "961be9bf-cae3-4a20-aa4e-3928e753aa7f",
+  "id": "2af1b705-a034-4c8b-8411-215ab5abb896",
   "prevId": "7fdfc87a-db9d-4b2d-8b34-7a04cb5ec50d",
   "tables": {
     "account": {
@@ -753,17 +753,15 @@
           "name": "canvas_x_cm",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
+          "notNull": false,
+          "autoincrement": false
         },
         "canvas_y_cm": {
           "name": "canvas_y_cm",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
+          "notNull": false,
+          "autoincrement": false
         },
         "page_id": {
           "name": "page_id",

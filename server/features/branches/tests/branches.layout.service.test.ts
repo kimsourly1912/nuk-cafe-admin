@@ -460,6 +460,12 @@ describe('Studio frames, pages and layers (ISS-021, ISS-035, ISS-036)', () => {
     expect(kept.pages).toEqual(pages)
   })
 
+  it('keeps a frame placed at 0 as placed, and a floor never placed as left out (laid out by Studio)', async () => {
+    const layout = await save({ version: 0, layout: { floors: [floor('ground', 'Ground', { canvasX: 0, canvasY: 0 }), floor('up')], placements: [] } })
+    expect(layout.floors[0]).toMatchObject({ canvasX: 0, canvasY: 0 })
+    expect(layout.floors[1]).not.toHaveProperty('canvasX')
+  })
+
   it('a stale save moves no frame (409)', async () => {
     await save({ version: 0, layout: { floors: [floor('ground')], placements: [] } })
     await save({ version: 1, layout: { floors: [floor('ground', 'Ground', { canvasX: 100 })], placements: [] } })

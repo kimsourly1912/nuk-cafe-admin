@@ -11,7 +11,7 @@ import StudioNumberField from './StudioNumberField.vue'
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
+import { edgeLength, floorPageId, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
@@ -25,6 +25,7 @@ import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
 import { alignOffsets, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
+import { addPage, besideFrames, effectiveFrames, floorsOnPage, removePage, renamePage, setFloorPage } from '../designer/pages'
 import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
 import type { Starter } from '../designer/starters'
 import EdgePanel from './EdgePanel.vue'
@@ -196,10 +197,68 @@ function selectPlaced(target: PlanSelection, floorId: string) {
 }
 
 function selectFloor(id: string) {
+  shownPage.value = null
   if (id === floor.value?.id) return
   pending.value = null
   props.editor.showFloor(id)
   selection.value = null
+}
+
+// --- Pages (ISS-036, like Figma's): groups of floors; the canvas shows one page's frames ---
+
+const pages = computed(() => layoutPages(layout.value))
+/** A page picked that has no floors yet: shown empty. Null: the floor shown's page. */
+const shownPage = ref<string | null>(null)
+const pageId = computed(() => shownPage.value ?? (floor.value ? floorPageId(floor.value, pages.value) : pages.value[0]!.id))
+const pageFloors = computed(() => floorsOnPage(layout.value, pageId.value))
+/** Where each frame on the page stands: saved, or side by side for floors saved before frames. */
+const frameOffsets = computed(() => effectiveFrames(pageFloors.value))
+const frameAt = computed(() => (floor.value ? frameOffsets.value[floor.value.id] ?? { x: 0, y: 0 } : { x: 0, y: 0 }))
+/** The page's frames with their offsets written out, as `besideFrames` and a move need them. */
+const placedFrames = () => pageFloors.value.map(candidate => ({ ...candidate, canvasX: frameOffsets.value[candidate.id]?.x ?? 0, canvasY: frameOffsets.value[candidate.id]?.y ?? 0 }))
+/** The page's other floors, drawn beside the one shown (hidden ones aren't). */
+const otherFrames = computed(() => pageFloors.value.filter(candidate => candidate.id !== floor.value?.id && !candidate.hidden))
+
+/** Shows a page: its first floor, or the page empty. */
+function selectPage(id: string) {
+  const first = floorsOnPage(layout.value, id)[0]
+  if (first) return selectFloor(first.id)
+  shownPage.value = id
+  selection.value = null
+}
+function newPage() {
+  const page = { id: newLayoutId('page'), name: `Page ${pages.value.length + 1}` }
+  let added = false
+  draft.change(next => void (added = addPage(next, page)))
+  if (added) selectPage(page.id)
+  else toast.add({ title: 'Page not added', description: `A layout has at most ${LAYOUT_MAX_PAGES} pages.`, color: 'neutral', icon: 'i-lucide-info' })
+}
+function renamePageNamed(id: string, name: string) {
+  draft.change(next => renamePage(next, id, name.slice(0, PAGE_NAME_MAX)))
+}
+/** A page goes only empty: its floors' tables would otherwise leave the plan. */
+function deletePage(id: string) {
+  if (floorsOnPage(layout.value, id).length) {
+    toast.add({ title: 'Page not deleted', description: 'Move its floors to another page first.', color: 'neutral', icon: 'i-lucide-info' })
+    return
+  }
+  draft.change(next => void removePage(next, id))
+  if (shownPage.value === id) shownPage.value = null
+}
+function moveFloorToPage(id: string) {
+  const current = floor.value
+  if (!current || floorPageId(current, pages.value) === id) return
+  const target = floorsOnPage(layout.value, id)
+  const offsets = effectiveFrames(target)
+  draft.change((next) => {
+    setFloorPage(next, current.id, id)
+    // Beside the frames already there, as a new floor would be.
+    const moved = next.floors.find(candidate => candidate.id === current.id)
+    if (!moved) return
+    const at = besideFrames(target.map(other => ({ ...other, canvasX: offsets[other.id]?.x ?? 0, canvasY: offsets[other.id]?.y ?? 0 })), moved.outline)
+    moved.canvasX = at.x
+    moved.canvasY = at.y
+  })
 }
 
 // A floor without an outline (Blank) opens Draw outline.
@@ -711,7 +770,12 @@ const groupSummary = computed(() => {
 function addFloor() {
   if (!canAddFloor(layout.value)) return
   stopFind()
-  const created = newFloor(layout.value)
+  // On the page shown, beside its frames (ISS-036).
+  const created: Floor = { ...newFloor(layout.value) }
+  const at = besideFrames(placedFrames(), created.outline)
+  created.canvasX = at.x
+  created.canvasY = at.y
+  if (pageId.value !== pages.value[0]!.id) created.pageId = pageId.value
   draft.change(next => void next.floors.push(created))
   selectFloor(created.id)
   renaming.value = { id: created.id, name: created.name }
@@ -746,16 +810,23 @@ function renameFloor() {
 
 /** The frame moved, by its name on the plan or by Frame X and Y (ISS-035): one undo step; 0 is left out. */
 function setFrame(at: Point) {
-  changeFloor((target) => {
-    if (at.x) target.canvasX = at.x
-    else delete target.canvasX
-    if (at.y) target.canvasY = at.y
-    else delete target.canvasY
+  const current = floor.value
+  if (!current) return
+  const offsets = frameOffsets.value
+  draft.change((next) => {
+    // The page's frames all get their place written out (the first move after frames came), so
+    // none laid out side by side jumps; then this one goes where asked.
+    for (const other of next.floors) {
+      const place = other.id === current.id ? at : offsets[other.id]
+      if (!place) continue
+      other.canvasX = place.x
+      other.canvasY = place.y
+    }
   })
 }
 function moveFrame(delta: Point) {
   const current = floor.value
-  if (current && !current.locked) setFrame({ x: (current.canvasX ?? 0) + delta.x, y: (current.canvasY ?? 0) + delta.y })
+  if (current && !current.locked) setFrame({ x: frameAt.value.x + delta.x, y: frameAt.value.y + delta.y })
 }
 
 /**
@@ -1209,6 +1280,8 @@ function duplicateSelection() {
 function onStudioKey(event: KeyboardEvent) {
   if (!props.active || view.value !== 'design' || event.defaultPrevented || event.isComposing || somethingOnTop() || focusTakes(event)) return
   if (lengthEdit.value) return
+  // An empty page (ISS-036) shows no floor: no key may change the one hidden behind it.
+  if (!pageFloors.value.length && !((event.ctrlKey || event.metaKey) && event.key === '/') && event.key !== '?') return
   const plan = canvas.value
   const command = event.ctrlKey || event.metaKey
   if (!command && !event.altKey && plan?.keydown(event)) return
@@ -1513,8 +1586,65 @@ const pendingLabel = computed(() => {
       v-else-if="panel === 'floors'"
       class="flex flex-col gap-2"
     >
+      <!-- Pages (ISS-036, like Figma's): above the layers, each a group of floors by purpose. -->
+      <section
+        aria-label="Pages"
+        class="flex flex-col border-b border-default pb-2"
+        data-testid="studio-pages"
+      >
+        <div class="flex min-h-7 items-center justify-between">
+          <h3 class="text-xs font-semibold tracking-wide text-muted uppercase">
+            Pages
+          </h3>
+          <UTooltip text="Add page">
+            <UButton
+              icon="i-lucide-plus"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              aria-label="Add page"
+              @click="newPage()"
+            />
+          </UTooltip>
+        </div>
+        <StudioLayerRow
+          v-for="page in pages"
+          :key="page.id"
+          :label="page.name"
+          icon="i-lucide-file"
+          :current="page.id === pageId"
+          :flags="false"
+          :testid="`page-${page.name}`"
+          @select="selectPage(page.id)"
+          @rename="name => renamePageNamed(page.id, name)"
+        >
+          <template
+            v-if="pages.length > 1"
+            #actions
+          >
+            <UTooltip text="Delete page">
+              <UButton
+                icon="i-lucide-trash-2"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                :aria-label="`Delete page ${page.name}`"
+                class="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                @click="deletePage(page.id)"
+              />
+            </UTooltip>
+          </template>
+        </StudioLayerRow>
+      </section>
+      <p
+        v-if="!pageFloors.length"
+        class="text-sm text-muted"
+        data-testid="page-empty"
+      >
+        No floors on this page yet. Add a floor, or move one here from its Properties.
+      </p>
       <div
-        v-for="candidate in floors"
+        v-for="candidate in pageFloors"
         :key="candidate.id"
       >
         <UInput
@@ -2432,6 +2562,18 @@ const pendingLabel = computed(() => {
           label="Show floor below"
           description="On the plan only, to line this floor up."
         />
+        <UFormField
+          v-if="pages.length > 1"
+          label="Page"
+        >
+          <USelect
+            :model-value="floorPageId(floor, pages)"
+            :items="pages.map(page => ({ label: page.name, value: page.id }))"
+            class="w-full"
+            data-testid="floor-page"
+            @update:model-value="value => moveFloorToPage(String(value))"
+          />
+        </UFormField>
         <!-- The floor as a frame on Studio's canvas (ISS-035): design-only, 3D stacks floors by order. -->
         <div
           class="grid grid-cols-2 gap-2"
@@ -2440,26 +2582,26 @@ const pendingLabel = computed(() => {
         >
           <UFormField label="Frame X (cm)">
             <StudioNumberField
-              :model-value="floor.canvasX ?? 0"
+              :model-value="frameAt.x"
               label="Frame X"
               unit="cm"
               :min="-LAYOUT_MAX_EXTENT_CM"
               :max="LAYOUT_MAX_EXTENT_CM"
               :disabled="floor.locked"
               class="w-full"
-              @update:model-value="value => setFrame({ x: value, y: floor!.canvasY ?? 0 })"
+              @update:model-value="value => setFrame({ x: value, y: frameAt.y })"
             />
           </UFormField>
           <UFormField label="Frame Y (cm)">
             <StudioNumberField
-              :model-value="floor.canvasY ?? 0"
+              :model-value="frameAt.y"
               label="Frame Y"
               unit="cm"
               :min="-LAYOUT_MAX_EXTENT_CM"
               :max="LAYOUT_MAX_EXTENT_CM"
               :disabled="floor.locked"
               class="w-full"
-              @update:model-value="value => setFrame({ x: floor!.canvasX ?? 0, y: value })"
+              @update:model-value="value => setFrame({ x: frameAt.x, y: value })"
             />
           </UFormField>
         </div>
@@ -2742,8 +2884,11 @@ const pendingLabel = computed(() => {
                 :round-shape="roundShape"
                 :room-cut="roomCut"
                 :list-hover="layerHover"
+                :frames="otherFrames"
+                :frame-offsets="frameOffsets"
                 :group="group"
                 :placing="!!pending"
+                @open-floor="selectFloor"
                 @place="placePending"
                 @cancel-place="pending = null"
                 @select="selection = $event"
@@ -2766,6 +2911,29 @@ const pendingLabel = computed(() => {
               />
             </div>
           </UContextMenu>
+
+          <!-- A page with no floors yet (ISS-036): nothing to draw. -->
+          <div
+            v-if="!pageFloors.length"
+            class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-muted p-6 text-center"
+            data-testid="plan-empty-page"
+          >
+            <UIcon
+              name="i-lucide-file"
+              class="size-8 text-dimmed"
+            />
+            <p class="max-w-72 text-sm text-muted">
+              This page has no floors. Add one, or move a floor here from its Properties.
+            </p>
+            <UButton
+              label="Add floor"
+              icon="i-lucide-plus"
+              color="neutral"
+              variant="outline"
+              :disabled="!canAddFloor(layout)"
+              @click="addFloor()"
+            />
+          </div>
 
           <!-- Draw outline: the clicked length label becomes a field (3A). -->
           <form

@@ -5,7 +5,7 @@
  * place, pointing at it outlines it on the plan, and the eye and lock show on hover, or always
  * when on. The row keeps no state but the name being typed; the editor does the rest.
  */
-const { label, icon, selected = false, current = false, hidden = false, locked = false, renameable = true, depth = 0, testid } = defineProps<{
+const { label, icon, selected = false, current = false, hidden = false, locked = false, renameable = true, flags = true, depth = 0, testid } = defineProps<{
   label: string
   icon: string
   /** Picked on the plan. */
@@ -15,6 +15,8 @@ const { label, icon, selected = false, current = false, hidden = false, locked =
   hidden?: boolean
   locked?: boolean
   renameable?: boolean
+  /** The eye and the lock; off for a page (ISS-036). */
+  flags?: boolean
   /** 0 for a floor, 1 for what is on it. */
   depth?: number
   /** On the row's button (the part a click selects); the whole row is `${testid}-row`. */
@@ -87,7 +89,11 @@ function commit() {
       <span class="min-w-0 flex-1 truncate">{{ label }}</span>
       <slot name="trailing" />
     </button>
-    <UTooltip :text="locked ? 'Unlock' : 'Lock'">
+    <slot name="actions" />
+    <UTooltip
+      v-if="flags"
+      :text="locked ? 'Unlock' : 'Lock'"
+    >
       <UButton
         :icon="locked ? 'i-lucide-lock' : 'i-lucide-lock-open'"
         color="neutral"
@@ -100,7 +106,10 @@ function commit() {
         @click="emit('locked', !locked)"
       />
     </UTooltip>
-    <UTooltip :text="hidden ? 'Show' : 'Hide'">
+    <UTooltip
+      v-if="flags"
+      :text="hidden ? 'Show' : 'Hide'"
+    >
       <UButton
         :icon="hidden ? 'i-lucide-eye-off' : 'i-lucide-eye'"
         color="neutral"
