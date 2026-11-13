@@ -973,6 +973,31 @@ describe('the shop designer on saved layouts', () => {
     await shot(page, 'alt-distances')
     await page.keyboard.up('Alt')
     await expect.poll(() => plan(page).getByTestId('plan-gap').count()).toBe(0)
+
+    // Alt during a drag (ISS-014): the original stays and a copy follows the pointer; letting go of
+    // Alt moves it again; Alt held at the release leaves a copy, one undo step.
+    const count = await plants.count()
+    // By id: the copy is drawn after it, so `last()` would become the copy.
+    const original = plan(page).locator(`#plan-piece-item-${await plant.getAttribute('data-id')}`)
+    const originalAt = () => original.getAttribute('transform')
+    const originalRest = await originalAt()
+    const plantBox = (await original.boundingBox())!
+    await page.mouse.move(plantBox.x + plantBox.width / 2, plantBox.y + plantBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(plantBox.x + plantBox.width / 2 + 80, plantBox.y + plantBox.height / 2 + 40, { steps: 6 })
+    await expect.poll(originalAt).not.toBe(originalRest)
+    await page.keyboard.down('Alt')
+    await plan(page).getByTestId('copy-preview').waitFor()
+    await expect.poll(originalAt).toBe(originalRest)
+    await page.keyboard.up('Alt')
+    await plan(page).getByTestId('copy-preview').waitFor({ state: 'detached' })
+    await page.keyboard.down('Alt')
+    await page.mouse.up()
+    await page.keyboard.up('Alt')
+    await expect.poll(() => plants.count()).toBe(count + 1)
+    expect(await originalAt()).toBe(originalRest)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => plants.count()).toBe(count)
   })
 
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {

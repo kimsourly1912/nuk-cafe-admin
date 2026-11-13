@@ -165,7 +165,19 @@ watch(() => props.floorId, fit, { immediate: true })
 const liveLabel = shallowRef<{ at: Point, text: string } | null>(null)
 
 /** A gesture's live result, drawn instead of the stored position until the gesture ends. */
-const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number } | null>(null)
+const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number, copy?: boolean } | null>(null)
+/** Alt+drag (ISS-014): the piece drawn again where the copy will land, moved by the drag. */
+const copyPreview = computed(() => {
+  const live = preview.value
+  if (!live?.copy) return null
+  const origin = live.selection.kind === 'table'
+    ? props.layout.placements.find(placement => placement.tableId === live.selection.id)
+    : floor.value.items.find(item => item.id === live.selection.id)
+  return origin ? { href: `#${pieceId(live.selection)}`, dx: live.x - origin.x, dy: live.y - origin.y } : null
+})
+/** A table's or piece's element id, for the copy's `<use>`. */
+const pieceId = (target: PlanSelection) => `plan-piece-${target.kind}-${target.id}`
+
 /** Two or more selected (D278): they drag, turn and go together; no handles. */
 const multi = computed(() => (props.group?.length ?? 0) > 1)
 /** How far the whole selection is dragged so far (D278). */
@@ -267,7 +279,8 @@ function posed<T extends Sized>(selection: PlanSelection, object: T): T {
   const delta = groupDelta.value
   if (delta && multi.value && isSelected(selection.kind, selection.id)) return { ...object, x: object.x + delta.x, y: object.y + delta.y }
   const live = preview.value
-  if (!live || live.selection.kind !== selection.kind || live.selection.id !== selection.id) return object
+  // Alt+drag (ISS-014): the original stays where it is; the copy is drawn at the pointer instead.
+  if (!live || live.copy || live.selection.kind !== selection.kind || live.selection.id !== selection.id) return object
   return { ...object, x: live.x, y: live.y, rotation: live.rotation, width: live.width ?? object.width, depth: live.depth ?? object.depth }
 }
 
@@ -651,7 +664,7 @@ function onPointerDown(event: PointerEvent) {
   // Shift on a selected piece (ISS-011, like Figma): a drag moves it in a straight line, a click
   // without a move takes it out of the selection on release. An unselected piece joins at once.
   const shiftToggle = pickable && event.shiftKey && event.pointerType !== 'touch' ? { kind: kind as PlanSelection['kind'], id } : undefined
-  if (shiftToggle && !isSelected(kind, id)) {
+  if (shiftToggle && !isSelected(shiftToggle.kind, id)) {
     emit('toggle', shiftToggle)
     return
   }
@@ -694,10 +707,34 @@ function onPointerDown(event: PointerEvent) {
   gesture = { type: 'drag', selection, startPlan: plan, origin: { ...origin }, startClient: { x: event.clientX, y: event.clientY }, moved: false, toggle: shiftToggle }
 }
 
+/** What a pointer move needs: a real event, or the last one replayed when a key changes (ISS-014, ISS-017). */
+type PointerMove = Pick<PointerEvent, 'clientX' | 'clientY' | 'pointerId' | 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>
+let lastMove: PointerMove | null = null
+
+/**
+ * Shift, Alt, Ctrl or ⌘ pressed or let go during a gesture, without moving the pointer: the
+ * gesture follows at once, like Figma (a straight line, a copy, a square, from the centre).
+ */
+function replayKeys(event: KeyboardEvent) {
+  if (!lastMove || !pointerInside || !['Shift', 'Alt', 'Control', 'Meta'].includes(event.key)) return
+  if (!gesture && !drawing.value && props.mode !== 'wall') return
+  // Alt alone would focus the browser's menu bar on Windows.
+  if (event.key === 'Alt') event.preventDefault()
+  followPointer({ ...lastMove, shiftKey: event.shiftKey, altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey })
+}
+useEventListener('keydown', replayKeys)
+useEventListener('keyup', replayKeys)
+
 function onPointerMove(event: PointerEvent) {
+  lastMove = { clientX: event.clientX, clientY: event.clientY, pointerId: event.pointerId, shiftKey: event.shiftKey, altKey: event.altKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey }
+  if (!gesture) hovered.value = hoverTarget(event)
+  followPointer(event)
+}
+
+/** The pointer's move, or the last one again with new keys: the gesture's or the drawing's preview. */
+function followPointer(event: PointerMove) {
   if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
   if (!gesture) {
-    hovered.value = hoverTarget(event)
     // Hovering while drawing: where the next corner or wall end would go.
     if (drawing.value || props.mode === 'wall') {
       const plan = toPlan(event.clientX, event.clientY)
@@ -824,7 +861,7 @@ function onPointerMove(event: PointerEvent) {
     liveShape.value = moveCorner({ outline: floor.value.outline, edges: floor.value.edges }, gesture.index, to, !event.altKey)
     return
   }
-  preview.value = { selection: gesture.selection, ...to, rotation: gesture.origin.rotation }
+  preview.value = { selection: gesture.selection, ...to, rotation: gesture.origin.rotation, copy: gesture.type === 'drag' && event.altKey }
 }
 
 const overlaps = (a: Bounds, b: Bounds) => a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY
@@ -1153,7 +1190,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
     :viewBox="viewBox"
     preserveAspectRatio="xMinYMin meet"
     class="size-full touch-none select-none outline-none data-panning:**:cursor-[inherit]"
-    :class="panning ? 'cursor-grabbing' : spaceHeld || mode === 'hand' ? 'cursor-grab' : mode !== 'select' && 'cursor-crosshair'"
+    :class="preview?.copy ? 'cursor-copy' : panning ? 'cursor-grabbing' : spaceHeld || mode === 'hand' ? 'cursor-grab' : mode !== 'select' && 'cursor-crosshair'"
     :data-panning="spaceHeld || panning ? 'yes' : undefined"
     role="application"
     tabindex="0"
@@ -1357,6 +1394,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       <!-- Furniture and fixtures (grey: no QR). -->
       <g
         v-for="item in items"
+        :id="pieceId({ kind: 'item', id: item.id })"
         :key="item.id"
         :transform="transform(item)"
         data-kind="item"
@@ -1662,6 +1700,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
     >
       <g
         v-for="table in placed"
+        :id="pieceId({ kind: 'table', id: table.tableId })"
         :key="table.tableId"
         :transform="transform(table)"
         data-kind="table"
@@ -2298,6 +2337,16 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         stroke-width="3"
       />
     </g>
+
+    <!-- Alt+drag (ISS-014): the copy at the pointer, while the original stays. -->
+    <use
+      v-if="copyPreview"
+      :href="copyPreview.href"
+      :transform="`translate(${copyPreview.dx} ${copyPreview.dy})`"
+      opacity="0.85"
+      pointer-events="none"
+      data-testid="copy-preview"
+    />
 
     <!-- The live angle or size beside the pointer (ISS-029, ISS-033), on top of everything. -->
     <g
