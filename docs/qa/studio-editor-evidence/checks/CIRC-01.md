@@ -1,7 +1,7 @@
 # CIRC-01 · Circle arc and ring controls
 
 - Date: 2026-11-13
-- Status: Needs test in Studio
+- Status: Fail (compared 2026-11-13; finding ED-06)
 - Figma reference: [Wireframe scratch file](https://www.figma.com/design/sOEIGbUssGCpJIkm5dSNsP/Wireframe)
 - Source: [35-second circle recording](https://chatgpt.com/library?file_id=libfile_36d13fd676a08191aae494d3c6cba2c3&account_id=personal)
 
@@ -28,7 +28,13 @@ Use a plain filled circle on a 2D scratch layout, initially unselected. The Figm
 
 ## Studio comparison
 
-The matching Studio run is pending. For each step, record the Studio build, browser, zoom, cursor before pressing, live feedback during dragging, and final shape after release. Capture comparable frames and note any difference in a linked audit issue.
+Studio run: 2026-11-13, local e2e build of `main` at `36cc911` (PR #312), Playwright's Chromium 1440 × 900, Layout Lab "Lab Floor" from the Rooftop starter, a 100 × 100 cm Shape (S, click) and a 100 cm round Shape (O, click), zoom 99 % unless noted. Pointer positions and cursors read with `elementFromPoint` in the page. No real mouse or trackpad.
+
+| Step | Result | What happened | Evidence |
+|---|---|---|---|
+| Hover, select | Pass | Outline on hover; frame and four corner handles when selected, like the rectangle (same ED-02, ED-03, ED-04 apply). | [studio-01](../evidence/CIRC-01/studio-01-circle-selected.png) |
+| Arc, start, ratio | Fail (ED-06) | No arc, start or ratio handle and no such fields: Studio's round shape (`block-round`) is a full ellipse with name, height and finish only. | [studio-01](../evidence/CIRC-01/studio-01-circle-selected.png) |
+| Name label | Fail (ED-09) | The default name "Round block" is wider than a 100 cm circle and runs past its edge. | [studio-01](../evidence/CIRC-01/studio-01-circle-selected.png) |
 
 ## How to verify
 

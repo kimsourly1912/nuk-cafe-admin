@@ -1,7 +1,7 @@
 # RECT-01 · Rectangle selection and transforms
 
 - Date: 2026-11-13
-- Status: Needs test in Studio
+- Status: Fail (compared 2026-11-13; findings ED-01 to ED-05, ED-09)
 - Figma reference: existing square in the [Wireframe scratch file](https://www.figma.com/design/sOEIGbUssGCpJIkm5dSNsP/Wireframe?node-id=79-89)
 - Source: [53-second Figma recording](https://chatgpt.com/library?file_id=libfile_f15535c76fc08191a363778f4c4c7b33&account_id=personal)
 
@@ -29,7 +29,19 @@ Use a single unrotated, sharp-cornered rectangle in a 2D scratch layout. The Fig
 
 ## Actual Studio behavior
 
-The matching Studio run is pending for steps 1–7. This report records the Figma baseline. The existing audit links below give prior findings to consult when running the comparison.
+Studio run: 2026-11-13, local e2e build of `main` at `36cc911` (PR #312), Playwright's Chromium 1440 × 900, Layout Lab "Lab Floor" from the Rooftop starter, a 100 × 100 cm Shape (S, click) and a 100 cm round Shape (O, click), zoom 99 % unless noted. Pointer positions and cursors read with `elementFromPoint` in the page. No real mouse or trackpad.
+
+| Step | Result | What happened | Evidence |
+|---|---|---|---|
+| 1 Hover | Pass | Thin outline on hover (`plan-hover`), ordinary arrow. | — |
+| 2 Select | Fail (ED-04) | Frame and four square corner handles. No size badge under the selection: a size shows only beside the pointer during a resize. No dotted guides (Studio has no frame constraints, see ED-08). At the default fit zoom (32 %) a 100 cm piece is 32 px wide and shows **no handles at all** (ED-03). | [studio-01](../evidence/RECT-01/studio-01-selected-no-size-badge.png) |
+| 3 Edge and corner cursors | Fail (ED-01) | Corners: `nwse-resize` (turned with the piece, ISS-030). Edges: plain arrow; there is no edge resize. | — |
+| 4 Corner resize, Shift | Pass | Shift keeps the ratio: 100 × 100 → 60 × 60, live label `60 × 60 cm` beside the pointer. Badge placement differs (ED-04). | [studio-03](../evidence/RECT-01/studio-03-shift-corner-resize.png) |
+| 5 Edge resize | Fail (ED-01) | A drag on the left edge **moves** the piece 40 cm instead of resizing it. | — |
+| 6 Corner radius | Fail (ED-05) | No radius dots, no radius in Properties. Studio's rectangle is always sharp. | [studio-02](../evidence/RECT-01/studio-02-no-radius-dots.png) |
+| 7 Rotate just outside a corner | Fail (ED-02) | 10–12 px outside the corner the pointer is still on the resize handle's hit area: the drag resized to `60 × 130 cm`. Rotation starts only 12–32 px out (`ROTATE_ZONE_OFFSET_PX`). | [studio-04](../evidence/RECT-01/studio-04-outside-corner-resizes.png) |
+
+Earlier audit issues for the same steps:
 
 | Existing audit issue | Related check |
 |---|---|
@@ -51,4 +63,4 @@ The matching Studio run is pending for steps 1–7. This report records the Figm
 
 - The clip does not show which key or setting enabled proportional resize, or what triggers the dotted horizontal and vertical guides. Verify those triggers independently.
 - The clip demonstrates the left-edge resize and samples cursor directions. Drawing from the shape menu, free resize, all opposite-side drag cases, single-corner radius edits, and angle snapping need their own verification.
-- Studio code pointers and severity are pending the matching Studio run.
+- Figma's handle hit size, the rotate area's reach and the size below which Figma hides handles are not measured; ED-02 and ED-03 need those numbers before the fix.

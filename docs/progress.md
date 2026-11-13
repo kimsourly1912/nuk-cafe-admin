@@ -3,6 +3,13 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio editor QA: Figma references compared with Studio (2026-11-13)
+
+Documentation only. The [Studio editor QA folder](qa/studio-editor-evidence/README.md) (RECT-01, CIRC-01, GUIDE-01 and the Position inspector reference) is taken from PR #306 alone; that branch's older copy of `qa/studio-figma` is left out. Claude ran each check's steps in Studio and filled in the Studio results with screenshots. Findings ED-01 to ED-11: edge resize missing; just outside a corner still resizes; no handles under 56 px on screen; no size badge; no corner radius, arc, flips or constraints; Shape names overflow small shapes; one piece can't align to its floor. Alt distances and drag guides match Figma.
+
+- **Evidence:** a throwaway e2e run (not committed) on the local e2e build of `main` at `36cc911`, Playwright's Chromium, cursors read with `elementFromPoint`. No real mouse or trackpad.
+- **Open:** `qa/studio-figma` stays until its fixed issues are retested (owner, 2026-11-13). Owner asked for radius, flips, arc and ring, constraints and more Figma features; build order and the constraints question are in the README's findings.
+
 ### Account security step 5: Switch person on the counter (2026-11-13)
 
 Branch `claude/bold-hypatia-sx8nkl`, from main after PR #311. The owner's Q4 (no PIN mode; a Switch person action instead), as planned in [account security](plans/account-security.md#step-5-switch-person-on-the-counter-built-2026-11-13).

@@ -1,7 +1,7 @@
 # GUIDE-01 · Frame constraints, Alt distances and drag alignment
 
 - Date: 2026-11-13
-- Status: Needs comparison in Studio
+- Status: Mostly pass (compared 2026-11-13; ED-08 constraints, ED-10 to check)
 - Source: owner's Figma screenshots and explanation, 2026-11-13
 - Figma reference: [Wireframe scratch file](https://www.figma.com/design/sOEIGbUssGCpJIkm5dSNsP/Wireframe)
 
@@ -23,7 +23,14 @@ Figma's [Constraints help](https://help.figma.com/hc/en-us/articles/360039957734
 
 ## Studio comparison
 
-The Studio run is pending. D278 PR 3 already added smart guides and Alt distances, so compare the existing implementation with these examples before proposing changes. Record the Studio build, browser, zoom, pointer/keyboard state, and screenshots of each discrepancy.
+Studio run: 2026-11-13, local e2e build of `main` at `36cc911` (PR #312), Playwright's Chromium 1440 × 900, Layout Lab "Lab Floor" from the Rooftop starter, a 100 × 100 cm Shape (S, click) and a 100 cm round Shape (O, click), zoom 99 % unless noted. Pointer positions and cursors read with `elementFromPoint` in the page. No real mouse or trackpad.
+
+| Mode | Result | What happened | Evidence |
+|---|---|---|---|
+| Frame constraints (blue dotted) | Not in Studio (ED-08) | Studio has no constraints, so no blue lines. | — |
+| Alt to another piece | Pass | Block selected, Alt, pointer on the circle: one red line and `80 cm`. | [studio-01](../evidence/GUIDE-01/studio-01-alt-to-piece.png) |
+| Alt to the floor | Pass | Pointer on empty floor: four red lines to the walls, `250 cm`, `650 cm`, `250 cm`, `250 cm`. | [studio-02](../evidence/GUIDE-01/studio-02-alt-to-floor.png) |
+| Drag alignment | Pass, one difference (ED-10) | Dragging the block level with the circle showed three red guides (top, middle, bottom) like panel 04. The middle guide ran on to the far wall instead of stopping at the circle. | [studio-03](../evidence/GUIDE-01/studio-03-drag-align.png) |
 
 ## How to verify
 

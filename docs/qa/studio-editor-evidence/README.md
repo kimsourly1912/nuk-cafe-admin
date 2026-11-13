@@ -4,13 +4,31 @@ This folder records how Figma's editing tools behave and gives Claude Code steps
 
 | Check ID | Tool | Figma reference | Studio comparison |
 |---|---|---|---|
-| [RECT-01](checks/RECT-01.md) | Rectangle | [Final mockup](evidence/RECT-01/rectangle-tool-states.png) | Needs test |
-| [CIRC-01](checks/CIRC-01.md) | Circle | [Final mockup](evidence/CIRC-01/circle-tool-states.png) | Needs test |
-| [GUIDE-01](checks/GUIDE-01.md) | Position and alignment guides | [Final mockup](evidence/GUIDE-01/line-guides-states.png) | Needs test |
+| [RECT-01](checks/RECT-01.md) | Rectangle | [Final mockup](evidence/RECT-01/rectangle-tool-states.png) | Fail: ED-01 to ED-05, ED-09 |
+| [CIRC-01](checks/CIRC-01.md) | Circle | [Final mockup](evidence/CIRC-01/circle-tool-states.png) | Fail: ED-06, ED-09 |
+| [GUIDE-01](checks/GUIDE-01.md) | Position and alignment guides | [Final mockup](evidence/GUIDE-01/line-guides-states.png) | Mostly pass: ED-08, ED-10 |
 
 ## Inspector reference
 
-- [Position: alignment, X/Y, constraints, rotation and flips](inspector/position.md)
+- [Position: alignment, X/Y, constraints, rotation and flips](inspector/position.md). Studio, read from the code on 2026-11-13: X/Y math, scrubbing, arrows 1 and Shift 10 (ISS-020) and turn buttons both ways are there; flips (ED-07) and aligning one piece to its floor (ED-11) are not.
+
+## Findings
+
+From the Studio run of 2026-11-13 (local build of `main` at `36cc911`). Owner, 2026-11-13: build corner radius, flips, the circle's arc and ring, frame constraints, and more of Figma where it fits a floor plan. Each new stored property changes the saved layout and needs a matching 3D look.
+
+| ID | Severity | Type | Finding | Check |
+|---|---|---|---|---|
+| ED-01 | Medium | Gap | No edge resize: a drag on a side moves the piece; only the four corners resize. | RECT-01 steps 3, 5 |
+| ED-02 | Medium | Bug | Just outside a corner still resizes: the resize hit area reaches 16 px past the corner and rotation starts at 12 px, so 10–16 px out resizes. | RECT-01 step 7 |
+| ED-03 | Medium | Gap | No handles while a piece is under 56 px on screen: at the default fit zoom a 1 m piece can only be moved. | RECT-01 step 2 |
+| ED-04 | Low | Gap | No size badge under a selected piece; the size shows only beside the pointer while resizing. | RECT-01 steps 2, 4 |
+| ED-05 | Medium | Gap (owner: build) | No corner radius for the rectangle Shape (dots inside the corners, Radius label, Properties field, 3D). | RECT-01 step 6 |
+| ED-06 | Medium | Gap (owner: build) | No arc for the round Shape: sweep, start angle and inner ratio (ring). | CIRC-01 |
+| ED-07 | Low | Gap (owner: build) | No Flip horizontal or Flip vertical. | Position §4 |
+| ED-08 | Low | Gap (owner: build, see question) | No frame constraints. They only act when a frame is resized, and a Studio floor is never resized with its contents. | GUIDE-01, Position §3 |
+| ED-09 | Low | Bug | A Shape's name label runs past a small or round shape ("Round block" on a 1 m circle). | CIRC-01 |
+| ED-10 | Low | Needs check | The middle drag guide runs on to the far wall instead of stopping at the aligned piece. Check against Figma's guide length first. | GUIDE-01 |
+| ED-11 | Low | Gap | Align works only with several selected; Figma aligns one piece to its frame (here: the floor). | Position §1 |
 
 ## Workflow
 
