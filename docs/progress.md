@@ -3,6 +3,10 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio position and alignment reference (GUIDE-01, 2026-11-13)
+
+[GUIDE-01](qa/studio-editor-evidence/checks/GUIDE-01.md) records selected blue dotted guides, Alt distance labels to elements and frame edges, and red alignment guides during dragging. One consolidated image is published under `evidence/GUIDE-01/`. Compare with the existing D278 PR 3 smart guides and Alt distances; the Studio run and the blue guide frame condition remain open. No app code changed.
+
 ### Circle tool Figma reference (CIRC-01, 2026-11-13)
 
 [Circle QA check](qa/studio-editor-evidence/checks/CIRC-01.md) records the 35-second Figma baseline: hover/selection, separate resize and rotate hover targets, arc sweep, start angle, and inner ratio. One consolidated image is published under `evidence/CIRC-01/`. Studio comparison, persistence, and completed resize/rotation are pending; no app code changed.
