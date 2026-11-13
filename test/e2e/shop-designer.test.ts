@@ -539,13 +539,25 @@ describe('the shop designer on saved layouts', () => {
     // A mark on the plan's element: it is still there only if the plan was never mounted again.
     await plan(page).evaluate(svg => svg.setAttribute('data-kept', 'yes'))
     const width = (await plan(page).boundingBox())!.width
+    // Like Figma (ISS-028): hiding or showing the sidebar keeps the zoom, and the plan stays where it is on the screen.
+    const zoomLevel = page.getByTestId('zoom-level')
+    const zoomBefore = await zoomLevel.textContent()
+    const tableAt = async () => {
+      const box = (await plan(page).getByTestId('plan-table-L1').boundingBox())!
+      return { x: Math.round(box.x), y: Math.round(box.y) }
+    }
+    const tableBefore = await tableAt()
     const sidebar = page.getByTestId('studio-sidebar')
     await page.getByRole('button', { name: 'Hide sidebar' }).click()
     await sidebar.waitFor({ state: 'detached' })
     await expect.poll(async () => (await plan(page).boundingBox())!.width).toBeGreaterThan(width)
+    await expect.poll(tableAt).toEqual(tableBefore)
+    expect(await zoomLevel.textContent()).toBe(zoomBefore)
     await shot(page, 'sidebar-hidden')
     await page.getByRole('button', { name: 'Show sidebar' }).click()
     await sidebar.waitFor()
+    await expect.poll(tableAt).toEqual(tableBefore)
+    expect(await zoomLevel.textContent()).toBe(zoomBefore)
     expect(await plan(page).getAttribute('data-kept')).toBe('yes')
     await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
 

@@ -3,6 +3,18 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio follows Figma QA, Phase 1.1: the canvas keeps its view when a panel toggles (ISS-028, 2026-11-13)
+
+Branch `claude/bold-hypatia-sx8nkl`. First step of the [Studio vs Figma work plan](qa/studio-figma/PLAN.md); the plan asks for this step as its own PR. The QA folder `docs/qa/studio-figma` (README, PLAN, template, ISS-001 to ISS-036, evidence) is copied from branch `qa-studio-figma-evidence`, because main did not have it. D278 has the follow-up.
+
+- **Built:** `designer/camera.ts` keeps the 2D plan's zoom and anchor (pure, unit tested); `FloorPlanCanvas.vue` derives its viewBox from the camera and the canvas size. Hiding, showing or resizing the sidebar, and resizing the window, keep the zoom and every plan point's place on screen. Fit runs on a floor's first show (after the splitter's first layout) and on Fit and Zoom to selection. Zoom is limited to 10 % to 800 % on every screen size (ISS-005 note).
+- **How to verify:** on staging, Studio 2D at 77 % and at 196 %: select a table, hide and show the sidebar, drag the sidebar wider, resize the window. The zoom label and the plan do not move; nothing is cut off; no blank strip. Then the tester retests ISS-028 (PN2) and ISS-005.
+- **Evidence (local):** `pnpm lint` clean; `pnpm typecheck` clean (needed `NODE_OPTIONS=--max-old-space-size=6144`; the default heap ran out); `pnpm test:unit`: 194 files, 2,955 passed, 1 skipped (6 new in `designer-camera.test.ts`). `test/e2e/shop-designer.test.ts` (Playwright's Chromium): 29 passed; "Studio shell" now checks that hiding and showing the sidebar keeps the zoom label and table L1's screen position. With the follow step removed, that test fails. The blank strip and the toolbar jump were not checked by hand.
+
+### Studio vs Figma QA folder (2026-11-13)
+
+Documentation only. [docs/qa/studio-figma](qa/studio-figma/README.md) holds the standard test flow, an issue template, issue files ISS-001 to ISS-036 from manual testing of Figma and staging Studio, evidence images and the ordered [work plan](qa/studio-figma/PLAN.md). Values marked "from memory" are unverified.
+
 ### Studio canvas like Figma, PR 3: several at once (D278, 2026-11-12)
 
 Branch `claude/practical-heisenberg-lixhue`, after PR #304 (PR 2). The last part of D278, one PR (owner, 2026-11-12). [Plan → PR 3](plans/shop-designer.md#pr-3-several-at-once-smart-guides-and-alt-distances-built-2026-11-12).

@@ -19,12 +19,14 @@
  * `keydown`, so they work without focusing the plan. Nothing changes the layout until a
  * gesture ends: then one event is emitted, one undo step.
  */
-import { useElementSize, useEventListener } from '@vueuse/core'
+import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
 import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
+import { fitBounds, followCanvas, panBy, planToScreen, visibleRect, zoomAt } from '../designer/camera'
+import type { Camera, ScreenSize } from '../designer/camera'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
 import { moveWall, moveWallEnd, moveWalls } from '../designer/walls'
 import { cornerBounds, distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
@@ -82,41 +84,64 @@ const emit = defineEmits<{
 }>()
 
 const svg = useTemplateRef<SVGSVGElement>('svg')
-const { width: screenWidth, height: screenHeight } = useElementSize(svg)
+/** Where the canvas is on the page and how big: a panel hiding or showing changes these (ISS-028). */
+const { left: screenLeft, top: screenTop, width: screenWidth, height: screenHeight } = useElementBounding(svg)
 const floorIndex = computed(() => props.layout.floors.findIndex(floor => floor.id === props.floorId))
 const floor = computed(() => props.layout.floors[floorIndex.value] ?? props.layout.floors[0]!)
 const below = computed(() => (props.showBelow ? props.layout.floors[floorIndex.value - 1] : undefined))
 
-/** The narrowest and widest view, in centimetres, and the zoom range the menu and keys allow. */
-const MIN_VIEW_CM = 200
-const MAX_VIEW_CM = 8000
-const MIN_ZOOM = 0.05
-const MAX_ZOOM = 8
+/** The smallest plan span Fit and Zoom to selection show, in centimetres. */
+const MIN_FIT_SPAN_CM = 200
 
+/**
+ * The camera (ISS-028): the zoom and the plan point at the canvas's top-left corner. The canvas
+ * size only decides how much is visible, so hiding a panel or resizing the window never changes
+ * the zoom or moves the plan on the screen, like Figma.
+ */
+const camera = ref<Camera>({ x: -100, y: -100, scale: 0.75 })
+const screenSize = computed((): ScreenSize => ({ width: Math.max(1, screenWidth.value || 800), height: Math.max(1, screenHeight.value || 600) }))
 // The visible part of the plan, in centimetres.
-const view = ref({ x: -100, y: -100, width: 1200, height: 1100 })
-/** Screen pixels per centimetre (the viewBox fitted whole: xMidYMid meet). */
-const scale = computed(() => Math.min((screenWidth.value || 800) / view.value.width, (screenHeight.value || 600) / view.value.height))
+const view = computed(() => visibleRect(camera.value, screenSize.value))
+/** Screen pixels per centimetre. */
+const scale = computed(() => camera.value.scale)
 /** The zoom as a percentage, like Figma's: 100 % draws a centimetre as one screen pixel (D278). */
 const zoomLevel = computed(() => Math.round(scale.value * 100))
 const viewBox = computed(() => `${view.value.x} ${view.value.y} ${view.value.width} ${view.value.height}`)
 /** Centimetres per screen pixel: labels and handles keep their size on screen at every zoom. */
-const perPixel = computed(() => view.value.width / Math.max(1, screenWidth.value || 800))
+const perPixel = computed(() => 1 / scale.value)
+/** The canvas's size to fit to: none while hidden (3D), nor while the splitter lays out its first frame (a few pixels wide). */
+const MEASURED_MIN_PX = 100
+const measured = computed(() => screenWidth.value >= MEASURED_MIN_PX && screenHeight.value >= MEASURED_MIN_PX)
+
+// The canvas moved on the page (the sidebar hid, showed or was resized): every plan point stays
+// where it was on the screen. Not while hidden (3D) or not yet laid out: those positions mean nothing.
+watch([screenLeft, screenTop, measured], ([left, top, shown], [oldLeft, oldTop, wasShown]) => {
+  if (shown && wasShown) camera.value = followCanvas(camera.value, { x: oldLeft, y: oldTop }, { x: left, y: top })
+})
+
+/** Fit waits for the canvas's first real size: before it, there is nothing to fit to. */
+let fitWhenMeasured = false
+watch(measured, (shown) => {
+  if (shown && fitWhenMeasured) fit()
+})
 
 function fit() {
+  if (!measured.value) {
+    fitWhenMeasured = true
+    return
+  }
+  fitWhenMeasured = false
   const points = floor.value.outline.length ? floor.value.outline : below.value?.outline ?? []
   if (!points.length) {
-    view.value = { x: -100, y: -100, width: 1200, height: 1100 }
+    frame({ minX: -100, minY: -100, maxX: 1100, maxY: 1000 }, 0)
     return
   }
   frame(boundsOf(points), 160)
 }
 
-/** Shows these bounds whole, with a margin around them, at the plan's own aspect ratio. */
-function frame(bounds: { minX: number, minY: number, maxX: number, maxY: number }, margin: number) {
-  const width = Math.max(MIN_VIEW_CM, bounds.maxX - bounds.minX + margin * 2)
-  const height = Math.max(MIN_VIEW_CM, bounds.maxY - bounds.minY + margin * 2)
-  view.value = { x: (bounds.minX + bounds.maxX - width) / 2, y: (bounds.minY + bounds.maxY - height) / 2, width, height }
+/** Shows these bounds whole and centred, with a margin around them. */
+function frame(bounds: Bounds, margin: number) {
+  camera.value = fitBounds(bounds, screenSize.value, { margin, minSpan: MIN_FIT_SPAN_CM })
 }
 
 /** Shift+2: the selection fills the plan; nothing selected fits the floor (D278). */
@@ -128,8 +153,7 @@ function zoomToSelection() {
 
 /** A zoom percentage (Shift+0 is 100 %), around the middle of the plan. */
 function zoomTo(percent: number) {
-  const target = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, percent / 100))
-  zoomAround(viewMiddle(), scale.value / target)
+  zoomAround(viewMiddle(), percent / 100 / scale.value)
 }
 
 const viewMiddle = () => ({ x: view.value.x + view.value.width / 2, y: view.value.y + view.value.height / 2 })
@@ -402,14 +426,9 @@ const selectionBox = computed(() => {
   return { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y }
 })
 
-/** Plan centimetres → pixels from the plan's top-left corner (the viewBox fitted whole: xMidYMid meet). */
+/** Plan centimetres → pixels from the canvas's top-left corner. */
 function toScreen(point: Point): Point {
-  const { x, y, width, height } = view.value
-  const scale = Math.min(screenWidth.value / width, screenHeight.value / height)
-  return {
-    x: (screenWidth.value - width * scale) / 2 + (point.x - x) * scale,
-    y: (screenHeight.value - height * scale) / 2 + (point.y - y) * scale,
-  }
+  return planToScreen(camera.value, point)
 }
 
 /**
@@ -459,8 +478,8 @@ type Gesture
     | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'group', startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'marquee', startPlan: Point, startClient: Point, moved: boolean, additive: boolean }
-    | { type: 'pan', startClient: Point, startView: typeof view.value, moved: boolean, plan: Point | null, event: { altKey: boolean, fine: boolean }, navigateOnly?: boolean }
-    | { type: 'pinch', distance: number, startView: typeof view.value, middle: Point }
+    | { type: 'pan', startClient: Point, startCamera: Camera, moved: boolean, plan: Point | null, event: { altKey: boolean, fine: boolean }, navigateOnly?: boolean }
+    | { type: 'pinch', distance: number, startCamera: Camera, middle: Point }
 
 const pointers = new Map<number, Point>()
 let gesture: Gesture | null = null
@@ -548,7 +567,7 @@ function onPointerDown(event: PointerEvent) {
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
     hovered.value = null
     panning.value = true
-    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startView: { ...view.value }, moved: false, plan: null, event: { altKey: false, fine: false }, navigateOnly: true }
+    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan: null, event: { altKey: false, fine: false }, navigateOnly: true }
     return
   }
   svg.value?.setPointerCapture(event.pointerId)
@@ -563,13 +582,13 @@ function onPointerDown(event: PointerEvent) {
     marquee.value = null
     groupDelta.value = null
     guides.value = []
-    gesture = { type: 'pinch', distance: Math.hypot(a.x - b.x, a.y - b.y), startView: { ...view.value }, middle: toPlan((a.x + b.x) / 2, (a.y + b.y) / 2) ?? { x: 0, y: 0 } }
+    gesture = { type: 'pinch', distance: Math.hypot(a.x - b.x, a.y - b.y), startCamera: { ...camera.value }, middle: toPlan((a.x + b.x) / 2, (a.y + b.y) / 2) ?? { x: 0, y: 0 } }
     return
   }
   const target = (event.target as Element).closest<SVGElement>('[data-kind]')
   const plan = toPlan(event.clientX, event.clientY)
   const startPan = () => {
-    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startView: { ...view.value }, moved: false, plan, event: { altKey: event.altKey, fine: fineSnap(event) } }
+    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan, event: { altKey: event.altKey, fine: fineSnap(event) } }
   }
   if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
@@ -667,20 +686,17 @@ function onPointerMove(event: PointerEvent) {
   if (gesture.type === 'pinch') {
     const [a, b] = [...pointers.values()] as [Point, Point]
     if (!a || !b) return
-    const scale = gesture.distance / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))
-    zoomAround(gesture.middle, scale, gesture.startView)
+    const factor = Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, gesture.distance)
+    zoomAround(gesture.middle, factor, gesture.startCamera)
     return
   }
   if (gesture.type === 'pan') {
-    const element = svg.value
-    if (!element) return
     const dx = event.clientX - gesture.startClient.x
     const dy = event.clientY - gesture.startClient.y
     if (Math.hypot(dx, dy) > DRAG_SLOP_PX) gesture.moved = true
     if (!gesture.moved) return
     panning.value = true
-    const scale = gesture.startView.width / Math.max(1, element.getBoundingClientRect().width)
-    view.value = { ...gesture.startView, x: gesture.startView.x - dx * scale, y: gesture.startView.y - dy * scale }
+    camera.value = panBy(gesture.startCamera, -dx, -dy)
     return
   }
   const plan = toPlan(event.clientX, event.clientY)
@@ -923,15 +939,9 @@ function onDoubleClick(event: MouseEvent) {
   if (props.mode === 'select' && !props.placing && (target?.dataset.kind === 'edge' || onFloor)) emit('editPoints')
 }
 
-function zoomAround(point: Point, scale: number, from = view.value) {
-  const width = Math.min(MAX_VIEW_CM, Math.max(MIN_VIEW_CM, from.width * scale))
-  const factor = width / from.width
-  view.value = {
-    x: point.x - (point.x - from.x) * factor,
-    y: point.y - (point.y - from.y) * factor,
-    width,
-    height: from.height * factor,
-  }
+/** Zooms by `factor` (above 1 zooms in), keeping this plan point where it is on screen. */
+function zoomAround(point: Point, factor: number, from = camera.value) {
+  camera.value = zoomAt(from, point, factor)
 }
 
 /**
@@ -943,17 +953,16 @@ function onWheel(event: WheelEvent) {
   const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? (screenHeight.value || 600) : 1
   if (event.ctrlKey || event.metaKey) {
     const point = toPlan(event.clientX, event.clientY)
-    if (point) zoomAround(point, 1.01 ** (event.deltaY * unit))
+    if (point) zoomAround(point, 1.01 ** -(event.deltaY * unit))
     return
   }
-  const perScreenPixel = 1 / scale.value
-  const dx = (event.shiftKey ? event.deltaY : event.deltaX) * unit * perScreenPixel
-  const dy = (event.shiftKey ? 0 : event.deltaY) * unit * perScreenPixel
-  view.value = { ...view.value, x: view.value.x + dx, y: view.value.y + dy }
+  const dx = (event.shiftKey ? event.deltaY : event.deltaX) * unit
+  const dy = (event.shiftKey ? 0 : event.deltaY) * unit
+  camera.value = panBy(camera.value, dx, dy)
 }
 
 function zoom(direction: 1 | -1) {
-  zoomAround(viewMiddle(), direction > 0 ? 0.8 : 1.25)
+  zoomAround(viewMiddle(), direction > 0 ? 1.25 : 0.8)
 }
 defineExpose({ toPlan, viewCenter, fit, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, warnings, keydown, focus: () => svg.value?.focus() })
 
@@ -1086,7 +1095,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
   <svg
     ref="svg"
     :viewBox="viewBox"
-    preserveAspectRatio="xMidYMid meet"
+    preserveAspectRatio="xMinYMin meet"
     class="size-full touch-none select-none outline-none data-panning:**:cursor-[inherit] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
     :class="panning ? 'cursor-grabbing' : spaceHeld || mode === 'hand' ? 'cursor-grab' : mode !== 'select' && 'cursor-crosshair'"
     :data-panning="spaceHeld || panning ? 'yes' : undefined"
