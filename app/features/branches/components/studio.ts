@@ -11,7 +11,7 @@ export const STUDIO_SIDEBAR = { min: 232, initial: 288, max: 430 } as const
 export const STUDIO_SHORTCUTS = [
   { kbds: ['v'], label: 'Select' },
   { kbds: ['h'], label: 'Hand (or hold Space and drag)' },
-  { kbds: ['r'], label: 'Room: drag a rectangle (Alt cuts it out)' },
+  { kbds: ['r'], label: 'Room: drag a rectangle (Cut in its bar cuts it out)' },
   { kbds: ['s'], label: 'Shape: drag a block of any size' },
   { kbds: ['o'], label: 'Shape: drag a round block' },
   { kbds: ['p'], label: 'Edit points: corners and sides of the floor (Enter or a double-click on the floor too)' },
@@ -45,7 +45,7 @@ export const STUDIO_DRAG_KEYS = [
   { kbds: ['shift'], label: 'Resize from a corner: keep the proportions' },
   { kbds: ['alt'], label: 'Resize from a corner: from the centre' },
   { kbds: ['shift'], label: 'Shape or Room: a square (press or let go while drawing)' },
-  { kbds: ['alt'], label: 'Shape: draw from the middle' },
+  { kbds: ['alt'], label: 'Shape or Room: draw from the middle' },
   { kbds: ['meta'], label: 'Drag: no snapping to other pieces' },
   { kbds: ['alt'], label: 'Drag: leave a copy behind' },
   { kbds: ['shift'], label: 'Draw a wall or a floor corner: 45° steps (any angle without it)' },

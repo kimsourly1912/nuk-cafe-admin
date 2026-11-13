@@ -703,6 +703,7 @@ function listLabels(labels: readonly string[]): string {
 let toolStart: { floorId: string, shape: FloorShape, walls: InnerWall[] } | null = null
 
 function startTool(next: PlanMode) {
+  if (next === 'room') roomCut.value = false
   pending.value = null
   if (mode.value === next) return finishTool()
   if (next === 'select' || next === 'hand') {
@@ -1276,6 +1277,8 @@ const planTools = [
 const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall' || mode.value === 'room' || mode.value === 'shape')
 /** The Shape tool draws a round block (O) rather than a block (S) (D278). */
 const roundShape = ref(false)
+/** Room adds by default; the tool bar's Cut cuts the rectangle out (owner: Alt draws from the middle, like Figma). */
+const roomCut = ref(false)
 const pendingLabel = computed(() => {
   const piece = pending.value
   if (!piece) return ''
@@ -2484,6 +2487,7 @@ const pendingLabel = computed(() => {
                 :show-below="showBelow"
                 :mode="mode"
                 :round-shape="roundShape"
+                :room-cut="roomCut"
                 :group="group"
                 :placing="!!pending"
                 @place="placePending"
@@ -2698,7 +2702,7 @@ const pendingLabel = computed(() => {
                       aria-label="Shape"
                     >
                       <UButton
-                        v-for="option in [{ round: false, label: 'Rectangle', icon: 'i-lucide-square' }, { round: true, label: 'Circle', icon: 'i-lucide-circle' }]"
+                        v-for="option in [{ round: false, label: 'Rectangle', icon: 'i-lucide-square' }, { round: true, label: 'Ellipse', icon: 'i-lucide-circle' }]"
                         :key="option.label"
                         :icon="option.icon"
                         :label="option.label"
@@ -2706,6 +2710,23 @@ const pendingLabel = computed(() => {
                         :variant="roundShape === option.round ? 'soft' : 'ghost'"
                         :aria-pressed="roundShape === option.round"
                         @click="roundShape = option.round"
+                      />
+                    </UFieldGroup>
+                    <UFieldGroup
+                      v-if="mode === 'room'"
+                      size="sm"
+                      role="group"
+                      aria-label="Room"
+                    >
+                      <UButton
+                        v-for="option in [{ cut: false, label: 'Add', icon: 'i-lucide-square-plus' }, { cut: true, label: 'Cut', icon: 'i-lucide-square-minus' }]"
+                        :key="option.label"
+                        :icon="option.icon"
+                        :label="option.label"
+                        :color="roomCut === option.cut ? 'primary' : 'neutral'"
+                        :variant="roomCut === option.cut ? 'soft' : 'ghost'"
+                        :aria-pressed="roomCut === option.cut"
+                        @click="roomCut = option.cut"
                       />
                     </UFieldGroup>
                     <USwitch
@@ -2789,7 +2810,7 @@ const pendingLabel = computed(() => {
             </template>
             <template v-else-if="mode === 'room'">
               <span>Drag a rectangle: the floor, or a room added to it.</span>
-              <span>Hold Alt while you let go to cut it out instead.</span>
+              <span>Choose Cut above to cut it out instead. Shift draws a square, Alt from the middle.</span>
             </template>
             <template v-else>
               <span>Click where the wall starts, then where it ends: any angle, Shift for 45° steps.</span>

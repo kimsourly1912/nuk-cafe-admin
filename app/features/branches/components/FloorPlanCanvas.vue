@@ -48,6 +48,8 @@ const props = defineProps<{
   placing?: boolean
   /** The Shape tool draws a circle (a round block) rather than a rectangle (D278). */
   roundShape?: boolean
+  /** Room cuts the rectangle out instead of adding it (the tool bar's Cut, owner: Alt is Figma's "from the middle"). */
+  roomCut?: boolean
   /** Everything selected (D278 multi-select): two or more pieces and walls moved and drawn together. */
   group?: readonly PlanSelection[]
 }>()
@@ -68,7 +70,7 @@ const emit = defineEmits<{
   addWall: [wall: Omit<InnerWall, 'id'>]
   /** An inside wall's end or the whole wall was dragged (D278): the floor's walls after it. */
   walls: [walls: InnerWall[]]
-  /** The Room tool's rectangle (D278), and whether Alt cuts it out. */
+  /** The Room tool's rectangle (D278), and whether it cuts it out (the tool bar's Cut). */
   room: [bounds: Bounds, cut: boolean]
   /** The Shape tool's rectangle or circle (D278): a new shape piece there. */
   block: [bounds: Bounds]
@@ -190,7 +192,7 @@ const guides = shallowRef<Guide[]>([])
 /** Alt is held over the plan: the gaps from the selection are measured (D278). */
 const altHeld = ref(false)
 
-/** The Room tool's rectangle while it's dragged, and whether it will cut (Alt) (D278). */
+/** The Room tool's rectangle while it's dragged, and whether it will cut (the tool bar's Cut) (D278). */
 const roomPreview = shallowRef<{ bounds: Bounds, cut: boolean } | null>(null)
 
 /** The inside walls while an end or a whole wall is dragged (D278). */
@@ -781,10 +783,9 @@ function followPointer(event: PointerMove) {
     const step = SNAP_CM
     const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
     // Like Figma (ISS-017): Shift keeps both sides equal while held (a round block too); Alt
-    // draws a shape from its middle. In Room, Alt cuts instead (its own meaning, D278).
-    const shapeTool = props.mode === 'shape'
-    const bounds = drawBounds({ start: gesture.start, end, keepRatio: event.shiftKey, fromCenter: shapeTool && event.altKey })
-    roomPreview.value = { bounds, cut: props.mode === 'room' && event.altKey }
+    // draws from the middle, in Room too. Cutting is the tool bar's choice.
+    const bounds = drawBounds({ start: gesture.start, end, keepRatio: event.shiftKey, fromCenter: event.altKey })
+    roomPreview.value = { bounds, cut: props.mode === 'room' && !!props.roomCut }
     return
   }
   if (gesture.type === 'rotate') {
@@ -960,7 +961,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   if ((finished.type === 'wall' || finished.type === 'wall-end') && finished.moved && movedWalls) emit('walls', movedWalls)
   if (finished.type === 'room' && room) {
     if (props.mode === 'shape') emit('block', room.bounds)
-    else emit('room', room.bounds, event.altKey)
+    else emit('room', room.bounds, room.cut)
   }
 }
 
@@ -1192,7 +1193,7 @@ const ariaLabel = computed(() => {
   if (drawing.value) return `Draw outline, ${floor.value.name} floor. Click on the grid to add corners; Enter closes the shape, Backspace removes the last corner.`
   if (props.mode === 'outline') return `Edit points, ${floor.value.name} floor. Drag a corner or a side to move it; double-click a side to add a corner; with a corner picked, arrow keys move it and Delete removes it.`
   if (props.mode === 'shape') return `Shape, ${floor.value.name} floor. Drag to draw a ${props.roundShape ? 'round block' : 'block'} for anything the library doesn't have.`
-  if (props.mode === 'room') return `Room, ${floor.value.name} floor. Drag a rectangle to add a room to the floor; hold Alt to cut it out.`
+  if (props.mode === 'room') return `Room, ${floor.value.name} floor. Drag a rectangle to ${props.roomCut ? 'cut it out of the floor' : 'add a room to the floor'}; hold Alt to draw from the middle.`
   if (props.mode === 'wall') return `Draw wall, ${floor.value.name} floor. Click where the wall starts and where it ends; Escape stops.`
   return `Floor plan, ${floor.value.name}. Arrow keys move the selected piece 1 cm (Shift: 10 cm), Shift+R turns it, Delete removes it, Escape clears the selection. Question mark lists every shortcut.`
 })

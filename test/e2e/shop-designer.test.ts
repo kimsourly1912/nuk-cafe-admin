@@ -861,7 +861,9 @@ describe('the shop designer on saved layouts', () => {
     expect(Math.max(...ground.outline.map(point => point.x))).toBe(right + 200)
     // A cut inside the floor would leave a hole: refused, and it says why.
     await page.keyboard.press('r')
-    await dragPlan(page, { x: right + 50, y: top + 50 }, { x: right + 100, y: top + 150 }, ['Alt'])
+    // Cut is the tool bar's choice now; Alt draws from the middle (owner: like Figma).
+    await page.getByTestId('tool-bar').getByRole('button', { name: 'Cut' }).click()
+    await dragPlan(page, { x: right + 50, y: top + 50 }, { x: right + 100, y: top + 150 })
     await page.getByText('That would leave a hole in the floor', { exact: false }).first().waitFor()
     await page.keyboard.press('Escape')
     await expect.poll(mode).toBe('select')
