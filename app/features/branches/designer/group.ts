@@ -1,5 +1,6 @@
 import type { InnerWall, LayoutItem, Point, ShopLayout } from '#shared/contracts/shop-layout'
 import { newLayoutId, normalizeRotation } from './geometry'
+import type { Bounds } from './geometry'
 import type { PlanSelection } from './plan'
 import { moveWalls } from './walls'
 
@@ -152,4 +153,30 @@ export function cycleSelection(order: readonly PlanSelection[], current: PlanSel
   const at = current ? order.findIndex(target => target.kind === current.kind && target.id === current.id) : -1
   if (at < 0) return order[step > 0 ? 0 : order.length - 1]!
   return order[(at + step + order.length) % order.length]!
+}
+
+export type AlignEdge = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+
+/**
+ * Align (ISS-026, Figma): how far each selected thing moves so its `edge` lines up with the same
+ * edge of the whole selection. `boxes` are what each one takes up on the plan, as drawn.
+ */
+export function alignOffsets(boxes: readonly { target: PlanSelection, bounds: Bounds }[], edge: AlignEdge): { target: PlanSelection, delta: Point }[] {
+  if (boxes.length < 2) return []
+  const all = {
+    minX: Math.min(...boxes.map(box => box.bounds.minX)),
+    maxX: Math.max(...boxes.map(box => box.bounds.maxX)),
+    minY: Math.min(...boxes.map(box => box.bounds.minY)),
+    maxY: Math.max(...boxes.map(box => box.bounds.maxY)),
+  }
+  return boxes.map(({ target, bounds }) => {
+    const delta = { x: 0, y: 0 }
+    if (edge === 'left') delta.x = all.minX - bounds.minX
+    if (edge === 'right') delta.x = all.maxX - bounds.maxX
+    if (edge === 'center') delta.x = Math.round((all.minX + all.maxX - bounds.minX - bounds.maxX) / 2)
+    if (edge === 'top') delta.y = all.minY - bounds.minY
+    if (edge === 'bottom') delta.y = all.maxY - bounds.maxY
+    if (edge === 'middle') delta.y = Math.round((all.minY + all.maxY - bounds.minY - bounds.maxY) / 2)
+    return { target, delta }
+  }).filter(({ delta }) => delta.x || delta.y)
 }

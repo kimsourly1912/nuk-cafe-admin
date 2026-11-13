@@ -980,6 +980,14 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => positionOf(page, 'L1')).toEqual(tableBefore)
     expect(await plantAt()).toEqual(plantBefore)
 
+    // Align (ISS-026): the tops line up (the plant, smaller than L1 and its chairs, moves up), one undo step.
+    await page.getByTestId('align-top').click()
+    await expect.poll(async () => (await plantAt()).y).toBeLessThan(plantBefore.y)
+    expect(await positionOf(page, 'L1')).toEqual(tableBefore)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => positionOf(page, 'L1')).toEqual(tableBefore)
+    expect(await plantAt()).toEqual(plantBefore)
+
     // Delete on the set: L1 back to Unplaced tables, the plant gone; Undo brings both back.
     const plantCount = await plants.count()
     await page.keyboard.press('Delete')

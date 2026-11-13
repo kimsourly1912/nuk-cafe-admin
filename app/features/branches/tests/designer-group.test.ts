@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ShopLayout } from '#shared/contracts/shop-layout'
-import { copySelected, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, copySelected, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
 import type { PlanSelection } from '../designer/plan'
 
@@ -131,5 +131,21 @@ describe('Tab through the floor (ISS-007)', () => {
     expect(cycleSelection(set, set[0]!, -1)).toEqual(set[2])
     expect(cycleSelection(set, { kind: 'edge', id: '0' }, 1)).toEqual(set[0])
     expect(cycleSelection([], null, 1)).toBeNull()
+  })
+})
+
+describe('align (ISS-026)', () => {
+  const boxes = [
+    { target: { kind: 'item' as const, id: 'a' }, bounds: { minX: 0, minY: 0, maxX: 100, maxY: 50 } },
+    { target: { kind: 'item' as const, id: 'b' }, bounds: { minX: 200, minY: 100, maxX: 260, maxY: 300 } },
+  ]
+  it('lines each one up with the set\'s edge, centre or middle; already there does not move', () => {
+    expect(alignOffsets(boxes, 'left')).toEqual([{ target: boxes[1]!.target, delta: { x: -200, y: 0 } }])
+    expect(alignOffsets(boxes, 'right')).toEqual([{ target: boxes[0]!.target, delta: { x: 160, y: 0 } }])
+    expect(alignOffsets(boxes, 'center')).toEqual([{ target: boxes[0]!.target, delta: { x: 80, y: 0 } }, { target: boxes[1]!.target, delta: { x: -100, y: 0 } }])
+    expect(alignOffsets(boxes, 'top')).toEqual([{ target: boxes[1]!.target, delta: { x: 0, y: -100 } }])
+    expect(alignOffsets(boxes, 'bottom')).toEqual([{ target: boxes[0]!.target, delta: { x: 0, y: 250 } }])
+    expect(alignOffsets(boxes, 'middle')).toEqual([{ target: boxes[0]!.target, delta: { x: 0, y: 125 } }, { target: boxes[1]!.target, delta: { x: 0, y: -50 } }])
+    expect(alignOffsets([boxes[0]!], 'left')).toEqual([])
   })
 })

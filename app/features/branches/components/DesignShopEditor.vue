@@ -14,13 +14,14 @@ import { edgeLength, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKi
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
+import type { AlignEdge } from '../designer/group'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
 import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, placementExtent, snap } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
-import { cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
 import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
@@ -529,6 +530,30 @@ function turnGroup() {
   const center = { x: snap((box.minX + box.maxX) / 2, FINE_GRID_CM), y: snap((box.minY + box.maxY) / 2, FINE_GRID_CM) }
   draft.change(next => turnSelected(next, floorId, group.value, center))
 }
+
+/** Align (ISS-026, Figma): each selected one lines up with the set's edge, as drawn; one undo step. */
+function alignGroup(edge: AlignEdge) {
+  const plan = canvas.value
+  const floorId = floor.value?.id
+  if (!plan || !floorId) return
+  const boxes = group.value.flatMap((target) => {
+    const bounds = plan.boxOf(target)
+    return bounds ? [{ target, bounds }] : []
+  })
+  const moves = alignOffsets(boxes, edge)
+  if (!moves.length) return
+  draft.change((next) => {
+    for (const { target, delta } of moves) shiftSelected(next, floorId, [target], delta)
+  })
+}
+const ALIGN_BUTTONS: { edge: AlignEdge, label: string, icon: string }[] = [
+  { edge: 'left', label: 'Align left', icon: 'i-lucide-align-start-vertical' },
+  { edge: 'center', label: 'Align centres', icon: 'i-lucide-align-center-vertical' },
+  { edge: 'right', label: 'Align right', icon: 'i-lucide-align-end-vertical' },
+  { edge: 'top', label: 'Align top', icon: 'i-lucide-align-start-horizontal' },
+  { edge: 'middle', label: 'Align middles', icon: 'i-lucide-align-center-horizontal' },
+  { edge: 'bottom', label: 'Align bottom', icon: 'i-lucide-align-end-horizontal' },
+]
 
 function removeGroup() {
   const targets = [...group.value]
@@ -1765,6 +1790,27 @@ const pendingLabel = computed(() => {
       <p class="text-sm text-muted">
         Drag any of them, or use the arrow keys, to move them together. Shift+click adds or removes one.
       </p>
+      <!-- Figma's align row (ISS-026): to the set's own edges. -->
+      <div
+        role="group"
+        aria-label="Align"
+        class="flex flex-wrap gap-1"
+      >
+        <UTooltip
+          v-for="button in ALIGN_BUTTONS"
+          :key="button.edge"
+          :text="button.label"
+        >
+          <UButton
+            :icon="button.icon"
+            color="neutral"
+            variant="ghost"
+            :aria-label="button.label"
+            :data-testid="`align-${button.edge}`"
+            @click="alignGroup(button.edge)"
+          />
+        </UTooltip>
+      </div>
       <div class="grid grid-cols-2 gap-2">
         <UButton
           label="Rotate 90°"
