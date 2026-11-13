@@ -13,6 +13,10 @@ Goal: the Studio floor-plan editor behaves like Figma (D278). This plan orders a
 - Update `docs/progress.md` (and a decision entry if the step changes architecture). Set the issue Status in its file when done, then the tester retests with new evidence.
 - Do not guess business policy. Items under "Owner decision" wait for an answer.
 
+## Status (2026-11-13)
+
+Built in one PR on `claude/bold-hypatia-sx8nkl` (owner: collect the small and medium steps), waiting for retest: ISS-028, 001, 006, 003, 031, 032, 033, 009, 010, 029, 011, 012, 013, 015, 014, 017, 018, 019, 022, 025, 007, 026. Not reproduced: ISS-024. Deferred: ISS-020 (owner's Shift step), ISS-023 (details). Each issue file has a "Work" note.
+
 ## Phase 1: View and zoom (start here)
 
 Why first: every other check depends on a stable camera.
