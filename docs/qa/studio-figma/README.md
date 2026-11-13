@@ -34,6 +34,8 @@ docs/qa/studio-figma/
 
 ## For Claude Code
 
+Start with [PLAN.md](PLAN.md): it orders all issues into phases and steps.
+
 Read the issue file, fix only what it describes, run its "How to verify", then update the Status in the file and in `docs/progress.md` as usual. Values marked "from memory" or "unverified" are not confirmed; verify before you rely on them.
 
 ## Issues
