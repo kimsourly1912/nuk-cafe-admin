@@ -74,3 +74,5 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-032](issues/ISS-032.md) | Medium | Bug | The yellow ring is far from the element on hover and select |
 | [ISS-033](issues/ISS-033.md) | Medium | Gap | A rotate circle floats above the element |
 | [ISS-034](issues/ISS-034.md) | High | Bug | Pieces and walls do not stick together; broken wall corners |
+| [ISS-035](issues/ISS-035.md) | Medium | Improvement | The floor is not a movable frame like Figma's |
+| [ISS-036](issues/ISS-036.md) | Medium | Improvement | Sidebar should list pages and each floor should be a frame |
