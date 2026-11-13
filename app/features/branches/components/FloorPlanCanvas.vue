@@ -24,7 +24,7 @@ import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { Floor, InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, floorPageId, innerWallKind, layoutPages, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
-import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
+import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeCursor, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
@@ -606,6 +606,12 @@ function toScreen(point: Point): Point {
  * of moving it.
  */
 const handleCorners = (width: number, depth: number) => (Math.min(width, depth) / perPixel.value >= 56 ? rectCorners({ x: 0, y: 0 }, width, depth, 0) : [])
+
+/**
+ * Figma's rotate cursor (ISS-030): a curved arrow, dark with a light edge so it shows on any
+ * floor, its hot spot in the middle; the browser's own alias arrow where a custom cursor can't show.
+ */
+const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15a7 7 0 0 1 12-6.5" stroke="#fff" stroke-width="5"/><path d="M15 5l3.5 3.5L15 12" stroke="#fff" stroke-width="5"/><path d="M6 15a7 7 0 0 1 12-6.5" stroke="#111" stroke-width="2"/><path d="M15 5l3.5 3.5L15 12" stroke="#111" stroke-width="2"/></g></svg>')}") 12 12, alias`
 
 /** A Shape tool click's shape, each way (ISS-016, Figma's 100 × 100). */
 const SHAPE_CLICK_CM = 100
@@ -1591,7 +1597,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :data-id="wall.id"
           :data-testid="`plan-wall-${wall.id}`"
           :data-wall-kind="wall.kind"
-          class="cursor-move"
+          class="cursor-default"
         >
           <line
             v-if="isSelected('wall', wall.id)"
@@ -1683,7 +1689,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           data-kind="item"
           :data-id="item.id"
           :data-testid="`plan-item-${item.kind}`"
-          class="cursor-grab"
+          class="cursor-default"
         >
           <template v-if="item.kind === 'plant'">
             <circle
@@ -1988,7 +1994,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           data-kind="table"
           :data-id="table.tableId"
           :data-testid="`plan-table-${table.label}`"
-          class="cursor-grab"
+          class="cursor-default"
         >
           <rect
             v-for="(chair, index) in table.chairs"
@@ -2288,7 +2294,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
               :data-id="table.tableId"
               data-handle="rotate"
               :data-testid="`rotate-zone-${place}`"
-              class="cursor-alias"
+              :style="{ cursor: ROTATE_CURSOR }"
             />
             <g
               v-for="(point, handle) in handleCorners(table.extent.width, table.extent.depth)"
@@ -2316,7 +2322,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
                 data-handle="resize"
                 :data-corner="handle"
                 :data-testid="`resize-handle-${handle}`"
-                :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+                :style="{ cursor: resizeCursor(handle, table.rotation) }"
               />
             </g>
           </g>
@@ -2352,7 +2358,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
               :data-id="item.id"
               data-handle="rotate"
               :data-testid="`rotate-zone-${place}`"
-              class="cursor-alias"
+              :style="{ cursor: ROTATE_CURSOR }"
             />
             <g
               v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width, item.depth))"
@@ -2379,7 +2385,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
                 :data-id="item.id"
                 data-handle="resize"
                 :data-corner="handle"
-                :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+                :style="{ cursor: resizeCursor(handle, item.rotation) }"
               />
             </g>
           </g>

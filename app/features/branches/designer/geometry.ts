@@ -472,3 +472,15 @@ export function outlineWallBands(outline: readonly Point[], isWall: readonly boo
     return wallStrip(wall, 0, sign * thickness, before, after)
   })
 }
+
+/**
+ * The resize cursor for a corner handle (ISS-030, like Figma's): the double arrow along the corner's
+ * direction once the piece is turned. Corners in `rectCorners` order (0 top-left before turning).
+ */
+export function resizeCursor(corner: number, rotation: number): 'ew-resize' | 'nwse-resize' | 'ns-resize' | 'nesw-resize' {
+  // A corner's direction from the centre, unturned: 225°, 315°, 45°, 135° (screen, y down).
+  const base = [225, 315, 45, 135][corner % 4]!
+  const angle = (((base + rotation) % 180) + 180) % 180
+  const step = Math.round(angle / 45) % 4
+  return (['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'] as const)[step]!
+}
