@@ -3,6 +3,12 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio vs Figma QA folder (2026-11-13)
+
+Documentation only. [docs/qa/studio-figma](qa/studio-figma/README.md) holds the standard test flow, an issue template and issue files ISS-001 to ISS-005 from manual testing of Figma and staging Studio (zoom and pan so far). Each issue lists steps, expected (Figma), actual (Studio), suspected cause, fix direction and how to verify. Images go in `evidence/ISS-xxx/`; none are added yet.
+
+- **Evidence:** documentation only; no code changed. Figma values marked "from memory" are unverified. Real wheel and trackpad pinch tests are still open.
+
 ### Studio canvas like Figma, PR 3: several at once (D278, 2026-11-12)
 
 Branch `claude/practical-heisenberg-lixhue`, after PR #304 (PR 2). The last part of D278, one PR (owner, 2026-11-12). [Plan → PR 3](plans/shop-designer.md#pr-3-several-at-once-smart-guides-and-alt-distances-built-2026-11-12).
