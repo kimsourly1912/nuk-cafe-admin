@@ -46,3 +46,7 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-004](issues/ISS-004.md) | Low | Improvement | Zoom menu has no grid, snap or ruler toggles |
 | [ISS-005](issues/ISS-005.md) | Low | Gap | Zoom limits differ from Figma |
 | [ISS-006](issues/ISS-006.md) | Medium | Gap | Ctrl/Cmd+0 does nothing in Studio |
+| [ISS-007](issues/ISS-007.md) | Low | Gap | Tab does not select the next item |
+| [ISS-008](issues/ISS-008.md) | Low | Gap | Right-click menu much smaller than Figma's |
+| [ISS-009](issues/ISS-009.md) | Low | Improvement | Yellow ring around the editor (needs recheck) |
+| [ISS-010](issues/ISS-010.md) | Low | Bug | "Zoom to s…" label cut off |
