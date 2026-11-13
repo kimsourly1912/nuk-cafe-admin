@@ -56,3 +56,6 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-014](issues/ISS-014.md) | Medium | Improvement | Alt + drag copy works but is not smooth like Figma |
 | [ISS-015](issues/ISS-015.md) | Medium | Gap | Shift and Alt do nothing while resizing |
 | [ISS-016](issues/ISS-016.md) | Low | Improvement | Shape tool: single click creates nothing |
+| [ISS-017](issues/ISS-017.md) | Medium | Gap | Shape and Room drawing: Shift and Alt not like Figma |
+| [ISS-018](issues/ISS-018.md) | Medium | Gap | Wall tool: straight by default, not free with Shift 45 |
+| [ISS-019](issues/ISS-019.md) | Medium | Gap | Edit points keeps right angles by default |
