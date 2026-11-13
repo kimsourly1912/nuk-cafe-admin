@@ -55,3 +55,4 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-013](issues/ISS-013.md) | Low | Improvement | Rotate: free by default, Shift snaps 15° (owner: follow Figma) |
 | [ISS-014](issues/ISS-014.md) | Medium | Improvement | Alt + drag copy works but is not smooth like Figma |
 | [ISS-015](issues/ISS-015.md) | Medium | Gap | Shift and Alt do nothing while resizing |
+| [ISS-016](issues/ISS-016.md) | Low | Improvement | Shape tool: single click creates nothing |
