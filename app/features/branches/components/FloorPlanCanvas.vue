@@ -366,9 +366,9 @@ const selectionFrames = computed(() => {
   const selection = props.selection
   if (props.mode !== 'select' || !selection || multi.value) return null
   const table = selection.kind === 'table' ? placed.value.find(candidate => candidate.tableId === selection.id) : undefined
-  if (table) return { pose: table, width: table.extent.width + 12, depth: table.extent.depth + 12, handle: 56 }
+  if (table) return { pose: table, width: table.extent.width, depth: table.extent.depth, handle: 56 }
   const item = selection.kind === 'item' ? items.value.find(candidate => candidate.id === selection.id) : undefined
-  return item ? { pose: item, width: item.width + 16, depth: item.depth + 16, handle: 50 } : null
+  return item ? { pose: item, width: item.width, depth: item.depth, handle: 50 } : null
 })
 
 /** The hovered piece's outline, or the hovered wall's or edge's line; none for the selection itself. */
@@ -377,11 +377,11 @@ const hoverOutline = computed(() => {
   if (props.mode !== 'select' || !target || isSelected(target.kind, target.id)) return null
   if (target.kind === 'table') {
     const table = placed.value.find(candidate => candidate.tableId === target.id)
-    return table ? { kind: 'frame' as const, pose: table, width: table.extent.width + 12, depth: table.extent.depth + 12 } : null
+    return table ? { kind: 'frame' as const, pose: table, width: table.extent.width, depth: table.extent.depth } : null
   }
   if (target.kind === 'item') {
     const item = items.value.find(candidate => candidate.id === target.id)
-    return item ? { kind: 'frame' as const, pose: item, width: item.width + 16, depth: item.depth + 16 } : null
+    return item ? { kind: 'frame' as const, pose: item, width: item.width, depth: item.depth } : null
   }
   if (target.kind === 'wall') {
     const wall = walls.value.find(candidate => candidate.id === target.id)
@@ -1779,10 +1779,10 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       >
         <rect
           v-if="boxOf(member)"
-          :x="boxOf(member)!.minX - 4"
-          :y="boxOf(member)!.minY - 4"
-          :width="boxOf(member)!.maxX - boxOf(member)!.minX + 8"
-          :height="boxOf(member)!.maxY - boxOf(member)!.minY + 8"
+          :x="boxOf(member)!.minX"
+          :y="boxOf(member)!.minY"
+          :width="boxOf(member)!.maxX - boxOf(member)!.minX"
+          :height="boxOf(member)!.maxY - boxOf(member)!.minY"
           fill="none"
           stroke="var(--ui-primary)"
           stroke-width="1.5"
@@ -1791,14 +1791,13 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       </template>
       <rect
         v-if="selectedBounds"
-        :x="selectedBounds.minX - 12"
-        :y="selectedBounds.minY - 12"
-        :width="selectedBounds.maxX - selectedBounds.minX + 24"
-        :height="selectedBounds.maxY - selectedBounds.minY + 24"
+        :x="selectedBounds.minX"
+        :y="selectedBounds.minY"
+        :width="selectedBounds.maxX - selectedBounds.minX"
+        :height="selectedBounds.maxY - selectedBounds.minY"
         fill="none"
         stroke="var(--ui-primary)"
-        stroke-width="2"
-        stroke-dasharray="6 4"
+        stroke-width="1.5"
         vector-effect="non-scaling-stroke"
       />
     </g>
@@ -1880,20 +1879,20 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :transform="transform(table)"
         >
           <rect
-            :x="-table.extent.width / 2 - 6"
-            :y="-table.extent.depth / 2 - 6"
-            :width="table.extent.width + 12"
-            :height="table.extent.depth + 12"
+            :x="-table.extent.width / 2"
+            :y="-table.extent.depth / 2"
+            :width="table.extent.width"
+            :height="table.extent.depth"
             fill="none"
             stroke="var(--ui-primary)"
-            stroke-width="3"
+            stroke-width="1.5"
             vector-effect="non-scaling-stroke"
             pointer-events="none"
           />
           <line
             x1="0"
             x2="0"
-            :y1="-table.extent.depth / 2 - 6"
+            :y1="-table.extent.depth / 2"
             :y2="-table.extent.depth / 2 - 44"
             stroke="var(--ui-primary)"
             stroke-width="3"
@@ -1912,7 +1911,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             class="cursor-alias"
           />
           <g
-            v-for="(point, handle) in handleCorners(table.extent.width + 12, table.extent.depth + 12)"
+            v-for="(point, handle) in handleCorners(table.extent.width, table.extent.depth)"
             :key="handle"
           >
             <rect
@@ -1951,13 +1950,13 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :transform="transform(item)"
         >
           <rect
-            :x="-item.width / 2 - 8"
-            :y="-item.depth / 2 - 8"
-            :width="item.width + 16"
-            :height="item.depth + 16"
+            :x="-item.width / 2"
+            :y="-item.depth / 2"
+            :width="item.width"
+            :height="item.depth"
             fill="none"
             stroke="var(--ui-primary)"
-            stroke-width="3"
+            stroke-width="1.5"
             vector-effect="non-scaling-stroke"
             pointer-events="none"
           />
@@ -1973,7 +1972,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             class="cursor-alias"
           />
           <g
-            v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width + 16, item.depth + 16))"
+            v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width, item.depth))"
             :key="handle"
           >
             <rect
