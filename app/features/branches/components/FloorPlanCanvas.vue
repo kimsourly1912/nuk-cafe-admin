@@ -744,7 +744,9 @@ function onPointerMove(event: PointerEvent) {
   }
   if (gesture.type === 'resize') {
     const delta = { x: plan.x - gesture.startPlan.x, y: plan.y - gesture.startPlan.y }
-    preview.value = { selection: gesture.selection, ...resizeFromCorner(gesture.origin, { corner: gesture.corner, delta, round: gesture.round, min: gesture.min, max: gesture.max }) }
+    const resized = resizeFromCorner(gesture.origin, { corner: gesture.corner, delta, round: gesture.round, min: gesture.min, max: gesture.max })
+    preview.value = { selection: gesture.selection, ...resized }
+    liveLabel.value = { at: plan, text: `${resized.width} × ${resized.depth} cm` }
     return
   }
   if (!gesture.moved && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
@@ -1110,6 +1112,8 @@ function chairRect(chair: TableLook['chair']) {
 }
 const metres = (cm: number) => `${Math.round(cm)} cm`
 /** A label's box around its text, in plan centimetres at the current zoom. */
+/** A drawn rectangle's size, as the live label shows it (ISS-029). */
+const sizeText = (bounds: Bounds) => `${bounds.maxX - bounds.minX} × ${bounds.maxY - bounds.minY} cm`
 const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.value, height: 22 * perPixel.value, font: 12 * perPixel.value })
 </script>
 
@@ -1748,14 +1752,25 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         stroke-dasharray="8 6"
         vector-effect="non-scaling-stroke"
       />
+      <!-- The size under the shape, like Figma's (ISS-029). -->
+      <rect
+        :x="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2 - chipSize(sizeText(roomPreview.bounds)).width / 2"
+        :y="roomPreview.bounds.maxY + 8 * perPixel"
+        :width="chipSize(sizeText(roomPreview.bounds)).width"
+        :height="chipSize('').height"
+        :rx="4 * perPixel"
+        fill="var(--ui-text-highlighted)"
+      />
       <text
         :x="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2"
-        :y="(roomPreview.bounds.minY + roomPreview.bounds.maxY) / 2"
+        :y="roomPreview.bounds.maxY + 8 * perPixel + chipSize('').height / 2"
         text-anchor="middle"
         dominant-baseline="central"
-        :font-size="12 * perPixel"
-        fill="var(--ui-text-highlighted)"
-      >{{ roomPreview.bounds.maxX - roomPreview.bounds.minX }} × {{ roomPreview.bounds.maxY - roomPreview.bounds.minY }} cm</text>
+        :font-size="chipSize('').font"
+        fill="var(--ui-bg)"
+        class="tabular-nums"
+        data-testid="draw-size"
+      >{{ sizeText(roomPreview.bounds) }}</text>
     </g>
 
     <!-- What a click would pick (D278). -->

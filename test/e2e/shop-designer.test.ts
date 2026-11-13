@@ -839,7 +839,14 @@ describe('the shop designer on saved layouts', () => {
     // Shape (S): a block drawn on the floor (over whatever is there), named Stage and 40 cm high.
     await page.keyboard.press('s')
     await expect.poll(mode).toBe('shape')
-    await dragPlan(page, { x: right - 400, y: top + 400 }, { x: right - 200, y: top + 500 })
+    // While drawing, the size shows under the shape (ISS-029).
+    const shapeStart = await onScreen(page, { x: right - 400, y: top + 400 })
+    const shapeEnd = await onScreen(page, { x: right - 200, y: top + 500 })
+    await page.mouse.move(shapeStart.x, shapeStart.y)
+    await page.mouse.down()
+    await page.mouse.move(shapeEnd.x, shapeEnd.y, { steps: 8 })
+    await expect.poll(() => plan(page).getByTestId('draw-size').textContent()).toBe('200 × 100 cm')
+    await page.mouse.up()
     await expect.poll(mode).toBe('select')
     const name = properties.getByLabel('Name')
     await name.fill('Stage')
@@ -1139,6 +1146,8 @@ describe('the shop designer on saved layouts', () => {
     await page.mouse.move(start.x, start.y)
     await page.mouse.down()
     await page.mouse.move(start.x + 40 * scale, start.y + 40 * scale, { steps: 5 })
+    // The size beside the pointer while resizing (ISS-029).
+    await expect.poll(() => plan(page).getByTestId('live-label').textContent()).toBe(`${before + 40} × ${before + 40} cm`)
     await page.mouse.up()
     await expect.poll(width).toBe(String(before + 40))
     expect(await panel.getByLabel('Depth (cm)').inputValue()).toBe(String(before + 40))
