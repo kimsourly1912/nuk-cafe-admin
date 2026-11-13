@@ -11,7 +11,8 @@ import type { LayoutDraft } from './useLayoutDraft'
 
 /**
  * A branch's shop layout being edited (D273, step 2b): the saved layout from the server, the draft
- * on top of it, and the version the draft started from.
+ * on top of it, and the version the draft started from. It saves itself (D279) a moment after a
+ * change, through the same versioned save; restoring a kept version is one undo step.
  *
  * - **Saved vs draft.** With nothing unsaved, the draft follows the server (a refetch after a table
  *   change, or another device's save seen on return). A refetch that brings the same drawing

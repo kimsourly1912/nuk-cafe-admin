@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio follows Figma QA, Phase 5 in one PR: layers, frames, pages, autosave (D278, D279, 2026-11-13)
+
+Branch `claude/bold-hypatia-sx8nkl`, from main after PR #309. Owner: start Phase 5, hide and lock like Figma, the other steps too, in one PR; autosave: real, with history (D279).
+
+- **Built:** data (migration `0065`: floor frame, page, hidden, locked; placement hidden, locked; layout pages; `branch_layout_versions`); ISS-021 layers (hide, lock, rename, range select, hover); ISS-035 the floor as a movable frame and floor order; ISS-036 pages and the page's floors side by side on one canvas; ISS-027 autosave and version history.
+- **How to verify:** on staging, Studio 2D: in Floors, hide and lock a table and a plant (eye, lock), double-click to rename, Shift+click a range; drag a floor's name to move its frame, type Frame X; move a floor Up and Down; add a page (empty), move a floor to it, delete an empty page; with two floors on a page, click the other frame and press Shift+1; edit something and watch the status go Saving… then Saved without pressing Save; open History, Restore an older version, then Undo. Check 3D and Explore still look the same (frames and flags are design-only).
+- **Evidence (local):** `pnpm lint` and `pnpm typecheck` clean (`NODE_OPTIONS=--max-old-space-size=6144`); `pnpm test:unit`: 196 files, 2,996 passed, 1 skipped (server: frames, pages, flags, 0 vs never placed, history cadence and pruning, two-cafe isolation of history; unit: `designer-pages`); `test/e2e/shop-designer.test.ts`: 30 passed (layers, frame drag, order, pages, side-by-side frames, history; the save helper waits for Saved since the layout saves itself). Migration generated with `drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts` after `pnpm nuxt prepare` (the bundled schema was stale once); a second run says "No schema changes". No staging check yet.
+- **Open:** pages without floors hold nothing else (no free pieces outside a floor) until the owner asks; ISS-002, 005, 008, 016, 023, 024, 030 wait for the owner or the tester.
+
 ### Studio follows Figma QA, third PR: clean wall corners and flush snapping (ISS-034, 2026-11-13)
 
 Branch `claude/bold-hypatia-sx8nkl`, from main after PR #308 merged. A large step, its own PR (work plan 3.1).
