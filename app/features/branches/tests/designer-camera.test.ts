@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitBounds, followCanvas, minorGridOpacity, panBy, parseZoomPercent, planToScreen, screenToPlan, visibleRect, wheelZoomFactor, ZOOM_LIMITS, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, majorGridOpacity, minorGridOpacity, panBy, parseZoomPercent, planToScreen, screenToPlan, visibleRect, wheelZoomFactor, ZOOM_LIMITS, zoomAt } from '../designer/camera'
 import type { Camera } from '../designer/camera'
 
 const camera: Camera = { x: 100, y: 50, scale: 1.96 }
@@ -39,7 +39,7 @@ describe('the plan camera (ISS-028)', () => {
     const zoomed = zoomAt(camera, at, 2)
     expect(zoomed.scale).toBeCloseTo(3.92)
     expect(close(screenToPlan(zoomed, planToScreen(camera, at)))).toEqual(at)
-    expect(zoomAt(camera, at, 100).scale).toBe(ZOOM_LIMITS.max)
+    expect(zoomAt(camera, at, 1000).scale).toBe(ZOOM_LIMITS.max)
     expect(zoomAt(camera, at, 0.0001).scale).toBe(ZOOM_LIMITS.min)
     const stopped = zoomAt({ ...camera, scale: ZOOM_LIMITS.max }, at, 2)
     expect(close(screenToPlan(stopped, planToScreen({ ...camera, scale: ZOOM_LIMITS.max }, at)))).toEqual(at)
@@ -85,5 +85,12 @@ describe('the plan camera (ISS-028)', () => {
     expect(minorGridOpacity(0.6)).toBeCloseTo(0.5)
     expect(minorGridOpacity(0.4)).toBe(0)
     expect(minorGridOpacity(0.1)).toBe(0)
+  })
+
+  it('zooms from 2 % to 25,600 % (ISS-005), and the metre lines fade far out', () => {
+    expect(ZOOM_LIMITS).toEqual({ min: 0.02, max: 256 })
+    expect(majorGridOpacity(0.08)).toBe(1)
+    expect(majorGridOpacity(0.06)).toBeCloseTo(0.5)
+    expect(majorGridOpacity(0.02)).toBe(0)
   })
 })

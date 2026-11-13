@@ -4,7 +4,7 @@ import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook, keepsCircle } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { besideOf, chairPoses, constrainAngle, outlineWallBands, wallStrip, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, constrainAngle, resizeCursor, outlineWallBands, wallStrip, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import { fitDistance } from '../designer/scene/units'
@@ -365,5 +365,15 @@ describe('wall corners (ISS-034)', () => {
     expect(strip[2]!.y).toBe(6)
     const back = { from: { x: 100, y: 0 }, to: { x: 0, y: 5 } }
     expect(close(wallStrip(a, -6, 6, undefined, back))![2]).toEqual({ x: 100, y: 6 })
+  })
+})
+
+describe('resize cursors (ISS-030)', () => {
+  it('point along the corner, and turn with the piece', () => {
+    expect([0, 1, 2, 3].map(corner => resizeCursor(corner, 0))).toEqual(['nwse-resize', 'nesw-resize', 'nwse-resize', 'nesw-resize'])
+    expect(resizeCursor(0, 45)).toBe('ns-resize')
+    expect(resizeCursor(1, 45)).toBe('ew-resize')
+    expect(resizeCursor(0, 90)).toBe('nesw-resize')
+    expect(resizeCursor(2, 360)).toBe('nwse-resize')
   })
 })

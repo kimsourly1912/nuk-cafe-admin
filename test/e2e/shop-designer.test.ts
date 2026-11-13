@@ -836,7 +836,7 @@ describe('the shop designer on saved layouts', () => {
     // Ctrl+0 is 100 % too (ISS-006), without the browser's page zoom.
     await page.keyboard.press('Control+0')
     await expect.poll(() => zoom.textContent()).toBe('100%')
-    // A typed percentage in the zoom menu (ISS-003): clamped to 800 %, letters are ignored.
+    // A typed percentage in the zoom menu (ISS-003): clamped to 25,600 % (ISS-005), letters are ignored.
     // Each time from a closed menu: a number closes it (wait until it is gone, it animates out),
     // letters leave it open.
     const zoomField = page.getByTestId('zoom-input')
@@ -849,10 +849,10 @@ describe('the shop designer on saved layouts', () => {
     await typeZoom('150', true)
     await expect.poll(() => zoom.textContent()).toBe('150%')
     await typeZoom('99999', true)
-    await expect.poll(() => zoom.textContent()).toBe('800%')
+    await expect.poll(() => zoom.textContent()).toBe('25600%')
     await typeZoom('abc', false)
-    await expect.poll(() => zoomField.inputValue()).toBe('800')
-    expect(await zoom.textContent()).toBe('800%')
+    await expect.poll(() => zoomField.inputValue()).toBe('25600')
+    expect(await zoom.textContent()).toBe('25600%')
     await page.keyboard.press('Escape')
     await zoomField.waitFor({ state: 'detached' })
     await page.keyboard.press('Shift+1')
@@ -1017,6 +1017,15 @@ describe('the shop designer on saved layouts', () => {
     await properties.getByLabel('Height (cm)').fill('40')
     await properties.getByLabel('Height (cm)').press('Enter')
     await plan(page).getByText('Stage').waitFor()
+    // A click with Shape (ISS-016, like Figma's): a 100 × 100 cm block there, selected; Undo takes it away.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    await page.keyboard.press('s')
+    await expect.poll(mode).toBe('shape')
+    await clickPlan(page, { x: right - 600, y: top + 450 })
+    await expect.poll(mode).toBe('select')
+    await expect.poll(() => properties.getByLabel('Width (cm)').inputValue()).toBe('100')
+    expect(await properties.getByLabel('Depth (cm)').inputValue()).toBe('100')
+    await page.getByRole('button', { name: 'Undo' }).click()
     await shot(page, 'shape-stage')
 
     await save(page)
@@ -1171,6 +1180,25 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Undo' }).click()
     await page.getByRole('button', { name: 'Undo' }).click()
     await expect.poll(() => plants.count()).toBe(count)
+
+    // The right-click menu has Figma's edit group (ISS-008): Paste here puts the copy at the
+    // pointer; Bring to front draws it last; Lock from the menu.
+    const pasteAt = await onScreen(page, { x: tableBefore.x + 300, y: tableBefore.y + 200 })
+    await page.mouse.click(pasteAt.x, pasteAt.y, { button: 'right' })
+    await page.getByRole('menuitem', { name: 'Paste here' }).click()
+    await expect.poll(() => plants.count()).toBe(count + 1)
+    // A screen pixel rounds to a centimetre or so.
+    await expect.poll(async () => {
+      const [, x, y] = /translate\((-?[\d.]+) (-?[\d.]+)\)/.exec(await plants.last().getAttribute('transform') ?? '') ?? []
+      return Math.abs(Number(x) - tableBefore.x - 300) <= 2 && Math.abs(Number(y) - tableBefore.y - 200) <= 2
+    }).toBe(true)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => plants.count()).toBe(count)
+    await original.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Lock' }).click()
+    await expect.poll(() => original.getAttribute('pointer-events')).toBe('none')
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => original.getAttribute('pointer-events')).toBeNull()
 
     // Layers (ISS-021, Figma): pointing at a row outlines it on the plan; the eye hides it from the
     // plan; the lock stops picks on the plan while Layers still selects it; a double-click renames;

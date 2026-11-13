@@ -30,8 +30,11 @@ export interface ZoomLimits {
   max: number
 }
 
-/** 10 % to 800 %: a whole building to a chair's leg, the same on every screen size. */
-export const ZOOM_LIMITS: ZoomLimits = { min: 0.1, max: 8 }
+/**
+ * 2 % to 25,600 %, Figma's range (ISS-005; reported by Figma users, not in Figma's documentation),
+ * the same on every screen size.
+ */
+export const ZOOM_LIMITS: ZoomLimits = { min: 0.02, max: 256 }
 
 export function clampScale(scale: number, limits: ZoomLimits = ZOOM_LIMITS): number {
   return Math.min(limits.max, Math.max(limits.min, scale))
@@ -128,6 +131,13 @@ export const GRID_MAJOR_CM = 100
  * below and gone at 4 px, so zooming out never turns the grid into a grey texture.
  */
 export function minorGridOpacity(scale: number): number {
-  const gap = GRID_MINOR_CM * scale
-  return Math.min(1, Math.max(0, (gap - 4) / 4))
+  return gridOpacity(GRID_MINOR_CM * scale)
 }
+
+/** The metre lines fade the same way when zoomed far out (ISS-005: down to 2 %). */
+export function majorGridOpacity(scale: number): number {
+  return gridOpacity(GRID_MAJOR_CM * scale)
+}
+
+/** Full from 8 px apart on screen, gone at 4 px. */
+const gridOpacity = (gap: number) => Math.min(1, Math.max(0, (gap - 4) / 4))

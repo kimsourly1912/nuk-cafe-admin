@@ -24,9 +24,9 @@ import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { Floor, InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, floorPageId, innerWallKind, layoutPages, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
-import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
+import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeCursor, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
-import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, majorGridOpacity, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
 import { moveWall, moveWallEnd, moveWalls } from '../designer/walls'
@@ -126,6 +126,7 @@ const perPixel = computed(() => 1 / scale.value)
 const MEASURED_MIN_PX = 100
 /** The fine grid fades out when its lines get close on screen (ISS-031). */
 const minorOpacity = computed(() => minorGridOpacity(scale.value))
+const majorOpacity = computed(() => majorGridOpacity(scale.value))
 const measured = computed(() => screenWidth.value >= MEASURED_MIN_PX && screenHeight.value >= MEASURED_MIN_PX)
 
 // The canvas moved on the page (the sidebar hid, showed or was resized): every plan point stays
@@ -607,6 +608,15 @@ function toScreen(point: Point): Point {
  */
 const handleCorners = (width: number, depth: number) => (Math.min(width, depth) / perPixel.value >= 56 ? rectCorners({ x: 0, y: 0 }, width, depth, 0) : [])
 
+/**
+ * Figma's rotate cursor (ISS-030): a curved arrow, dark with a light edge so it shows on any
+ * floor, its hot spot in the middle; the browser's own alias arrow where a custom cursor can't show.
+ */
+const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15a7 7 0 0 1 12-6.5" stroke="#fff" stroke-width="5"/><path d="M15 5l3.5 3.5L15 12" stroke="#fff" stroke-width="5"/><path d="M6 15a7 7 0 0 1 12-6.5" stroke="#111" stroke-width="2"/><path d="M15 5l3.5 3.5L15 12" stroke="#111" stroke-width="2"/></g></svg>')}") 12 12, alias`
+
+/** A Shape tool click's shape, each way (ISS-016, Figma's 100 × 100). */
+const SHAPE_CLICK_CM = 100
+
 /** Rotate zones' size and how far they sit out from the corner, in screen pixels (ISS-033): past the resize handle's 16 px reach. */
 const ROTATE_ZONE_PX = 20
 const ROTATE_ZONE_OFFSET_PX = 12
@@ -659,7 +669,7 @@ type Gesture
     | { type: 'corner', index: number, startPlan: Point, origin: Point, startClient: Point, moved: boolean }
     | { type: 'wall-end', id: string, end: 'from' | 'to', startClient: Point, moved: boolean }
     | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
-    | { type: 'room', start: Point }
+    | { type: 'room', start: Point, startClient: Point }
     | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'group', startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'join', target: PlanSelection, startPlan: Point, startClient: Point, moved: boolean }
@@ -717,11 +727,14 @@ useEventListener('keydown', (event: KeyboardEvent) => {
  * A right-click picks what's under the pointer (or clears the selection on empty plan), so Studio's
  * menu acts on it (D278). Only in the select tool; the other tools keep the browser's menu off.
  */
+/** Where the plan was last right-clicked, in plan centimetres: the menu's Paste here (ISS-008). */
+const contextPoint = shallowRef<Point | null>(null)
 function onContextMenu(event: MouseEvent) {
   if (props.mode !== 'select' || props.placing) {
     event.preventDefault()
     return
   }
+  contextPoint.value = toPlan(event.clientX, event.clientY)
   const target = (event.target as Element).closest<SVGElement>('[data-kind]')
   const kind = target?.dataset.kind
   if (target && (kind === 'table' || kind === 'item' || kind === 'wall' || kind === 'edge')) {
@@ -779,7 +792,7 @@ function onPointerDown(event: PointerEvent) {
   }
   if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
     const step = SNAP_CM
-    gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) } }
+    gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) }, startClient: { x: event.clientX, y: event.clientY } }
     return
   }
   // A drag on empty plan selects what the box touches (Figma); a finger still pans.
@@ -925,6 +938,8 @@ function followPointer(event: PointerMove) {
   const plan = toPlan(event.clientX, event.clientY)
   if (!plan) return
   if (gesture.type === 'room') {
+    // A few pixels are still a click (ISS-016): no rectangle yet.
+    if (!roomPreview.value && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
     const step = SNAP_CM
     const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
     // Like Figma (ISS-017): Shift keeps both sides equal while held (a round block too); Alt
@@ -1119,6 +1134,11 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     if (props.mode === 'shape') emit('block', room.bounds)
     else emit('room', room.bounds, room.cut)
   }
+  // A click with Shape (ISS-016, like Figma's): a 100 × 100 cm shape centred there.
+  else if (finished.type === 'room' && props.mode === 'shape') {
+    const half = SHAPE_CLICK_CM / 2
+    emit('block', { minX: finished.start.x - half, minY: finished.start.y - half, maxX: finished.start.x + half, maxY: finished.start.y + half })
+  }
 }
 
 /** Gestures that change something when released; Escape before the release drops them. */
@@ -1235,7 +1255,7 @@ function onWheel(event: WheelEvent) {
 function zoom(direction: 1 | -1) {
   zoomAround(viewMiddle(), direction > 0 ? 1.25 : 0.8)
 }
-defineExpose({ frameOffset, toPlan, viewCenter, fit: fitPage, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, boxOf, warnings, keydown, focus: () => svg.value?.focus() })
+defineExpose({ contextPoint, frameOffset, toPlan, viewCenter, fit: fitPage, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, boxOf, warnings, keydown, focus: () => svg.value?.focus() })
 
 const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }
 
@@ -1432,6 +1452,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :d="`M${GRID_MAJOR_CM} 0H0V${GRID_MAJOR_CM}`"
           fill="none"
           stroke="var(--ui-border-accented)"
+          :stroke-opacity="majorOpacity"
           stroke-width="1"
           vector-effect="non-scaling-stroke"
         />
@@ -1578,7 +1599,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :data-id="wall.id"
           :data-testid="`plan-wall-${wall.id}`"
           :data-wall-kind="wall.kind"
-          class="cursor-move"
+          class="cursor-default"
         >
           <line
             v-if="isSelected('wall', wall.id)"
@@ -1670,7 +1691,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           data-kind="item"
           :data-id="item.id"
           :data-testid="`plan-item-${item.kind}`"
-          class="cursor-grab"
+          class="cursor-default"
         >
           <template v-if="item.kind === 'plant'">
             <circle
@@ -1975,7 +1996,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           data-kind="table"
           :data-id="table.tableId"
           :data-testid="`plan-table-${table.label}`"
-          class="cursor-grab"
+          class="cursor-default"
         >
           <rect
             v-for="(chair, index) in table.chairs"
@@ -2275,7 +2296,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
               :data-id="table.tableId"
               data-handle="rotate"
               :data-testid="`rotate-zone-${place}`"
-              class="cursor-alias"
+              :style="{ cursor: ROTATE_CURSOR }"
             />
             <g
               v-for="(point, handle) in handleCorners(table.extent.width, table.extent.depth)"
@@ -2303,7 +2324,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
                 data-handle="resize"
                 :data-corner="handle"
                 :data-testid="`resize-handle-${handle}`"
-                :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+                :style="{ cursor: resizeCursor(handle, table.rotation) }"
               />
             </g>
           </g>
@@ -2339,7 +2360,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
               :data-id="item.id"
               data-handle="rotate"
               :data-testid="`rotate-zone-${place}`"
-              class="cursor-alias"
+              :style="{ cursor: ROTATE_CURSOR }"
             />
             <g
               v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width, item.depth))"
@@ -2366,7 +2387,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
                 :data-id="item.id"
                 data-handle="resize"
                 :data-corner="handle"
-                :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+                :style="{ cursor: resizeCursor(handle, item.rotation) }"
               />
             </g>
           </g>
