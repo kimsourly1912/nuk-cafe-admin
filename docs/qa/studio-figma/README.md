@@ -45,4 +45,4 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-003](issues/ISS-003.md) | Medium | Gap | Zoom menu has no typed percent field |
 | [ISS-004](issues/ISS-004.md) | Low | Improvement | Zoom menu has no grid, snap or ruler toggles |
 | [ISS-005](issues/ISS-005.md) | Low | Gap | Zoom limits differ from Figma |
-| [ISS-006](issues/ISS-006.md) | Low | Gap | Ctrl/Cmd+0 does nothing in Studio |
+| [ISS-006](issues/ISS-006.md) | Medium | Gap | Ctrl/Cmd+0 does nothing in Studio |
