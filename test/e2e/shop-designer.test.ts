@@ -707,6 +707,17 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Shift+R')
     await expect.poll(() => l1.getAttribute('transform')).toMatch(/rotate\((90|180|270|0)\)/)
 
+    // Shift+drag on the selected table (ISS-011): it stays selected and moves straight across.
+    const before = await positionOf(page, 'L1')
+    await dragPlan(page, before, { x: before.x + 100, y: before.y + 30 }, ['Shift'])
+    await expect.poll(async () => (await positionOf(page, 'L1')).x).not.toBe(before.x)
+    expect((await positionOf(page, 'L1')).y).toBe(before.y)
+    await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+    // Shift+click on it without a move takes it out of the selection.
+    await l1.click({ modifiers: ['Shift'] })
+    await page.getByTestId('selected-table').waitFor({ state: 'detached' })
+    await l1.click()
+
     // The wheel pans and keeps the zoom; Ctrl+wheel zooms; Shift+0 is 100 %, Shift+1 fits.
     const zoom = page.getByTestId('zoom-level')
     const viewBox = () => plan(page).getAttribute('viewBox')

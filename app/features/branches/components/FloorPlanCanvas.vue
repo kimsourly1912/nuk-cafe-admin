@@ -489,15 +489,15 @@ function drawPoint(plan: Point, from: Point | undefined, free: boolean, fine: bo
 }
 
 type Gesture
-  = | { type: 'drag', selection: PlanSelection, startPlan: Point, origin: { x: number, y: number, rotation: number }, startClient: Point, moved: boolean }
+  = | { type: 'drag', selection: PlanSelection, startPlan: Point, origin: { x: number, y: number, rotation: number }, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'rotate', selection: PlanSelection, center: Point, start: Point, origin: number, rotation: number }
     | { type: 'resize', selection: PlanSelection, corner: number, startPlan: Point, origin: Sized, round: boolean, min: number, max: number }
     | { type: 'corner', index: number, startPlan: Point, origin: Point, startClient: Point, moved: boolean }
     | { type: 'wall-end', id: string, end: 'from' | 'to', startClient: Point, moved: boolean }
-    | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean }
+    | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'room', start: Point }
     | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
-    | { type: 'group', startPlan: Point, startClient: Point, moved: boolean }
+    | { type: 'group', startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'marquee', startPlan: Point, startClient: Point, moved: boolean, additive: boolean }
     | { type: 'pan', startClient: Point, startCamera: Camera, moved: boolean, plan: Point | null, event: { altKey: boolean, fine: boolean }, navigateOnly?: boolean }
     | { type: 'pinch', distance: number, startCamera: Camera, middle: Point }
@@ -648,13 +648,15 @@ function onPointerDown(event: PointerEvent) {
     return
   }
   const pickable = props.mode === 'select' && (kind === 'table' || kind === 'item' || kind === 'wall') && !target.dataset.handle
-  if (pickable && event.shiftKey && event.pointerType !== 'touch') {
-    // Shift+click (D278): in or out of the selection, no drag.
-    emit('toggle', { kind, id })
+  // Shift on a selected piece (ISS-011, like Figma): a drag moves it in a straight line, a click
+  // without a move takes it out of the selection on release. An unselected piece joins at once.
+  const shiftToggle = pickable && event.shiftKey && event.pointerType !== 'touch' ? { kind: kind as PlanSelection['kind'], id } : undefined
+  if (shiftToggle && !isSelected(kind, id)) {
+    emit('toggle', shiftToggle)
     return
   }
   if (pickable && multi.value && isSelected(kind, id)) {
-    gesture = { type: 'group', startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+    gesture = { type: 'group', startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false, toggle: shiftToggle }
     return
   }
   if (kind === 'wall-end') {
@@ -665,7 +667,7 @@ function onPointerDown(event: PointerEvent) {
   if (kind === 'wall') {
     // Pressed and dragged, a wall moves at once (Figma); its joined neighbours stretch to follow.
     if (!isSelected('wall', id)) emit('select', { kind, id })
-    gesture = { type: 'wall', id, startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+    gesture = { type: 'wall', id, startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false, toggle: shiftToggle }
     return
   }
   if (kind === 'edge' && props.mode === 'outline') {
@@ -689,7 +691,7 @@ function onPointerDown(event: PointerEvent) {
     return
   }
   if (!isSelected(selection.kind, selection.id)) emit('select', selection)
-  gesture = { type: 'drag', selection, startPlan: plan, origin: { ...origin }, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+  gesture = { type: 'drag', selection, startPlan: plan, origin: { ...origin }, startClient: { x: event.clientX, y: event.clientY }, moved: false, toggle: shiftToggle }
 }
 
 function onPointerMove(event: PointerEvent) {
@@ -874,6 +876,11 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     if (!finished.moved || !box) return tap(finished.startPlan, { altKey: event.altKey, fine: fineSnap(event) })
     const touched = pieceBoxes.value.filter(piece => piece.from && piece.to ? segmentTouches(box, piece.from, piece.to) : overlaps(box, piece.bounds))
     emit('selectMany', touched.map(piece => piece.target), finished.additive)
+    return
+  }
+  // Shift+click on a selected piece, without a move: out of the selection (ISS-011).
+  if ((finished.type === 'drag' || finished.type === 'group' || finished.type === 'wall') && finished.toggle && !finished.moved) {
+    emit('toggle', finished.toggle)
     return
   }
   if (finished.type === 'group' && finished.moved && delta && (delta.x || delta.y)) emit('moveGroup', delta)
