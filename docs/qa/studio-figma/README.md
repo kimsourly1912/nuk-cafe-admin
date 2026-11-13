@@ -62,3 +62,5 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-020](issues/ISS-020.md) | Medium | Gap | Inspector number fields: Shift+arrow, math, label scrub |
 | [ISS-021](issues/ISS-021.md) | Low | Gap | Layers list: range select, hover outline, hide and lock |
 | [ISS-022](issues/ISS-022.md) | Medium | Gap | Ctrl+C and Ctrl+V do nothing |
+| [ISS-023](issues/ISS-023.md) | Low | Improvement | Alt gap distances not as smooth as Figma |
+| [ISS-024](issues/ISS-024.md) | Low | Improvement | Selection lost going from 3D back to 2D |
