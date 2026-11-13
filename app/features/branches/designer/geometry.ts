@@ -160,6 +160,10 @@ export interface ResizeOptions {
   round: boolean
   min: number
   max: number
+  /** Shift (ISS-015, Figma): width and depth keep their ratio. */
+  keepRatio?: boolean
+  /** Alt (ISS-015, Figma): the centre stays, so both sides grow or shrink. */
+  fromCenter?: boolean
 }
 
 /**
@@ -168,17 +172,29 @@ export interface ResizeOptions {
  * centre is rounded to whole centimetres, as the layout stores it.
  */
 export function resizeFromCorner(start: Sized, options: ResizeOptions): Sized {
-  const { corner, delta, min, max } = options
+  const { corner, delta, min, max, keepRatio, fromCenter } = options
   const sx = corner === 1 || corner === 2 ? 1 : -1
   const sy = corner >= 2 ? 1 : -1
-  // The pointer's move in the piece's own (unturned) directions, outwards from the centre.
+  // The pointer's move in the piece's own (unturned) directions, outwards from the centre; from
+  // the centre, the far side moves as much, so the size changes twice as much.
   const local = rotatePoint(delta, -start.rotation)
-  const along = { x: sx * local.x, y: sy * local.y }
+  const reach = fromCenter ? 2 : 1
+  const along = { x: sx * local.x * reach, y: sy * local.y * reach }
   const fit = (value: number) => Math.min(max, Math.max(min, snap(value, FINE_GRID_CM)))
   let width = fit(start.width + along.x)
   let depth = fit(start.depth + along.y)
   if (options.round) width = depth = fit(start.width + (Math.abs(along.x) >= Math.abs(along.y) ? along.x : along.y))
-  const shift = rotatePoint({ x: (sx * (width - start.width)) / 2, y: (sy * (depth - start.depth)) / 2 }, start.rotation)
+  else if (keepRatio) {
+    // The axis the pointer moved most along leads; the other follows at the same scale, within the limits.
+    const kx = (start.width + along.x) / start.width
+    const ky = (start.depth + along.y) / start.depth
+    const lowest = Math.max(min / start.width, min / start.depth)
+    const highest = Math.min(max / start.width, max / start.depth)
+    const k = Math.min(highest, Math.max(lowest, Math.abs(kx - 1) >= Math.abs(ky - 1) ? kx : ky))
+    width = fit(start.width * k)
+    depth = fit(start.depth * k)
+  }
+  const shift = fromCenter ? { x: 0, y: 0 } : rotatePoint({ x: (sx * (width - start.width)) / 2, y: (sy * (depth - start.depth)) / 2 }, start.rotation)
   return { x: Math.round(start.x + shift.x), y: Math.round(start.y + shift.y), rotation: start.rotation, width, depth }
 }
 

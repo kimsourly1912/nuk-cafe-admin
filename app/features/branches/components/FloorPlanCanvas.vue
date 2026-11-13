@@ -746,7 +746,7 @@ function onPointerMove(event: PointerEvent) {
   }
   if (gesture.type === 'resize') {
     const delta = { x: plan.x - gesture.startPlan.x, y: plan.y - gesture.startPlan.y }
-    const resized = resizeFromCorner(gesture.origin, { corner: gesture.corner, delta, round: gesture.round, min: gesture.min, max: gesture.max })
+    const resized = resizeFromCorner(gesture.origin, { corner: gesture.corner, delta, round: gesture.round, min: gesture.min, max: gesture.max, keepRatio: event.shiftKey, fromCenter: event.altKey })
     preview.value = { selection: gesture.selection, ...resized }
     liveLabel.value = { at: plan, text: `${resized.width} × ${resized.depth} cm` }
     return

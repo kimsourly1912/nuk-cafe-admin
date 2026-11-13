@@ -236,6 +236,19 @@ describe('corner handles and Duplicate (2B)', () => {
     expect(corner(fromTopLeft, 2)).toEqual(corner(table, 2))
   })
 
+  it('Shift keeps the ratio, led by the axis moved most, within the limits (ISS-015)', () => {
+    // 120 x 80, the corner dragged 60 cm out: 1.5 times both ways.
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 60, y: 5 }, keepRatio: true })).toMatchObject({ width: 180, depth: 120 })
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 0, y: -40 }, keepRatio: true })).toMatchObject({ width: 60, depth: 40 })
+    // The limit stops both sides at the same scale: depth may not go under 40 cm.
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: -100, y: 0 }, keepRatio: true })).toMatchObject({ width: 60, depth: 40 })
+  })
+
+  it('Alt resizes around the centre: both sides move, the centre stays (ISS-015)', () => {
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 20, y: 10 }, fromCenter: true })).toEqual({ x: 100, y: 100, rotation: 0, width: 160, depth: 100 })
+    expect(resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 30, y: 0 }, fromCenter: true, keepRatio: true })).toEqual({ x: 100, y: 100, rotation: 0, width: 180, depth: 120 })
+  })
+
   it('follows the piece\'s turn: on a table turned 90°, dragging down the screen widens it', () => {
     const turned = { ...table, rotation: 90 }
     const grown = resizeFromCorner(turned, { ...limits, corner: 2, delta: { x: 0, y: 40 } })
