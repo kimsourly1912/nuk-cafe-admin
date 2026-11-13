@@ -108,10 +108,14 @@ function branchTables(page: Page): Promise<DiningTable[]> {
   return page.evaluate(path => fetch(path).then(response => response.json()), `${api(lab.branchId)}/tables?status=all`)
 }
 
+/**
+ * The layout saved: Studio saves itself a moment after a change (ISS-027), so Save layout may have
+ * nothing left to do; when it still can, it saves at once. Either way: the status says Saved.
+ */
 async function save(page: Page) {
-  await saveButton(page).click()
-  await page.getByText('Shop layout saved').first().waitFor()
-  await expect.poll(() => saveButton(page).isDisabled()).toBe(true)
+  if (await saveButton(page).isEnabled()) await saveButton(page).click({ timeout: 3_000 }).catch(() => undefined)
+  await expect.poll(() => saveButton(page).isDisabled(), { timeout: 15_000 }).toBe(true)
+  await page.getByRole('status').filter({ hasText: /^Saved$/ }).first().waitFor()
 }
 
 /** Screen pixels for a point in plan centimetres. */
@@ -479,17 +483,17 @@ describe('the shop designer on saved layouts', () => {
     await card.getByRole('button', { name: 'Edit in 2D' }).click()
     await expect.poll(() => page.getByTestId('selected-table').textContent()).toContain('L1')
 
-    // The same table stays picked on the way back, and a change not saved yet is drawn and named.
-    expect(await page.getByTestId('building-unsaved').count()).toBe(0)
+    // The same table stays picked on the way back, and a change is drawn at once (it saves itself, ISS-027).
+    const movedFrom = await positionOf(page, 'L1')
     await plan(page).press('ArrowUp')
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: movedFrom.x, y: movedFrom.y - 1 })
     await page.getByRole('button', { name: '3D', exact: true }).first().click()
     await drawn(page)
-    await page.getByTestId('building-unsaved').waitFor()
     await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('L1')
-    expect(await saveButton(page).isEnabled()).toBe(true)
-    // Undo from the keyboard works in 3D too (D277).
+    // Undo from the keyboard works in 3D too (D277), and saves again.
     await page.keyboard.press('ControlOrMeta+z')
-    await expect.poll(() => saveButton(page).isDisabled()).toBe(true)
+    await save(page)
+    expect((await savedLayout(page)).placements.find(placement => placement.floorId && placement.x === movedFrom.x && placement.y === movedFrom.y)).toBeTruthy()
   })
 
   it('on a phone, the lists and QR work before WebGL starts and after graphics are lost inside a floor', { timeout: 120_000 }, async () => {
@@ -871,6 +875,8 @@ describe('the shop designer on saved layouts', () => {
     const commands = page.getByTestId('studio-commands')
     await commands.waitFor()
     await page.keyboard.type('draw wall')
+    // The list filters as it's typed: Enter picks the top match once it is there.
+    await expect.poll(() => commands.getByRole('option').first().textContent()).toContain('Draw wall')
     await page.keyboard.press('Enter')
     await expect.poll(() => plan(page).getAttribute('data-mode')).toBe('wall')
     await commands.waitFor({ state: 'detached' })
@@ -1379,7 +1385,12 @@ describe('the shop designer on saved layouts', () => {
     // A mouse on a wide screen gets no quick bar over the plan: Properties and the menu instead.
     await panel.getByLabel('Width (cm)').waitFor()
     expect(await page.getByTestId('quick-actions').count()).toBe(0)
-    expect(await l1.getAttribute('transform')).toContain('rotate(0)')
+    // Earlier tests' turns are kept now that the layout saves itself (ISS-027): start from 0°.
+    if (!(await l1.getAttribute('transform'))?.includes('rotate(0)')) {
+      await panel.getByLabel('Rotation (°)').fill('0')
+      await panel.getByLabel('Rotation (°)').press('Enter')
+    }
+    await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(0)')
     const width = () => panel.getByLabel('Width (cm)').inputValue()
     const before = Number(await width())
 
@@ -1775,9 +1786,7 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('scene-button').click()
     const panel = page.getByRole('complementary', { name: 'Scene' })
     await panel.getByRole('radio', { name: /Neighborhood lane/ }).click()
-    // A change to the layout, shown at once and saved with it.
-    await page.getByTestId('building-unsaved').waitFor()
-    expect(await saveButton(page).isDisabled()).toBe(false)
+    // A change to the layout, shown at once and saved with it (it saves itself, ISS-027).
     await page.getByRole('button', { name: 'Fit scene' }).click()
     await shot(page, '3d-scene-panel')
     // The street never gets between a person and their tables.
@@ -1890,8 +1899,7 @@ describe('the shop designer on saved layouts', () => {
     await toggle.click()
     await shot(page, 'explore-settings-phone')
     await dialog.getByRole('button', { name: 'Done' }).click()
-    await expect.poll(() => saveButton(page).isEnabled()).toBe(true)
-    expect((await fetch(publicPath())).status).toBe(404)
+    // Saved a moment later by itself (ISS-027): Explore shows it then.
     await save(page)
 
     const published = await fetch(publicPath())
@@ -1905,5 +1913,25 @@ describe('the shop designer on saved layouts', () => {
     await dialog.getByRole('button', { name: 'Done' }).click()
     await save(page)
     expect((await fetch(publicPath())).status).toBe(404)
+  })
+
+  it('version history (ISS-027): lists kept versions; Restore is one undo step and saves itself', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').waitFor()
+    const before = await savedLayout(page)
+    await page.getByRole('button', { name: 'Version history' }).click()
+    const list = page.getByTestId('layout-history')
+    await list.waitFor()
+    const restore = list.getByRole('button', { name: /^Restore version/ }).and(page.locator(':not([disabled])')).first()
+    await restore.click()
+    await page.getByText(/Version \d+ restored/).first().waitFor()
+    await save(page)
+    // Undo brings back what was there, and that saves too.
+    await page.keyboard.press('ControlOrMeta+z')
+    await save(page)
+    const after = await savedLayout(page)
+    expect(after.floors.map(floor => floor.id)).toEqual(before.floors.map(floor => floor.id))
+    expect(after.placements).toEqual(before.placements)
   })
 })

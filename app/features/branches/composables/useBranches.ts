@@ -1,5 +1,5 @@
 import type { BranchPause, BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
-import type { BranchLayout, CreateItemLookInput, CreateLookInput, CustomItemLook, CustomLook, SaveLayoutInput, UpdateItemLookInput } from '#shared/contracts/shop-layout'
+import type { BranchLayout, CreateItemLookInput, CreateLookInput, CustomItemLook, CustomLook, LayoutHistoryEntry, SaveLayoutInput, ShopLayout, UpdateItemLookInput } from '#shared/contracts/shop-layout'
 
 const base = (branchId: string) => `/admin/branches/${branchId}`
 
@@ -194,9 +194,19 @@ export function useBranchLayout(branchId: string, options: { immediate?: boolean
 /** The layout as saved now (the stale-save flow reads it without touching the editor's draft). */
 export const fetchBranchLayout = (branchId: string) => apiFetch<BranchLayout>(`${base(branchId)}/layout`)
 
+/** The layout's version history (ISS-027), newest first; read when the History panel opens. */
+export function useLayoutHistory(branchId: string) {
+  return useApiQuery(`branches:layout-history:${branchId}`, () => apiFetch<LayoutHistoryEntry[]>(`${base(branchId)}/layout/history`), { immediate: false })
+}
+
+/** One version's layout, to restore in the editor. */
+export const fetchLayoutVersion = (branchId: string, version: number) => apiFetch<ShopLayout>(`${base(branchId)}/layout/history/${version}`)
+
 export interface LayoutSave {
   branchId: string
   body: SaveLayoutInput
+  /** An autosave (ISS-027): no success toast, the status says it. */
+  quiet?: boolean
 }
 
 /** Saves the whole layout as one versioned change; resolves to the layout as saved. */
@@ -207,7 +217,7 @@ export function useLayoutMutations() {
       id: 'branches:layout-save',
       key: input => input.branchId,
       lock: input => `branch-layout:${input.branchId}`,
-      successMessage: 'Shop layout saved',
+      successMessage: (_, input) => (input.quiet ? false : 'Shop layout saved'),
       errorMessage: 'Could not save the shop layout',
     },
   )

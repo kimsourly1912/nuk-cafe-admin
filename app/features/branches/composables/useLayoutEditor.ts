@@ -39,6 +39,10 @@ import type { LayoutDraft } from './useLayoutDraft'
  * (the first time Design shop or View in 3D opens): the table list doesn't need the layout.
  */
 
+/** Autosave (ISS-027): this long after the last change, and never longer behind while edits keep coming. */
+export const AUTOSAVE_DELAY_MS = 2_000
+export const AUTOSAVE_MAX_WAIT_MS = 10_000
+
 export interface LayoutConflict {
   /** The layout as saved now; `null` while it loads or when it couldn't be read. */
   latest: BranchLayout | null
@@ -159,8 +163,8 @@ export function useLayoutEditor(branchId: string) {
     start(layout)
   }, { immediate: true })
 
-  /** Sends the draft at `at` (the version read, or the latest one when overwriting). */
-  async function send(at: number): Promise<boolean> {
+  /** Sends the draft at `at` (the version read, or the latest one when overwriting); `quiet` for an autosave. */
+  async function send(at: number, quiet = false): Promise<boolean> {
     if (saving.value) return false
     const parsed = v.safeParse(layoutSchema, draft.layout.value)
     if (!parsed.success) {
@@ -170,7 +174,7 @@ export function useLayoutEditor(branchId: string) {
     problem.value = null
     const sent = draft.layout.value
     saving.value = true
-    const result = await saveMutation.execute({ branchId, body: { version: at, layout: parsed.output } })
+    const result = await saveMutation.execute({ branchId, body: { version: at, layout: parsed.output }, quiet })
     saving.value = false
     if (result.ok) {
       applied = result.data
@@ -182,6 +186,8 @@ export function useLayoutEditor(branchId: string) {
       // Which looks the saved tables and pieces use changed with it (a look in use can't be deleted).
       if (looksQuery.data.value?.length) void looksQuery.refresh()
       if (itemLooksQuery.data.value?.length) void itemLooksQuery.refresh()
+      // Changed while it was on its way: those changes save next.
+      if (unsaved.isDirty.value) scheduleAutosave()
       return true
     }
     if (result.status !== 'error') return false
@@ -215,7 +221,53 @@ export function useLayoutEditor(branchId: string) {
   }
 
   function save() {
+    cancelAutosave()
     return send(version.value)
+  }
+
+  // --- Autosave (ISS-027, owner: like Figma) ---
+  // The layout saves itself a moment after the last change, through the same checked save (the
+  // version read, 409 on a stale one, one batch). It waits while a save is on its way, and stops
+  // while a conflict or a problem is shown: the next change, or the user's choice there, goes on.
+  // Save layout still saves at once. The editor ends with the page, and the timer with it.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let pendingSince = 0
+  function cancelAutosave() {
+    clearTimeout(timer)
+    timer = undefined
+    pendingSince = 0
+  }
+  function scheduleAutosave() {
+    clearTimeout(timer)
+    const now = Date.now()
+    pendingSince ||= now
+    // Never more than AUTOSAVE_MAX_WAIT_MS behind while edits keep coming.
+    const wait = Math.max(0, Math.min(AUTOSAVE_DELAY_MS, pendingSince + AUTOSAVE_MAX_WAIT_MS - now))
+    timer = setTimeout(() => void autosave(), wait)
+  }
+  async function autosave() {
+    cancelAutosave()
+    if (!ready.value || !unsaved.isDirty.value || conflict.value || saving.value) return
+    await send(version.value, true)
+  }
+  watch(() => draft.layout.value, () => {
+    if (unsaved.isDirty.value) scheduleAutosave()
+  })
+  onScopeDispose(cancelAutosave)
+
+  /**
+   * A version from the history (ISS-027) in place of the draft, as one undo step: autosave then
+   * saves it as a new version, through the normal checks (a table archived since is named first).
+   */
+  function restore(snapshot: ShopLayout) {
+    draft.change((layout) => {
+      layout.floors = cloneFormValue(snapshot.floors)
+      layout.placements = cloneFormValue(snapshot.placements)
+      if (snapshot.scene) layout.scene = cloneFormValue(snapshot.scene)
+      layout.pages = snapshot.pages && cloneFormValue(snapshot.pages)
+    })
+    if (!draft.layout.value.floors.some(floor => floor.id === floorId.value)) floorId.value = draft.layout.value.floors[0]?.id ?? null
+    selection.value = null
   }
 
   async function latestLayout(): Promise<BranchLayout | null> {
@@ -336,6 +388,7 @@ export function useLayoutEditor(branchId: string) {
     nextPasteOffset,
     load,
     save,
+    restore,
     discard: () => applied && start(applied),
     loadLatest,
     overwrite,

@@ -7,6 +7,7 @@ import { useBranchSettings, useBranchTables } from '../composables/useBranches'
 import { useLayoutEditor } from '../composables/useLayoutEditor'
 import BuildingView3D from './BuildingView3D.vue'
 import DesignShopEditor from './DesignShopEditor.vue'
+import LayoutHistory from './LayoutHistory.vue'
 import LayoutSaveAlerts from './LayoutSaveAlerts.vue'
 import StudioToolbar from './StudioToolbar.vue'
 import { STUDIO_SIDEBAR } from './studio'
@@ -40,6 +41,8 @@ const title = computed(() => cafe.name.value ? `${cafe.name.value} Studio` : 'St
 /** The left sidebar on a wide screen (D277). Kept across 2D and 3D. Hiding it keeps the canvas as it is. */
 const sidebarOpen = ref(true)
 const sidebarWidth = ref<number>(STUDIO_SIDEBAR.initial)
+/** The version history panel (ISS-027). */
+const historyOpen = ref(false)
 const saveStatus = computed(() => saving.value ? 'Saving…' : isDirty.value ? 'Unsaved changes' : ready.value ? 'Saved' : '')
 const [DefineHeader, ReuseHeader] = createReusableTemplate<{ collapsible?: boolean }>()
 const [DefineSave, ReuseSave] = createReusableTemplate()
@@ -156,9 +159,20 @@ function showItemOnPlan(itemId: string) {
       </UTooltip>
     </div>
   </DefineHeader>
-  <!-- Save layout (D277): explicit, on the canvas in both views. Saving also updates Explore. -->
+  <!-- Saving (ISS-027, like Figma): the layout saves itself; Save layout saves at once; History
+       restores a kept version. On the canvas in both views. Saving also updates Explore. -->
   <DefineSave>
     <div class="pointer-events-auto flex items-center gap-2 rounded-lg border border-default bg-default p-1 shadow-sm">
+      <UTooltip text="Version history">
+        <UButton
+          icon="i-lucide-history"
+          color="neutral"
+          variant="ghost"
+          aria-label="Version history"
+          :disabled="!ready"
+          @click="historyOpen = true"
+        />
+      </UTooltip>
       <span
         v-if="saveStatus"
         class="pl-2 text-xs text-muted max-sm:sr-only"
@@ -194,6 +208,11 @@ function showItemOnPlan(itemId: string) {
       <LayoutSaveAlerts
         :editor="editor"
         :dining-tables="tables ?? []"
+      />
+      <LayoutHistory
+        v-model:open="historyOpen"
+        :editor="editor"
+        :branch-id="props.id"
       />
       <p
         v-if="publishes && isDirty"
