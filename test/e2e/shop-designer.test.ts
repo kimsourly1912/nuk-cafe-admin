@@ -788,6 +788,19 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Shift+1')
 
+    // Tab on the plan selects the next piece, Shift+Tab goes back (ISS-007); Escape twice lets Tab leave it.
+    await l1.click()
+    const selectedNow = () => page.getByRole('complementary', { name: 'Properties' }).textContent()
+    const first = await selectedNow()
+    await page.keyboard.press('Tab')
+    await expect.poll(selectedNow).not.toBe(first)
+    await page.keyboard.press('Shift+Tab')
+    await expect.poll(selectedNow).toBe(first)
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Tab')
+    expect(await plan(page).evaluate(svg => svg.contains(document.activeElement))).toBe(false)
+
     // ? lists the shortcuts (ISS-025), the new ones included.
     await page.keyboard.press('Shift+Slash')
     const list = page.getByRole('dialog').filter({ hasText: 'Copy the selection' })

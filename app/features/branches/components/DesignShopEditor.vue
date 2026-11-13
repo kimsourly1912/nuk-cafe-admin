@@ -20,7 +20,7 @@ import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
-import { duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
 import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
@@ -550,6 +550,24 @@ function selectBox(targets: PlanSelection[], additive: boolean) {
 }
 
 /** Ctrl/⌘+A: every table, piece and inside wall on the floor shown. */
+const planFocused = () => !!document.activeElement?.closest('[data-testid="floor-plan"]')
+
+/** The floor's tables, pieces and inside walls in the Floors list's order. */
+function floorOrder(): PlanSelection[] {
+  const current = floor.value
+  if (!current) return []
+  return [
+    ...tablesOn(current.id).map(placement => ({ kind: 'table' as const, id: placement.tableId })),
+    ...current.items.map(item => ({ kind: 'item' as const, id: item.id })),
+    ...current.walls.map(wall => ({ kind: 'wall' as const, id: wall.id })),
+  ]
+}
+
+function selectNext(step: 1 | -1) {
+  const next = cycleSelection(floorOrder(), selection.value, step)
+  if (next) props.editor.selectMany([next])
+}
+
 function selectAll() {
   const current = floor.value
   if (!current) return
@@ -1032,9 +1050,14 @@ function onStudioKey(event: KeyboardEvent) {
   if (event.shiftKey && event.code === 'Digit2') return run(() => plan?.zoomToSelection())
   if (event.shiftKey && event.code === 'Digit0') return run(() => plan?.zoomTo(100))
   if (event.key === '?') return run(showShortcuts)
+  // Tab and Shift+Tab while the plan has the focus (ISS-007, Figma): the next or previous piece, in
+  // the Floors list's order. Anywhere else Tab moves the focus as usual.
+  if (event.key === 'Tab' && mode.value === 'select' && !pending.value && planFocused()) return run(() => selectNext(event.shiftKey ? -1 : 1))
   if (event.key === 'Escape') {
     if (pending.value) return run(() => pending.value = null)
     if (mode.value !== 'select') return run(finishTool)
+    // Nothing selected: the page gets the focus back, so Tab leaves the plan (no keyboard trap).
+    if (!selection.value && planFocused()) return run(() => (document.activeElement as HTMLElement).blur())
     return
   }
   // Enter opens Edit points on the floor (Figma's Enter into a shape's points), and closes it again.

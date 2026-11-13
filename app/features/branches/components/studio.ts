@@ -17,6 +17,7 @@ export const STUDIO_SHORTCUTS = [
   { kbds: ['p'], label: 'Edit points: corners and sides of the floor (Enter or a double-click on the floor too)' },
   { kbds: ['w'], label: 'Draw wall' },
   { kbds: ['escape'], label: 'Cancel, leave the tool, then clear the selection' },
+  { kbds: ['tab'], label: 'Select the next piece on the floor (Shift: the one before), while the plan has the focus' },
   { kbds: ['delete'], label: 'Delete the selection (an outline wall or railing becomes Open)' },
   { kbds: ['meta', 'd'], label: 'Duplicate the selection' },
   { kbds: ['meta', 'c'], label: 'Copy the selection' },

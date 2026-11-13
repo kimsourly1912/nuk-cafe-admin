@@ -142,3 +142,14 @@ export function pasteClipboard(layout: ShopLayout, clipboard: PlanClipboard, off
   }
   return copies
 }
+
+/**
+ * Tab and Shift+Tab on the plan (ISS-007, Figma): the next or previous of `order` after `current`,
+ * round the end; the first (or last) when nothing in `order` is selected.
+ */
+export function cycleSelection(order: readonly PlanSelection[], current: PlanSelection | null, step: 1 | -1): PlanSelection | null {
+  if (!order.length) return null
+  const at = current ? order.findIndex(target => target.kind === current.kind && target.id === current.id) : -1
+  if (at < 0) return order[step > 0 ? 0 : order.length - 1]!
+  return order[(at + step + order.length) % order.length]!
+}

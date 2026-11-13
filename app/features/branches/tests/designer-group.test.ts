@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ShopLayout } from '#shared/contracts/shop-layout'
-import { copySelected, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { copySelected, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
 import type { PlanSelection } from '../designer/plan'
 
@@ -119,5 +119,17 @@ describe('copy and paste (ISS-022)', () => {
     // The clipboard is its own copy: changing the pasted piece leaves it as it was.
     next.floors[0]!.items[0]!.x = 999
     expect(clipboard.items[0]!.x).toBe(100)
+  })
+})
+
+describe('Tab through the floor (ISS-007)', () => {
+  it('goes to the next or previous one, round the end, and starts at an end', () => {
+    expect(cycleSelection(set, null, 1)).toEqual(set[0])
+    expect(cycleSelection(set, null, -1)).toEqual(set[2])
+    expect(cycleSelection(set, set[0]!, 1)).toEqual(set[1])
+    expect(cycleSelection(set, set[2]!, 1)).toEqual(set[0])
+    expect(cycleSelection(set, set[0]!, -1)).toEqual(set[2])
+    expect(cycleSelection(set, { kind: 'edge', id: '0' }, 1)).toEqual(set[0])
+    expect(cycleSelection([], null, 1)).toBeNull()
   })
 })
