@@ -979,6 +979,19 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => positionOf(page, 'L1')).toEqual(tableBefore)
     expect(await plantAt()).toEqual(plantBefore)
 
+    // Shift+drag on a piece not yet selected (ISS-011, Figma): it joins, and the set moves together.
+    await page.keyboard.press('Escape')
+    await l1.click()
+    const plantStart = await plantAt()
+    await dragPlan(page, plantStart, { x: plantStart.x + 100, y: plantStart.y + 3 }, ['Shift'])
+    await expect.poll(() => group.textContent()).toContain('2 selected')
+    await expect.poll(async () => (await plantAt()).x).not.toBe(plantStart.x)
+    const moved = (await plantAt()).x - plantStart.x
+    expect((await positionOf(page, 'L1')).x - tableBefore.x).toBe(moved)
+    expect((await plantAt()).y).toBe(plantStart.y)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => positionOf(page, 'L1')).toEqual(tableBefore)
+
     // Align (ISS-026): the tops line up (the plant, smaller than L1 and its chairs, moves up), one undo step.
     await page.getByTestId('align-top').click()
     await expect.poll(async () => (await plantAt()).y).toBeLessThan(plantBefore.y)

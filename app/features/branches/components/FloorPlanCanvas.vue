@@ -525,6 +525,7 @@ type Gesture
     | { type: 'room', start: Point }
     | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'group', startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
+    | { type: 'join', target: PlanSelection, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'marquee', startPlan: Point, startClient: Point, moved: boolean, additive: boolean }
     | { type: 'pan', startClient: Point, startCamera: Camera, moved: boolean, plan: Point | null, event: { shiftKey: boolean, fine: boolean }, navigateOnly?: boolean }
     | { type: 'pinch', distance: number, startCamera: Camera, middle: Point }
@@ -676,10 +677,11 @@ function onPointerDown(event: PointerEvent) {
   }
   const pickable = props.mode === 'select' && (kind === 'table' || kind === 'item' || kind === 'wall') && !target.dataset.handle
   // Shift on a selected piece (ISS-011, like Figma): a drag moves it in a straight line, a click
-  // without a move takes it out of the selection on release. An unselected piece joins at once.
+  // without a move takes it out of the selection on release. On an unselected piece, with something
+  // selected, a click adds it and a drag adds it and moves the whole set (owner: follow Figma).
   const shiftToggle = pickable && event.shiftKey && event.pointerType !== 'touch' ? { kind: kind as PlanSelection['kind'], id } : undefined
-  if (shiftToggle && !isSelected(shiftToggle.kind, id)) {
-    emit('toggle', shiftToggle)
+  if (shiftToggle && !isSelected(shiftToggle.kind, id) && props.selection) {
+    gesture = { type: 'join', target: shiftToggle, startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
     return
   }
   if (pickable && multi.value && isSelected(kind, id)) {
@@ -801,6 +803,12 @@ function followPointer(event: PointerMove) {
   }
   if (!gesture.moved && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
   gesture.moved = true
+  if (gesture.type === 'join') {
+    // Past the slop: it joins the selection, and from the next move the whole set is dragged.
+    emit('toggle', gesture.target)
+    gesture = { type: 'group', startPlan: gesture.startPlan, startClient: gesture.startClient, moved: true }
+    return
+  }
   if (gesture.type === 'marquee') {
     const start = gesture.startPlan
     marquee.value = { minX: Math.min(start.x, plan.x), minY: Math.min(start.y, plan.y), maxX: Math.max(start.x, plan.x), maxY: Math.max(start.y, plan.y) }
@@ -929,6 +937,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     emit('selectMany', touched.map(piece => piece.target), finished.additive)
     return
   }
+  if (finished.type === 'join') return emit('toggle', finished.target)
   // Shift+click on a selected piece, without a move: out of the selection (ISS-011).
   if ((finished.type === 'drag' || finished.type === 'group' || finished.type === 'wall') && finished.toggle && !finished.moved) {
     emit('toggle', finished.toggle)
@@ -956,7 +965,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
 }
 
 /** Gestures that change something when released; Escape before the release drops them. */
-const CANCELLABLE: ReadonlySet<string> = new Set(['drag', 'group', 'wall', 'wall-end', 'side', 'corner', 'resize', 'rotate', 'room', 'marquee'])
+const CANCELLABLE: ReadonlySet<string> = new Set(['join', 'drag', 'group', 'wall', 'wall-end', 'side', 'corner', 'resize', 'rotate', 'room', 'marquee'])
 
 /**
  * Escape while dragging (ISS-012, like Figma): the piece goes back, nothing is emitted and no undo
