@@ -50,3 +50,5 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-008](issues/ISS-008.md) | Low | Gap | Right-click menu much smaller than Figma's |
 | [ISS-009](issues/ISS-009.md) | Low | Improvement | Yellow ring around the editor (owner: remove it) |
 | [ISS-010](issues/ISS-010.md) | Low | Bug | "Zoom to s…" label cut off |
+| [ISS-011](issues/ISS-011.md) | Medium | Bug | Shift + drag deselects the piece, no straight-line move |
+| [ISS-012](issues/ISS-012.md) | Medium | Gap | Esc during a drag does not cancel it |
