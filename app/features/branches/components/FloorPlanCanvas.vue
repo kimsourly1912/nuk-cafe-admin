@@ -86,6 +86,8 @@ const emit = defineEmits<{
   moveGroup: [delta: Point]
   /** Draw outline: an edge's length label was clicked, to type its length there (3A). */
   editLength: [index: number, at: Point]
+  /** The floor's frame dragged by its name (ISS-035): by how much, its drawing unchanged. */
+  moveFrame: [delta: Point]
 }>()
 
 const svg = useTemplateRef<SVGSVGElement>('svg')
@@ -165,6 +167,28 @@ function zoomTo(percent: number) {
 
 const viewMiddle = () => ({ x: view.value.x + view.value.width / 2, y: view.value.y + view.value.height / 2 })
 watch(() => props.floorId, fit, { immediate: true })
+
+// --- The floor as a frame (ISS-035, like Figma's) ---
+/**
+ * Where the floor's (0, 0) is on Studio's canvas. The plan draws and edits the floor in its own
+ * coordinates; the frame's offset only places the grid, the other frames and the camera, so moving
+ * a frame never rewrites its drawing.
+ */
+const frameOffset = computed(() => ({ x: floor.value.canvasX ?? 0, y: floor.value.canvasY ?? 0 }))
+/** The frame being dragged by its name: drawn moved by this until let go. */
+const frameDrag = shallowRef<Point | null>(null)
+// The frame moved (a drag, a typed X or Y, an undo): the canvas around it stays where it is on the
+// screen, so the floor lands where it was dropped and the grid doesn't jump.
+watch(() => [floor.value.id, frameOffset.value.x, frameOffset.value.y] as const, ([id, x, y], [oldId, oldX, oldY]) => {
+  if (id === oldId && (x !== oldX || y !== oldY)) camera.value = { ...camera.value, x: camera.value.x - (x - oldX), y: camera.value.y - (y - oldY) }
+})
+/** The frame's name tag, above its top-left corner. */
+const frameLabel = computed(() => {
+  const outline = shape.value.outline
+  if (outline.length < 3) return null
+  const box = boundsOf(outline)
+  return { x: box.minX - WALL_THICKNESS_CM, y: box.minY - WALL_THICKNESS_CM - 8 * perPixel.value }
+})
 
 /** The live number beside the pointer while turning, resizing or drawing (ISS-029, ISS-033), like Figma's. */
 const liveLabel = shallowRef<{ at: Point, text: string } | null>(null)
@@ -584,6 +608,7 @@ type Gesture
     | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'group', startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'join', target: PlanSelection, startPlan: Point, startClient: Point, moved: boolean }
+    | { type: 'frame', startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'marquee', startPlan: Point, startClient: Point, moved: boolean, additive: boolean }
     | { type: 'pan', startClient: Point, startCamera: Camera, moved: boolean, plan: Point | null, event: { shiftKey: boolean, fine: boolean }, navigateOnly?: boolean }
     | { type: 'pinch', distance: number, startCamera: Camera, middle: Point }
@@ -710,6 +735,11 @@ function onPointerDown(event: PointerEvent) {
   if (props.placing || props.mode === 'hand' || props.mode === 'wall' || !target || !plan) return startPan()
   const kind = target.dataset.kind!
   const id = target.dataset.id!
+  if (kind === 'frame') {
+    // Its name: a click selects the floor, a drag moves the frame (not a locked one).
+    gesture = { type: 'frame', startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
+    return
+  }
   if (kind === 'corner') {
     const index = Number(id)
     corner.value = index
@@ -860,6 +890,11 @@ function followPointer(event: PointerMove) {
   }
   if (!gesture.moved && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
   gesture.moved = true
+  if (gesture.type === 'frame') {
+    if (floor.value.locked) return
+    frameDrag.value = { x: snap(plan.x - gesture.startPlan.x, SNAP_CM), y: snap(plan.y - gesture.startPlan.y, SNAP_CM) }
+    return
+  }
   if (gesture.type === 'join') {
     // Past the slop: it joins the selection, and from the next move the whole set is dragged.
     emit('toggle', gesture.target)
@@ -994,6 +1029,12 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     emit('selectMany', touched.map(piece => piece.target), finished.additive)
     return
   }
+  if (finished.type === 'frame') {
+    const delta = frameDrag.value
+    frameDrag.value = null
+    if (finished.moved && delta && (delta.x || delta.y)) return emit('moveFrame', delta)
+    return emit('select', null)
+  }
   if (finished.type === 'join') return emit('toggle', finished.target)
   // Shift+click on a selected piece, without a move: out of the selection (ISS-011).
   if ((finished.type === 'drag' || finished.type === 'group' || finished.type === 'wall') && finished.toggle && !finished.moved) {
@@ -1022,7 +1063,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
 }
 
 /** Gestures that change something when released; Escape before the release drops them. */
-const CANCELLABLE: ReadonlySet<string> = new Set(['join', 'drag', 'group', 'wall', 'wall-end', 'side', 'corner', 'resize', 'rotate', 'room', 'marquee'])
+const CANCELLABLE: ReadonlySet<string> = new Set(['frame', 'join', 'drag', 'group', 'wall', 'wall-end', 'side', 'corner', 'resize', 'rotate', 'room', 'marquee'])
 
 /**
  * Escape while dragging (ISS-012, like Figma): the piece goes back, nothing is emitted and no undo
@@ -1039,6 +1080,7 @@ function cancelGesture(): boolean {
   groupDelta.value = null
   guides.value = []
   liveLabel.value = null
+  frameDrag.value = null
   return true
 }
 
@@ -1134,7 +1176,7 @@ function onWheel(event: WheelEvent) {
 function zoom(direction: 1 | -1) {
   zoomAround(viewMiddle(), direction > 0 ? 1.25 : 0.8)
 }
-defineExpose({ toPlan, viewCenter, fit, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, boxOf, warnings, keydown, focus: () => svg.value?.focus() })
+defineExpose({ frameOffset, toPlan, viewCenter, fit, zoom, zoomTo, zoomToSelection, zoomLevel, selectionBox, selectedBounds, boxOf, warnings, keydown, focus: () => svg.value?.focus() })
 
 const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }
 
@@ -1303,6 +1345,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         :width="GRID_MINOR_CM"
         :height="GRID_MINOR_CM"
         patternUnits="userSpaceOnUse"
+        :patternTransform="`translate(${-frameOffset.x} ${-frameOffset.y})`"
       >
         <path
           :d="`M${GRID_MINOR_CM} 0H0V${GRID_MINOR_CM}`"
@@ -1318,6 +1361,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         :width="GRID_MAJOR_CM"
         :height="GRID_MAJOR_CM"
         patternUnits="userSpaceOnUse"
+        :patternTransform="`translate(${-frameOffset.x} ${-frameOffset.y})`"
       >
         <rect
           v-if="minorOpacity > 0"
@@ -1343,1058 +1387,1112 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       style="background: var(--ui-bg-muted)"
     />
 
-    <!-- The floor below, faint: stairs and walls line up with it (9A). -->
+    <!-- The floor's frame (ISS-035): everything on it moves with its name while that is dragged. -->
     <g
-      v-if="below"
-      opacity="0.7"
-      fill="none"
-      stroke="var(--ui-text-dimmed)"
-      stroke-dasharray="14 10"
-      stroke-width="4"
-      pointer-events="none"
-      data-testid="plan-below"
+      :transform="frameDrag ? `translate(${frameDrag.x} ${frameDrag.y})` : undefined"
+      data-testid="plan-frame"
     >
-      <polygon :points="points(below.outline)" />
-      <rect
-        v-for="stairs in belowStairs"
-        :key="stairs.id"
-        :x="-stairs.width / 2"
-        :y="-stairs.depth / 2"
-        :width="stairs.width"
-        :height="stairs.depth"
-        :transform="transform(stairs)"
-        stroke-dasharray="8 8"
-      />
-    </g>
-
-    <polygon
-      v-if="shape.outline.length >= 3"
-      :points="points(shape.outline)"
-      :fill="mode === 'outline' ? 'color-mix(in oklab, var(--ui-primary) 10%, var(--ui-bg))' : 'var(--ui-bg)'"
-    />
-
-    <!-- Edges to click (3B): wide and invisible, under furniture, inside walls and tables, so a
-         piece against a wall is picked, not the wall (D278). -->
-    <template v-if="mode !== 'wall'">
-      <line
-        v-for="edge in edges"
-        :key="edge.index"
-        :x1="edge.from.x"
-        :y1="edge.from.y"
-        :x2="edge.to.x"
-        :y2="edge.to.y"
-        stroke="transparent"
-        :stroke-width="Math.max(40, perPixel * 16)"
-        data-kind="edge"
-        :data-id="edge.index"
-        :data-testid="`plan-edge-${edge.index}`"
-        class="cursor-pointer"
-      />
-    </template>
-
-    <!-- Furniture, tables and inside walls fade back while the outline is edited (3A). -->
-    <g
-      :opacity="mode === 'outline' ? 0.35 : 1"
-      :pointer-events="piecesActive ? undefined : 'none'"
-    >
-      <!-- Inside walls (D278): a wall, railing, half wall or glass, with doors (gaps) and windows. -->
       <g
-        v-for="wall in innerWalls"
-        :key="wall.id"
-        :pointer-events="isLocked('wall', wall.id) ? 'none' : undefined"
-        data-kind="wall"
-        :data-id="wall.id"
-        :data-testid="`plan-wall-${wall.id}`"
-        :data-wall-kind="wall.kind"
-        class="cursor-move"
+        v-if="frameLabel"
+        data-kind="frame"
+        data-id="frame"
+        :class="mode === 'select' && !floor.locked ? 'cursor-move' : undefined"
+        :pointer-events="mode === 'select' ? undefined : 'none'"
+        data-testid="plan-frame-label"
       >
-        <line
-          v-if="isSelected('wall', wall.id)"
-          :x1="wall.from.x"
-          :y1="wall.from.y"
-          :x2="wall.to.x"
-          :y2="wall.to.y"
-          stroke="color-mix(in oklab, var(--ui-primary) 35%, transparent)"
-          stroke-width="30"
-          stroke-linecap="round"
+        <rect
+          :x="frameLabel.x"
+          :y="frameLabel.y - 16 * perPixel"
+          :width="chipSize(floor.name).width"
+          :height="20 * perPixel"
+          fill="transparent"
         />
-        <polygon
-          v-for="(band, index) in wall.bands"
-          :key="`band-${index}`"
-          :points="points(band)"
-          fill="var(--ui-text-toned)"
-        />
-        <line
-          v-for="(span, index) in (wall.kind === 'wall' ? [] : wall.spans)"
-          :key="index"
-          :x1="span.from.x"
-          :y1="span.from.y"
-          :x2="span.to.x"
-          :y2="span.to.y"
-          :stroke="wall.kind === 'glass' ? 'var(--ui-info)' : wall.kind === 'wall' ? 'var(--ui-text-toned)' : 'var(--ui-text-muted)'"
-          :stroke-width="wall.kind === 'glass' ? 5 : wall.kind === 'railing' ? 6 : wall.kind === 'half' ? 9 : 12"
-          :stroke-dasharray="wall.kind === 'railing' ? '14 8' : wall.kind === 'half' ? '24 6' : undefined"
-          stroke-linecap="square"
-        />
-        <line
-          v-for="pane in wall.windows"
-          :key="pane.id"
-          :x1="pane.from.x"
-          :y1="pane.from.y"
-          :x2="pane.to.x"
-          :y2="pane.to.y"
-          stroke="var(--ui-info)"
-          stroke-width="5"
-        />
-        <path
-          v-for="door in wall.doors"
-          :key="door.id"
-          :d="`M${door.hinge.x} ${door.hinge.y} L${door.swing.x} ${door.swing.y}`"
-          stroke="var(--ui-text-muted)"
-          stroke-width="3"
-          stroke-dasharray="6 6"
-        />
-        <line
-          :x1="wall.from.x"
-          :y1="wall.from.y"
-          :x2="wall.to.x"
-          :y2="wall.to.y"
-          stroke="transparent"
-          :stroke-width="Math.max(36, perPixel * 14)"
+        <text
+          :x="frameLabel.x"
+          :y="frameLabel.y"
+          :font-size="12 * perPixel"
+          fill="var(--ui-text-muted)"
+        >{{ floor.name }}</text>
+      </g>
+
+      <!-- The floor below, faint: stairs and walls line up with it (9A). -->
+      <g
+        v-if="below"
+        opacity="0.7"
+        fill="none"
+        stroke="var(--ui-text-dimmed)"
+        stroke-dasharray="14 10"
+        stroke-width="4"
+        pointer-events="none"
+        data-testid="plan-below"
+      >
+        <polygon :points="points(below.outline)" />
+        <rect
+          v-for="stairs in belowStairs"
+          :key="stairs.id"
+          :x="-stairs.width / 2"
+          :y="-stairs.depth / 2"
+          :width="stairs.width"
+          :height="stairs.depth"
+          :transform="transform(stairs)"
+          stroke-dasharray="8 8"
         />
       </g>
-      <!-- A selected inside wall's ends: drag one to stretch or turn the wall (D278). -->
-      <template
-        v-for="wall in innerWalls"
-        :key="`ends-${wall.id}`"
-      >
-        <template v-if="mode === 'select' && !multi && isSelected('wall', wall.id)">
-          <circle
-            v-for="end in (['from', 'to'] as const)"
-            :key="end"
-            :cx="wall[end].x"
-            :cy="wall[end].y"
-            :r="9 * perPixel"
-            fill="var(--ui-bg)"
-            stroke="var(--ui-primary)"
-            stroke-width="2"
-            vector-effect="non-scaling-stroke"
-            data-kind="wall-end"
-            :data-id="wall.id"
-            :data-end="end"
-            :data-testid="`wall-end-${end}`"
-            class="cursor-crosshair"
-          />
-        </template>
+
+      <polygon
+        v-if="shape.outline.length >= 3"
+        :points="points(shape.outline)"
+        :fill="mode === 'outline' ? 'color-mix(in oklab, var(--ui-primary) 10%, var(--ui-bg))' : 'var(--ui-bg)'"
+      />
+
+      <!-- Edges to click (3B): wide and invisible, under furniture, inside walls and tables, so a
+         piece against a wall is picked, not the wall (D278). -->
+      <template v-if="mode !== 'wall'">
+        <line
+          v-for="edge in edges"
+          :key="edge.index"
+          :x1="edge.from.x"
+          :y1="edge.from.y"
+          :x2="edge.to.x"
+          :y2="edge.to.y"
+          stroke="transparent"
+          :stroke-width="Math.max(40, perPixel * 16)"
+          data-kind="edge"
+          :data-id="edge.index"
+          :data-testid="`plan-edge-${edge.index}`"
+          class="cursor-pointer"
+        />
       </template>
 
-      <!-- Furniture and fixtures (grey: no QR). -->
+      <!-- Furniture, tables and inside walls fade back while the outline is edited (3A). -->
       <g
-        v-for="item in items"
-        :id="pieceId({ kind: 'item', id: item.id })"
-        :key="item.id"
-        :pointer-events="isLocked('item', item.id) ? 'none' : undefined"
-        :transform="transform(item)"
-        data-kind="item"
-        :data-id="item.id"
-        :data-testid="`plan-item-${item.kind}`"
-        class="cursor-grab"
+        :opacity="mode === 'outline' ? 0.35 : 1"
+        :pointer-events="piecesActive ? undefined : 'none'"
       >
-        <template v-if="item.kind === 'plant'">
-          <circle
-            :r="item.width / 2"
-            fill="color-mix(in oklab, var(--ui-success) 22%, var(--ui-bg))"
-            stroke="var(--ui-success)"
-            stroke-width="3"
-          />
-          <circle
-            :r="item.width / 5"
-            fill="var(--ui-success)"
-            opacity="0.6"
-          />
-        </template>
-        <!-- People and pets (step 3g): seen from above, the front (head) towards +y. -->
+        <!-- Inside walls (D278): a wall, railing, half wall or glass, with doors (gaps) and windows. -->
         <g
-          v-else-if="isFigureKind(item.kind)"
-          fill="color-mix(in oklab, var(--ui-secondary) 22%, var(--ui-bg))"
-          stroke="var(--ui-secondary)"
-          stroke-width="3"
+          v-for="wall in innerWalls"
+          :key="wall.id"
+          :pointer-events="isLocked('wall', wall.id) ? 'none' : undefined"
+          data-kind="wall"
+          :data-id="wall.id"
+          :data-testid="`plan-wall-${wall.id}`"
+          :data-wall-kind="wall.kind"
+          class="cursor-move"
         >
-          <template v-if="ITEM_SPECS[item.kind].figure === 'hammock'">
-            <rect
-              :x="-item.width / 2 + 6"
-              :y="-item.depth / 2 + 6"
-              :width="item.width - 12"
-              :height="item.depth - 12"
-              rx="6"
-              fill="none"
-            />
-            <ellipse
-              :rx="item.width / 2 - 24"
-              :ry="item.depth / 2 - 14"
-            />
-            <circle
-              :cx="-item.width / 2 + 60"
-              r="11"
-              fill="var(--ui-secondary)"
-              stroke="none"
-              opacity="0.7"
-            />
-          </template>
-          <template v-else-if="ITEM_SPECS[item.kind].figure === 'animal'">
-            <ellipse
-              :rx="item.width / 2 - 3"
-              :ry="item.depth / 2 - 10"
-              cy="-6"
-            />
-            <circle
-              :cy="item.depth / 2 - 10"
-              :r="item.width / 3"
-              fill="var(--ui-secondary)"
-              stroke="none"
-              opacity="0.7"
-            />
-          </template>
-          <template v-else>
-            <ellipse
-              :rx="item.width / 2 - 4"
-              :ry="Math.min(item.depth, 35) / 2 - 4"
-            />
-            <circle
-              r="10"
-              fill="var(--ui-secondary)"
-              stroke="none"
-              opacity="0.7"
-            />
-          </template>
-        </g>
-        <!-- Overhead (step 3f: a pendant lamp, a parasol): a dashed outline over what stands below,
-             grabbed by its middle. -->
-        <g v-else-if="ITEM_SPECS[item.kind].overhead">
-          <circle
-            :r="item.width / 2"
-            fill="none"
-            stroke="var(--ui-border-accented)"
-            stroke-width="3"
-            stroke-dasharray="12 8"
+          <line
+            v-if="isSelected('wall', wall.id)"
+            :x1="wall.from.x"
+            :y1="wall.from.y"
+            :x2="wall.to.x"
+            :y2="wall.to.y"
+            stroke="color-mix(in oklab, var(--ui-primary) 35%, transparent)"
+            stroke-width="30"
+            stroke-linecap="round"
           />
+          <polygon
+            v-for="(band, index) in wall.bands"
+            :key="`band-${index}`"
+            :points="points(band)"
+            fill="var(--ui-text-toned)"
+          />
+          <line
+            v-for="(span, index) in (wall.kind === 'wall' ? [] : wall.spans)"
+            :key="index"
+            :x1="span.from.x"
+            :y1="span.from.y"
+            :x2="span.to.x"
+            :y2="span.to.y"
+            :stroke="wall.kind === 'glass' ? 'var(--ui-info)' : wall.kind === 'wall' ? 'var(--ui-text-toned)' : 'var(--ui-text-muted)'"
+            :stroke-width="wall.kind === 'glass' ? 5 : wall.kind === 'railing' ? 6 : wall.kind === 'half' ? 9 : 12"
+            :stroke-dasharray="wall.kind === 'railing' ? '14 8' : wall.kind === 'half' ? '24 6' : undefined"
+            stroke-linecap="square"
+          />
+          <line
+            v-for="pane in wall.windows"
+            :key="pane.id"
+            :x1="pane.from.x"
+            :y1="pane.from.y"
+            :x2="pane.to.x"
+            :y2="pane.to.y"
+            stroke="var(--ui-info)"
+            stroke-width="5"
+          />
+          <path
+            v-for="door in wall.doors"
+            :key="door.id"
+            :d="`M${door.hinge.x} ${door.hinge.y} L${door.swing.x} ${door.swing.y}`"
+            stroke="var(--ui-text-muted)"
+            stroke-width="3"
+            stroke-dasharray="6 6"
+          />
+          <line
+            :x1="wall.from.x"
+            :y1="wall.from.y"
+            :x2="wall.to.x"
+            :y2="wall.to.y"
+            stroke="transparent"
+            :stroke-width="Math.max(36, perPixel * 14)"
+          />
+        </g>
+        <!-- A selected inside wall's ends: drag one to stretch or turn the wall (D278). -->
+        <template
+          v-for="wall in innerWalls"
+          :key="`ends-${wall.id}`"
+        >
+          <template v-if="mode === 'select' && !multi && isSelected('wall', wall.id)">
+            <circle
+              v-for="end in (['from', 'to'] as const)"
+              :key="end"
+              :cx="wall[end].x"
+              :cy="wall[end].y"
+              :r="9 * perPixel"
+              fill="var(--ui-bg)"
+              stroke="var(--ui-primary)"
+              stroke-width="2"
+              vector-effect="non-scaling-stroke"
+              data-kind="wall-end"
+              :data-id="wall.id"
+              :data-end="end"
+              :data-testid="`wall-end-${end}`"
+              class="cursor-crosshair"
+            />
+          </template>
+        </template>
+
+        <!-- Furniture and fixtures (grey: no QR). -->
+        <g
+          v-for="item in items"
+          :id="pieceId({ kind: 'item', id: item.id })"
+          :key="item.id"
+          :pointer-events="isLocked('item', item.id) ? 'none' : undefined"
+          :transform="transform(item)"
+          data-kind="item"
+          :data-id="item.id"
+          :data-testid="`plan-item-${item.kind}`"
+          class="cursor-grab"
+        >
+          <template v-if="item.kind === 'plant'">
+            <circle
+              :r="item.width / 2"
+              fill="color-mix(in oklab, var(--ui-success) 22%, var(--ui-bg))"
+              stroke="var(--ui-success)"
+              stroke-width="3"
+            />
+            <circle
+              :r="item.width / 5"
+              fill="var(--ui-success)"
+              opacity="0.6"
+            />
+          </template>
+          <!-- People and pets (step 3g): seen from above, the front (head) towards +y. -->
+          <g
+            v-else-if="isFigureKind(item.kind)"
+            fill="color-mix(in oklab, var(--ui-secondary) 22%, var(--ui-bg))"
+            stroke="var(--ui-secondary)"
+            stroke-width="3"
+          >
+            <template v-if="ITEM_SPECS[item.kind].figure === 'hammock'">
+              <rect
+                :x="-item.width / 2 + 6"
+                :y="-item.depth / 2 + 6"
+                :width="item.width - 12"
+                :height="item.depth - 12"
+                rx="6"
+                fill="none"
+              />
+              <ellipse
+                :rx="item.width / 2 - 24"
+                :ry="item.depth / 2 - 14"
+              />
+              <circle
+                :cx="-item.width / 2 + 60"
+                r="11"
+                fill="var(--ui-secondary)"
+                stroke="none"
+                opacity="0.7"
+              />
+            </template>
+            <template v-else-if="ITEM_SPECS[item.kind].figure === 'animal'">
+              <ellipse
+                :rx="item.width / 2 - 3"
+                :ry="item.depth / 2 - 10"
+                cy="-6"
+              />
+              <circle
+                :cy="item.depth / 2 - 10"
+                :r="item.width / 3"
+                fill="var(--ui-secondary)"
+                stroke="none"
+                opacity="0.7"
+              />
+            </template>
+            <template v-else>
+              <ellipse
+                :rx="item.width / 2 - 4"
+                :ry="Math.min(item.depth, 35) / 2 - 4"
+              />
+              <circle
+                r="10"
+                fill="var(--ui-secondary)"
+                stroke="none"
+                opacity="0.7"
+              />
+            </template>
+          </g>
+          <!-- Overhead (step 3f: a pendant lamp, a parasol): a dashed outline over what stands below,
+             grabbed by its middle. -->
+          <g v-else-if="ITEM_SPECS[item.kind].overhead">
+            <circle
+              :r="item.width / 2"
+              fill="none"
+              stroke="var(--ui-border-accented)"
+              stroke-width="3"
+              stroke-dasharray="12 8"
+            />
+            <circle
+              :r="Math.min(14, item.width / 4)"
+              fill="var(--ui-bg-elevated)"
+              stroke="var(--ui-border-accented)"
+              stroke-width="3"
+            />
+          </g>
+          <!-- A shape (D278): its finish's colour and its name. -->
+          <g v-else-if="isShapeKind(item.kind)">
+            <ellipse
+              v-if="item.kind === 'block-round'"
+              :rx="item.width / 2"
+              :ry="item.depth / 2"
+              :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+              stroke="var(--ui-text-muted)"
+              stroke-width="3"
+            />
+            <rect
+              v-else
+              :x="-item.width / 2"
+              :y="-item.depth / 2"
+              :width="item.width"
+              :height="item.depth"
+              rx="4"
+              :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+              stroke="var(--ui-text-muted)"
+              stroke-width="3"
+            />
+            <text
+              text-anchor="middle"
+              dominant-baseline="central"
+              :font-size="Math.min(22, Math.max(10, Math.min(item.width, item.depth) / 4))"
+              fill="var(--ui-text-highlighted)"
+              :transform="`rotate(${-item.rotation})`"
+            >{{ item.name ?? ITEM_SPECS[item.kind].label }}</text>
+          </g>
           <circle
-            :r="Math.min(14, item.width / 4)"
+            v-else-if="ITEM_SPECS[item.kind].footprint === 'round'"
+            :r="item.width / 2"
             fill="var(--ui-bg-elevated)"
             stroke="var(--ui-border-accented)"
             stroke-width="3"
           />
+          <template v-else>
+            <rect
+              :x="-item.width / 2"
+              :y="-item.depth / 2"
+              :width="item.width"
+              :height="item.depth"
+              :rx="item.kind === 'service-counter' || item.kind === 'stairs' ? 3 : 8"
+              fill="var(--ui-bg-elevated)"
+              :stroke="item.kind === 'service-counter' || item.kind === 'stairs' ? 'var(--ui-text-muted)' : 'var(--ui-border-accented)'"
+              stroke-width="3"
+            />
+            <g
+              v-if="item.kind === 'stairs'"
+              stroke="var(--ui-border-accented)"
+              stroke-width="2"
+            >
+              <line
+                v-for="y in stairLines(item.depth)"
+                :key="y"
+                :x1="-item.width / 2"
+                :x2="item.width / 2"
+                :y1="y"
+                :y2="y"
+              />
+              <path
+                :d="`M0 ${item.depth / 2 - 30} V${-item.depth / 2 + 40} M-14 ${-item.depth / 2 + 58} L0 ${-item.depth / 2 + 40} L14 ${-item.depth / 2 + 58}`"
+                fill="none"
+                stroke="var(--ui-text-muted)"
+                stroke-width="3"
+                stroke-linecap="round"
+              />
+            </g>
+            <g
+              v-else-if="item.kind === 'room-divider'"
+              stroke="var(--ui-border-accented)"
+              stroke-width="2"
+            >
+              <line
+                v-for="x in slatLines(item.width)"
+                :key="x"
+                :x1="x"
+                :x2="x"
+                :y1="-item.depth / 2"
+                :y2="item.depth / 2"
+              />
+            </g>
+            <g v-else-if="item.kind === 'planter'">
+              <circle
+                v-for="x in slatLines(item.width).filter((_, index) => index % 3 === 1)"
+                :key="x"
+                :cx="x"
+                :r="Math.min(16, item.depth / 2 - 2)"
+                fill="color-mix(in oklab, var(--ui-success) 35%, var(--ui-bg))"
+              />
+            </g>
+            <line
+              v-else-if="item.kind === 'cafe-chair' || item.kind === 'bentwood-chair'"
+              :x1="-item.width / 2 + 6"
+              :x2="item.width / 2 - 6"
+              :y1="-item.depth / 2 + 6"
+              :y2="-item.depth / 2 + 6"
+              stroke="var(--ui-text-muted)"
+              stroke-width="4"
+              stroke-linecap="round"
+            />
+            <text
+              v-if="item.kind === 'service-counter' || item.kind === 'display-shelf'"
+              text-anchor="middle"
+              dominant-baseline="central"
+              font-size="20"
+              fill="var(--ui-text-muted)"
+              :transform="`rotate(${-item.rotation})`"
+            >{{ item.kind === 'service-counter' ? 'Counter' : 'Shelf' }}</text>
+          </template>
         </g>
-        <!-- A shape (D278): its finish's colour and its name. -->
-        <g v-else-if="isShapeKind(item.kind)">
-          <ellipse
-            v-if="item.kind === 'block-round'"
-            :rx="item.width / 2"
-            :ry="item.depth / 2"
-            :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+      </g>
+
+      <!-- Walls, railings, doors and windows on the outline. -->
+      <g
+        v-for="edge in edges"
+        :key="edge.index"
+        pointer-events="none"
+      >
+        <line
+          v-if="isSelected('edge', String(edge.index))"
+          :x1="edge.from.x"
+          :y1="edge.from.y"
+          :x2="edge.to.x"
+          :y2="edge.to.y"
+          stroke="color-mix(in oklab, var(--ui-warning) 40%, transparent)"
+          stroke-width="44"
+          data-testid="plan-edge-selected"
+        />
+        <!-- A wall band with mitred corners (ISS-034): square line caps left notches at corners. -->
+        <polygon
+          v-if="edge.kind === 'wall' && edge.band"
+          :points="points(edge.band)"
+          fill="var(--ui-text-toned)"
+          :data-testid="`plan-outline-band-${edge.index}`"
+        />
+        <template v-else-if="edge.kind === 'railing'">
+          <line
+            :x1="edge.from.x"
+            :y1="edge.from.y"
+            :x2="edge.to.x"
+            :y2="edge.to.y"
             stroke="var(--ui-text-muted)"
+            stroke-width="8"
+          />
+          <line
+            :x1="edge.from.x"
+            :y1="edge.from.y"
+            :x2="edge.to.x"
+            :y2="edge.to.y"
+            stroke="var(--ui-bg)"
+            stroke-width="3"
+            stroke-dasharray="3 22"
+          />
+        </template>
+        <line
+          v-else
+          :x1="edge.from.x"
+          :y1="edge.from.y"
+          :x2="edge.to.x"
+          :y2="edge.to.y"
+          stroke="var(--ui-border-accented)"
+          stroke-width="3"
+          stroke-dasharray="10 10"
+        />
+        <template
+          v-for="opening in edge.openings"
+          :key="opening.id"
+        >
+          <line
+            :x1="opening.start.x"
+            :y1="opening.start.y"
+            :x2="opening.end.x"
+            :y2="opening.end.y"
+            stroke="var(--ui-bg)"
+            :stroke-width="WALL_THICKNESS_CM + 3"
+          />
+          <template v-if="opening.kind === 'window'">
+            <line
+              :x1="opening.start.x"
+              :y1="opening.start.y"
+              :x2="opening.end.x"
+              :y2="opening.end.y"
+              stroke="color-mix(in oklab, var(--ui-info) 35%, var(--ui-bg))"
+              stroke-width="16"
+            />
+            <line
+              :x1="opening.start.x"
+              :y1="opening.start.y"
+              :x2="opening.end.x"
+              :y2="opening.end.y"
+              stroke="var(--ui-info)"
+              stroke-width="3"
+            />
+          </template>
+          <path
+            v-else
+            :d="`M${opening.hinge.x} ${opening.hinge.y} L${opening.swing.x} ${opening.swing.y}`"
+            stroke="var(--ui-text-toned)"
+            stroke-width="5"
+          />
+        </template>
+      </g>
+
+      <!-- The real dining tables (amber: each has a QR), their chairs from their seats. -->
+      <g
+        :opacity="mode === 'outline' ? 0.35 : 1"
+        :pointer-events="piecesActive ? undefined : 'none'"
+      >
+        <g
+          v-for="table in placed"
+          :id="pieceId({ kind: 'table', id: table.tableId })"
+          :key="table.tableId"
+          :pointer-events="isLocked('table', table.tableId) ? 'none' : undefined"
+          :transform="transform(table)"
+          data-kind="table"
+          :data-id="table.tableId"
+          :data-testid="`plan-table-${table.label}`"
+          class="cursor-grab"
+        >
+          <rect
+            v-for="(chair, index) in table.chairs"
+            :key="index"
+            v-bind="chairRect(table.look.chair)"
+            rx="8"
+            :transform="transform(chair)"
+            fill="var(--ui-bg-elevated)"
+            stroke="var(--ui-border-accented)"
+            stroke-width="2.5"
+          />
+          <template v-if="table.look.shape === 'booth'">
+            <rect
+              v-for="side in [1, -1]"
+              :key="side"
+              :x="-table.width / 2 - 5"
+              :y="side > 0 ? table.depth / 2 : -table.depth / 2 - BOOTH_BENCH_DEPTH_CM"
+              :width="table.width + 10"
+              :height="BOOTH_BENCH_DEPTH_CM"
+              rx="12"
+              fill="color-mix(in oklab, var(--ui-primary) 8%, var(--ui-bg-elevated))"
+              stroke="var(--ui-text-muted)"
+              stroke-width="2.5"
+            />
+          </template>
+          <ellipse
+            v-if="table.look.shape === 'round'"
+            :rx="table.width / 2"
+            :ry="table.depth / 2"
+            fill="color-mix(in oklab, var(--ui-primary) 14%, var(--ui-bg))"
+            stroke="var(--ui-primary)"
             stroke-width="3"
           />
           <rect
             v-else
-            :x="-item.width / 2"
-            :y="-item.depth / 2"
-            :width="item.width"
-            :height="item.depth"
-            rx="4"
-            :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
-            stroke="var(--ui-text-muted)"
+            :x="-table.width / 2"
+            :y="-table.depth / 2"
+            :width="table.width"
+            :height="table.depth"
+            rx="10"
+            fill="color-mix(in oklab, var(--ui-primary) 14%, var(--ui-bg))"
+            stroke="var(--ui-primary)"
             stroke-width="3"
           />
           <text
             text-anchor="middle"
             dominant-baseline="central"
-            :font-size="Math.min(22, Math.max(10, Math.min(item.width, item.depth) / 4))"
+            font-size="26"
+            font-weight="600"
             fill="var(--ui-text-highlighted)"
-            :transform="`rotate(${-item.rotation})`"
-          >{{ item.name ?? ITEM_SPECS[item.kind].label }}</text>
+            :transform="`rotate(${-table.rotation})`"
+          >{{ table.label }}</text>
         </g>
-        <circle
-          v-else-if="ITEM_SPECS[item.kind].footprint === 'round'"
-          :r="item.width / 2"
-          fill="var(--ui-bg-elevated)"
-          stroke="var(--ui-border-accented)"
-          stroke-width="3"
-        />
-        <template v-else>
-          <rect
-            :x="-item.width / 2"
-            :y="-item.depth / 2"
-            :width="item.width"
-            :height="item.depth"
-            :rx="item.kind === 'service-counter' || item.kind === 'stairs' ? 3 : 8"
-            fill="var(--ui-bg-elevated)"
-            :stroke="item.kind === 'service-counter' || item.kind === 'stairs' ? 'var(--ui-text-muted)' : 'var(--ui-border-accented)'"
-            stroke-width="3"
+      </g>
+
+      <!-- Placement warnings are advisory. -->
+      <g
+        fill="color-mix(in oklab, var(--ui-warning) 10%, transparent)"
+        stroke="var(--ui-warning)"
+        stroke-width="4"
+        stroke-dasharray="12 8"
+        pointer-events="none"
+      >
+        <template
+          v-for="table in placed"
+          :key="table.tableId"
+        >
+          <polygon
+            v-if="warnings.has(table.tableId)"
+            :points="warningCorners(table, table.extent.width, table.extent.depth)"
           />
-          <g
-            v-if="item.kind === 'stairs'"
-            stroke="var(--ui-border-accented)"
-            stroke-width="2"
-          >
-            <line
-              v-for="y in stairLines(item.depth)"
-              :key="y"
-              :x1="-item.width / 2"
-              :x2="item.width / 2"
-              :y1="y"
-              :y2="y"
-            />
-            <path
-              :d="`M0 ${item.depth / 2 - 30} V${-item.depth / 2 + 40} M-14 ${-item.depth / 2 + 58} L0 ${-item.depth / 2 + 40} L14 ${-item.depth / 2 + 58}`"
-              fill="none"
-              stroke="var(--ui-text-muted)"
-              stroke-width="3"
-              stroke-linecap="round"
-            />
-          </g>
-          <g
-            v-else-if="item.kind === 'room-divider'"
-            stroke="var(--ui-border-accented)"
-            stroke-width="2"
-          >
-            <line
-              v-for="x in slatLines(item.width)"
-              :key="x"
-              :x1="x"
-              :x2="x"
-              :y1="-item.depth / 2"
-              :y2="item.depth / 2"
-            />
-          </g>
-          <g v-else-if="item.kind === 'planter'">
-            <circle
-              v-for="x in slatLines(item.width).filter((_, index) => index % 3 === 1)"
-              :key="x"
-              :cx="x"
-              :r="Math.min(16, item.depth / 2 - 2)"
-              fill="color-mix(in oklab, var(--ui-success) 35%, var(--ui-bg))"
-            />
-          </g>
-          <line
-            v-else-if="item.kind === 'cafe-chair' || item.kind === 'bentwood-chair'"
-            :x1="-item.width / 2 + 6"
-            :x2="item.width / 2 - 6"
-            :y1="-item.depth / 2 + 6"
-            :y2="-item.depth / 2 + 6"
-            stroke="var(--ui-text-muted)"
-            stroke-width="4"
-            stroke-linecap="round"
+        </template>
+        <template
+          v-for="item in items"
+          :key="item.id"
+        >
+          <polygon
+            v-if="warnings.has(item.id)"
+            :points="warningCorners(item, item.width, item.depth)"
           />
-          <text
-            v-if="item.kind === 'service-counter' || item.kind === 'display-shelf'"
-            text-anchor="middle"
-            dominant-baseline="central"
-            font-size="20"
-            fill="var(--ui-text-muted)"
-            :transform="`rotate(${-item.rotation})`"
-          >{{ item.kind === 'service-counter' ? 'Counter' : 'Shelf' }}</text>
         </template>
       </g>
-    </g>
 
-    <!-- Walls, railings, doors and windows on the outline. -->
-    <g
-      v-for="edge in edges"
-      :key="edge.index"
-      pointer-events="none"
-    >
-      <line
-        v-if="isSelected('edge', String(edge.index))"
-        :x1="edge.from.x"
-        :y1="edge.from.y"
-        :x2="edge.to.x"
-        :y2="edge.to.y"
-        stroke="color-mix(in oklab, var(--ui-warning) 40%, transparent)"
-        stroke-width="44"
-        data-testid="plan-edge-selected"
-      />
-      <!-- A wall band with mitred corners (ISS-034): square line caps left notches at corners. -->
-      <polygon
-        v-if="edge.kind === 'wall' && edge.band"
-        :points="points(edge.band)"
-        fill="var(--ui-text-toned)"
-        :data-testid="`plan-outline-band-${edge.index}`"
-      />
-      <template v-else-if="edge.kind === 'railing'">
-        <line
-          :x1="edge.from.x"
-          :y1="edge.from.y"
-          :x2="edge.to.x"
-          :y2="edge.to.y"
-          stroke="var(--ui-text-muted)"
-          stroke-width="8"
-        />
-        <line
-          :x1="edge.from.x"
-          :y1="edge.from.y"
-          :x2="edge.to.x"
-          :y2="edge.to.y"
-          stroke="var(--ui-bg)"
-          stroke-width="3"
-          stroke-dasharray="3 22"
-        />
-      </template>
-      <line
-        v-else
-        :x1="edge.from.x"
-        :y1="edge.from.y"
-        :x2="edge.to.x"
-        :y2="edge.to.y"
-        stroke="var(--ui-border-accented)"
-        stroke-width="3"
-        stroke-dasharray="10 10"
-      />
-      <template
-        v-for="opening in edge.openings"
-        :key="opening.id"
-      >
-        <line
-          :x1="opening.start.x"
-          :y1="opening.start.y"
-          :x2="opening.end.x"
-          :y2="opening.end.y"
-          stroke="var(--ui-bg)"
-          :stroke-width="WALL_THICKNESS_CM + 3"
-        />
-        <template v-if="opening.kind === 'window'">
-          <line
-            :x1="opening.start.x"
-            :y1="opening.start.y"
-            :x2="opening.end.x"
-            :y2="opening.end.y"
-            stroke="color-mix(in oklab, var(--ui-info) 35%, var(--ui-bg))"
-            stroke-width="16"
-          />
-          <line
-            :x1="opening.start.x"
-            :y1="opening.start.y"
-            :x2="opening.end.x"
-            :y2="opening.end.y"
-            stroke="var(--ui-info)"
-            stroke-width="3"
-          />
-        </template>
-        <path
-          v-else
-          :d="`M${opening.hinge.x} ${opening.hinge.y} L${opening.swing.x} ${opening.swing.y}`"
-          stroke="var(--ui-text-toned)"
-          stroke-width="5"
-        />
-      </template>
-    </g>
-
-    <!-- The real dining tables (amber: each has a QR), their chairs from their seats. -->
-    <g
-      :opacity="mode === 'outline' ? 0.35 : 1"
-      :pointer-events="piecesActive ? undefined : 'none'"
-    >
+      <!-- The Room tool's rectangle (D278): primary to add, error to cut out. -->
       <g
-        v-for="table in placed"
-        :id="pieceId({ kind: 'table', id: table.tableId })"
-        :key="table.tableId"
-        :pointer-events="isLocked('table', table.tableId) ? 'none' : undefined"
-        :transform="transform(table)"
-        data-kind="table"
-        :data-id="table.tableId"
-        :data-testid="`plan-table-${table.label}`"
-        class="cursor-grab"
+        v-if="roomPreview"
+        pointer-events="none"
+        data-testid="room-preview"
       >
-        <rect
-          v-for="(chair, index) in table.chairs"
-          :key="index"
-          v-bind="chairRect(table.look.chair)"
-          rx="8"
-          :transform="transform(chair)"
-          fill="var(--ui-bg-elevated)"
-          stroke="var(--ui-border-accented)"
-          stroke-width="2.5"
-        />
-        <template v-if="table.look.shape === 'booth'">
-          <rect
-            v-for="side in [1, -1]"
-            :key="side"
-            :x="-table.width / 2 - 5"
-            :y="side > 0 ? table.depth / 2 : -table.depth / 2 - BOOTH_BENCH_DEPTH_CM"
-            :width="table.width + 10"
-            :height="BOOTH_BENCH_DEPTH_CM"
-            rx="12"
-            fill="color-mix(in oklab, var(--ui-primary) 8%, var(--ui-bg-elevated))"
-            stroke="var(--ui-text-muted)"
-            stroke-width="2.5"
-          />
-        </template>
         <ellipse
-          v-if="table.look.shape === 'round'"
-          :rx="table.width / 2"
-          :ry="table.depth / 2"
-          fill="color-mix(in oklab, var(--ui-primary) 14%, var(--ui-bg))"
+          v-if="mode === 'shape' && roundShape"
+          :cx="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2"
+          :cy="(roomPreview.bounds.minY + roomPreview.bounds.maxY) / 2"
+          :rx="(roomPreview.bounds.maxX - roomPreview.bounds.minX) / 2"
+          :ry="(roomPreview.bounds.maxY - roomPreview.bounds.minY) / 2"
+          fill="color-mix(in oklab, var(--ui-primary) 12%, transparent)"
           stroke="var(--ui-primary)"
-          stroke-width="3"
+          stroke-width="2"
+          stroke-dasharray="8 6"
+          vector-effect="non-scaling-stroke"
         />
         <rect
           v-else
-          :x="-table.width / 2"
-          :y="-table.depth / 2"
-          :width="table.width"
-          :height="table.depth"
-          rx="10"
-          fill="color-mix(in oklab, var(--ui-primary) 14%, var(--ui-bg))"
-          stroke="var(--ui-primary)"
-          stroke-width="3"
+          :x="roomPreview.bounds.minX"
+          :y="roomPreview.bounds.minY"
+          :width="roomPreview.bounds.maxX - roomPreview.bounds.minX"
+          :height="roomPreview.bounds.maxY - roomPreview.bounds.minY"
+          :fill="roomPreview.cut ? 'color-mix(in oklab, var(--ui-error) 12%, transparent)' : 'color-mix(in oklab, var(--ui-primary) 12%, transparent)'"
+          :stroke="roomPreview.cut ? 'var(--ui-error)' : 'var(--ui-primary)'"
+          stroke-width="2"
+          stroke-dasharray="8 6"
+          vector-effect="non-scaling-stroke"
+        />
+        <!-- The size under the shape, like Figma's (ISS-029). -->
+        <rect
+          :x="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2 - chipSize(sizeText(roomPreview.bounds)).width / 2"
+          :y="roomPreview.bounds.maxY + 8 * perPixel"
+          :width="chipSize(sizeText(roomPreview.bounds)).width"
+          :height="chipSize('').height"
+          :rx="4 * perPixel"
+          fill="var(--ui-text-highlighted)"
         />
         <text
+          :x="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2"
+          :y="roomPreview.bounds.maxY + 8 * perPixel + chipSize('').height / 2"
           text-anchor="middle"
           dominant-baseline="central"
-          font-size="26"
-          font-weight="600"
-          fill="var(--ui-text-highlighted)"
-          :transform="`rotate(${-table.rotation})`"
-        >{{ table.label }}</text>
+          :font-size="chipSize('').font"
+          fill="var(--ui-bg)"
+          class="tabular-nums"
+          data-testid="draw-size"
+        >{{ sizeText(roomPreview.bounds) }}</text>
       </g>
-    </g>
 
-    <!-- Placement warnings are advisory. -->
-    <g
-      fill="color-mix(in oklab, var(--ui-warning) 10%, transparent)"
-      stroke="var(--ui-warning)"
-      stroke-width="4"
-      stroke-dasharray="12 8"
-      pointer-events="none"
-    >
-      <template
-        v-for="table in placed"
-        :key="table.tableId"
-      >
-        <polygon
-          v-if="warnings.has(table.tableId)"
-          :points="warningCorners(table, table.extent.width, table.extent.depth)"
-        />
-      </template>
-      <template
-        v-for="item in items"
-        :key="item.id"
-      >
-        <polygon
-          v-if="warnings.has(item.id)"
-          :points="warningCorners(item, item.width, item.depth)"
-        />
-      </template>
-    </g>
-
-    <!-- The Room tool's rectangle (D278): primary to add, error to cut out. -->
-    <g
-      v-if="roomPreview"
-      pointer-events="none"
-      data-testid="room-preview"
-    >
-      <ellipse
-        v-if="mode === 'shape' && roundShape"
-        :cx="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2"
-        :cy="(roomPreview.bounds.minY + roomPreview.bounds.maxY) / 2"
-        :rx="(roomPreview.bounds.maxX - roomPreview.bounds.minX) / 2"
-        :ry="(roomPreview.bounds.maxY - roomPreview.bounds.minY) / 2"
-        fill="color-mix(in oklab, var(--ui-primary) 12%, transparent)"
-        stroke="var(--ui-primary)"
-        stroke-width="2"
-        stroke-dasharray="8 6"
-        vector-effect="non-scaling-stroke"
-      />
-      <rect
-        v-else
-        :x="roomPreview.bounds.minX"
-        :y="roomPreview.bounds.minY"
-        :width="roomPreview.bounds.maxX - roomPreview.bounds.minX"
-        :height="roomPreview.bounds.maxY - roomPreview.bounds.minY"
-        :fill="roomPreview.cut ? 'color-mix(in oklab, var(--ui-error) 12%, transparent)' : 'color-mix(in oklab, var(--ui-primary) 12%, transparent)'"
-        :stroke="roomPreview.cut ? 'var(--ui-error)' : 'var(--ui-primary)'"
-        stroke-width="2"
-        stroke-dasharray="8 6"
-        vector-effect="non-scaling-stroke"
-      />
-      <!-- The size under the shape, like Figma's (ISS-029). -->
-      <rect
-        :x="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2 - chipSize(sizeText(roomPreview.bounds)).width / 2"
-        :y="roomPreview.bounds.maxY + 8 * perPixel"
-        :width="chipSize(sizeText(roomPreview.bounds)).width"
-        :height="chipSize('').height"
-        :rx="4 * perPixel"
-        fill="var(--ui-text-highlighted)"
-      />
-      <text
-        :x="(roomPreview.bounds.minX + roomPreview.bounds.maxX) / 2"
-        :y="roomPreview.bounds.maxY + 8 * perPixel + chipSize('').height / 2"
-        text-anchor="middle"
-        dominant-baseline="central"
-        :font-size="chipSize('').font"
-        fill="var(--ui-bg)"
-        class="tabular-nums"
-        data-testid="draw-size"
-      >{{ sizeText(roomPreview.bounds) }}</text>
-    </g>
-
-    <!-- What a click would pick (D278). -->
-    <g
-      v-if="hoverOutline"
-      pointer-events="none"
-      data-testid="plan-hover"
-    >
-      <rect
-        v-if="hoverOutline.kind === 'frame'"
-        :transform="transform(hoverOutline.pose)"
-        :x="-hoverOutline.width / 2"
-        :y="-hoverOutline.depth / 2"
-        :width="hoverOutline.width"
-        :height="hoverOutline.depth"
-        fill="none"
-        stroke="var(--ui-primary)"
-        stroke-width="1.5"
-        vector-effect="non-scaling-stroke"
-      />
-      <line
-        v-else
-        :x1="hoverOutline.from.x"
-        :y1="hoverOutline.from.y"
-        :x2="hoverOutline.to.x"
-        :y2="hoverOutline.to.y"
-        stroke="color-mix(in oklab, var(--ui-primary) 45%, transparent)"
-        :stroke-width="Math.max(20, perPixel * 6)"
-        stroke-linecap="round"
-      />
-    </g>
-
-    <!-- Several selected (D278): each one's frame and the set's bounds. -->
-    <g
-      v-if="multi && mode === 'select'"
-      pointer-events="none"
-      data-testid="plan-group"
-    >
-      <template
-        v-for="member in group"
-        :key="`${member.kind}-${member.id}`"
+      <!-- What a click would pick (D278). -->
+      <g
+        v-if="hoverOutline"
+        pointer-events="none"
+        data-testid="plan-hover"
       >
         <rect
-          v-if="boxOf(member)"
-          :x="boxOf(member)!.minX"
-          :y="boxOf(member)!.minY"
-          :width="boxOf(member)!.maxX - boxOf(member)!.minX"
-          :height="boxOf(member)!.maxY - boxOf(member)!.minY"
+          v-if="hoverOutline.kind === 'frame'"
+          :transform="transform(hoverOutline.pose)"
+          :x="-hoverOutline.width / 2"
+          :y="-hoverOutline.depth / 2"
+          :width="hoverOutline.width"
+          :height="hoverOutline.depth"
           fill="none"
           stroke="var(--ui-primary)"
           stroke-width="1.5"
           vector-effect="non-scaling-stroke"
         />
-      </template>
-      <rect
-        v-if="selectedBounds"
-        :x="selectedBounds.minX"
-        :y="selectedBounds.minY"
-        :width="selectedBounds.maxX - selectedBounds.minX"
-        :height="selectedBounds.maxY - selectedBounds.minY"
-        fill="none"
-        stroke="var(--ui-primary)"
-        stroke-width="1.5"
-        vector-effect="non-scaling-stroke"
-      />
-    </g>
+        <line
+          v-else
+          :x1="hoverOutline.from.x"
+          :y1="hoverOutline.from.y"
+          :x2="hoverOutline.to.x"
+          :y2="hoverOutline.to.y"
+          stroke="color-mix(in oklab, var(--ui-primary) 45%, transparent)"
+          :stroke-width="Math.max(20, perPixel * 6)"
+          stroke-linecap="round"
+        />
+      </g>
 
-    <!-- A box selection being dragged (D278). -->
-    <rect
-      v-if="marquee"
-      :x="marquee.minX"
-      :y="marquee.minY"
-      :width="marquee.maxX - marquee.minX"
-      :height="marquee.maxY - marquee.minY"
-      fill="color-mix(in oklab, var(--ui-primary) 10%, transparent)"
-      stroke="var(--ui-primary)"
-      stroke-width="1"
-      vector-effect="non-scaling-stroke"
-      pointer-events="none"
-      data-testid="plan-marquee"
-    />
-
-    <!-- Smart guides while dragging, and the gaps measured with Alt (D278). -->
-    <g
-      pointer-events="none"
-      stroke="var(--ui-error)"
-      stroke-width="1"
-      vector-effect="non-scaling-stroke"
-    >
-      <line
-        v-for="(guide, index) in guides"
-        :key="`guide-${index}`"
-        :x1="guide.axis === 'x' ? guide.at : guide.from"
-        :y1="guide.axis === 'x' ? guide.from : guide.at"
-        :x2="guide.axis === 'x' ? guide.at : guide.to"
-        :y2="guide.axis === 'x' ? guide.to : guide.at"
-        vector-effect="non-scaling-stroke"
-        data-testid="plan-guide"
-      />
-    </g>
-    <g
-      v-for="(gap, index) in measurements"
-      :key="`gap-${index}`"
-      pointer-events="none"
-      data-testid="plan-gap"
-    >
-      <line
-        :x1="gap.from.x"
-        :y1="gap.from.y"
-        :x2="gap.to.x"
-        :y2="gap.to.y"
-        stroke="var(--ui-error)"
-        stroke-width="1.5"
-        vector-effect="non-scaling-stroke"
-      />
-      <rect
-        :x="(gap.from.x + gap.to.x) / 2 - chipSize(metres(gap.length)).width / 2"
-        :y="(gap.from.y + gap.to.y) / 2 - chipSize(metres(gap.length)).height / 2"
-        :width="chipSize(metres(gap.length)).width"
-        :height="chipSize(metres(gap.length)).height"
-        :rx="4 * perPixel"
-        fill="var(--ui-error)"
-      />
-      <text
-        :x="(gap.from.x + gap.to.x) / 2"
-        :y="(gap.from.y + gap.to.y) / 2"
-        text-anchor="middle"
-        dominant-baseline="central"
-        :font-size="chipSize(metres(gap.length)).font"
-        fill="var(--ui-bg)"
-      >{{ metres(gap.length) }}</text>
-    </g>
-
-    <!-- The selection, with its turn handle and corner handles (2B). -->
-    <template v-if="mode === 'select'">
-      <template
-        v-for="table in placed"
-        :key="table.tableId"
+      <!-- Several selected (D278): each one's frame and the set's bounds. -->
+      <g
+        v-if="multi && mode === 'select'"
+        pointer-events="none"
+        data-testid="plan-group"
       >
-        <g
-          v-if="isSelected('table', table.tableId)"
-          :transform="transform(table)"
+        <template
+          v-for="member in group"
+          :key="`${member.kind}-${member.id}`"
         >
           <rect
-            :x="-table.extent.width / 2"
-            :y="-table.extent.depth / 2"
-            :width="table.extent.width"
-            :height="table.extent.depth"
+            v-if="boxOf(member)"
+            :x="boxOf(member)!.minX"
+            :y="boxOf(member)!.minY"
+            :width="boxOf(member)!.maxX - boxOf(member)!.minX"
+            :height="boxOf(member)!.maxY - boxOf(member)!.minY"
             fill="none"
             stroke="var(--ui-primary)"
             stroke-width="1.5"
             vector-effect="non-scaling-stroke"
-            pointer-events="none"
           />
-          <!-- Just outside each corner: drag to turn (ISS-033, Figma has no turn handle). -->
-          <rect
-            v-for="(zone, place) in rotateZones(table.extent.width, table.extent.depth)"
-            :key="`rotate-${place}`"
-            :x="zone.x"
-            :y="zone.y"
-            :width="zone.size"
-            :height="zone.size"
-            fill="transparent"
-            data-kind="table"
-            :data-id="table.tableId"
-            data-handle="rotate"
-            :data-testid="`rotate-zone-${place}`"
-            class="cursor-alias"
-          />
+        </template>
+        <rect
+          v-if="selectedBounds"
+          :x="selectedBounds.minX"
+          :y="selectedBounds.minY"
+          :width="selectedBounds.maxX - selectedBounds.minX"
+          :height="selectedBounds.maxY - selectedBounds.minY"
+          fill="none"
+          stroke="var(--ui-primary)"
+          stroke-width="1.5"
+          vector-effect="non-scaling-stroke"
+        />
+      </g>
+
+      <!-- A box selection being dragged (D278). -->
+      <rect
+        v-if="marquee"
+        :x="marquee.minX"
+        :y="marquee.minY"
+        :width="marquee.maxX - marquee.minX"
+        :height="marquee.maxY - marquee.minY"
+        fill="color-mix(in oklab, var(--ui-primary) 10%, transparent)"
+        stroke="var(--ui-primary)"
+        stroke-width="1"
+        vector-effect="non-scaling-stroke"
+        pointer-events="none"
+        data-testid="plan-marquee"
+      />
+
+      <!-- Smart guides while dragging, and the gaps measured with Alt (D278). -->
+      <g
+        pointer-events="none"
+        stroke="var(--ui-error)"
+        stroke-width="1"
+        vector-effect="non-scaling-stroke"
+      >
+        <line
+          v-for="(guide, index) in guides"
+          :key="`guide-${index}`"
+          :x1="guide.axis === 'x' ? guide.at : guide.from"
+          :y1="guide.axis === 'x' ? guide.from : guide.at"
+          :x2="guide.axis === 'x' ? guide.at : guide.to"
+          :y2="guide.axis === 'x' ? guide.to : guide.at"
+          vector-effect="non-scaling-stroke"
+          data-testid="plan-guide"
+        />
+      </g>
+      <g
+        v-for="(gap, index) in measurements"
+        :key="`gap-${index}`"
+        pointer-events="none"
+        data-testid="plan-gap"
+      >
+        <line
+          :x1="gap.from.x"
+          :y1="gap.from.y"
+          :x2="gap.to.x"
+          :y2="gap.to.y"
+          stroke="var(--ui-error)"
+          stroke-width="1.5"
+          vector-effect="non-scaling-stroke"
+        />
+        <rect
+          :x="(gap.from.x + gap.to.x) / 2 - chipSize(metres(gap.length)).width / 2"
+          :y="(gap.from.y + gap.to.y) / 2 - chipSize(metres(gap.length)).height / 2"
+          :width="chipSize(metres(gap.length)).width"
+          :height="chipSize(metres(gap.length)).height"
+          :rx="4 * perPixel"
+          fill="var(--ui-error)"
+        />
+        <text
+          :x="(gap.from.x + gap.to.x) / 2"
+          :y="(gap.from.y + gap.to.y) / 2"
+          text-anchor="middle"
+          dominant-baseline="central"
+          :font-size="chipSize(metres(gap.length)).font"
+          fill="var(--ui-bg)"
+        >{{ metres(gap.length) }}</text>
+      </g>
+
+      <!-- The selection, with its turn handle and corner handles (2B). -->
+      <template v-if="mode === 'select'">
+        <template
+          v-for="table in placed"
+          :key="table.tableId"
+        >
           <g
-            v-for="(point, handle) in handleCorners(table.extent.width, table.extent.depth)"
-            :key="handle"
+            v-if="isSelected('table', table.tableId)"
+            :transform="transform(table)"
           >
             <rect
-              :x="point.x - 6 * perPixel"
-              :y="point.y - 6 * perPixel"
-              :width="12 * perPixel"
-              :height="12 * perPixel"
-              fill="var(--ui-bg)"
+              :x="-table.extent.width / 2"
+              :y="-table.extent.depth / 2"
+              :width="table.extent.width"
+              :height="table.extent.depth"
+              fill="none"
               stroke="var(--ui-primary)"
-              stroke-width="2"
+              stroke-width="1.5"
               vector-effect="non-scaling-stroke"
               pointer-events="none"
             />
+            <!-- Just outside each corner: drag to turn (ISS-033, Figma has no turn handle). -->
             <rect
-              :x="point.x - 16 * perPixel"
-              :y="point.y - 16 * perPixel"
-              :width="32 * perPixel"
-              :height="32 * perPixel"
+              v-for="(zone, place) in rotateZones(table.extent.width, table.extent.depth)"
+              :key="`rotate-${place}`"
+              :x="zone.x"
+              :y="zone.y"
+              :width="zone.size"
+              :height="zone.size"
               fill="transparent"
               data-kind="table"
               :data-id="table.tableId"
-              data-handle="resize"
-              :data-corner="handle"
-              :data-testid="`resize-handle-${handle}`"
-              :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+              data-handle="rotate"
+              :data-testid="`rotate-zone-${place}`"
+              class="cursor-alias"
             />
+            <g
+              v-for="(point, handle) in handleCorners(table.extent.width, table.extent.depth)"
+              :key="handle"
+            >
+              <rect
+                :x="point.x - 6 * perPixel"
+                :y="point.y - 6 * perPixel"
+                :width="12 * perPixel"
+                :height="12 * perPixel"
+                fill="var(--ui-bg)"
+                stroke="var(--ui-primary)"
+                stroke-width="2"
+                vector-effect="non-scaling-stroke"
+                pointer-events="none"
+              />
+              <rect
+                :x="point.x - 16 * perPixel"
+                :y="point.y - 16 * perPixel"
+                :width="32 * perPixel"
+                :height="32 * perPixel"
+                fill="transparent"
+                data-kind="table"
+                :data-id="table.tableId"
+                data-handle="resize"
+                :data-corner="handle"
+                :data-testid="`resize-handle-${handle}`"
+                :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+              />
+            </g>
           </g>
-        </g>
-      </template>
-      <template
-        v-for="item in items"
-        :key="item.id"
-      >
-        <g
-          v-if="isSelected('item', item.id)"
-          :transform="transform(item)"
+        </template>
+        <template
+          v-for="item in items"
+          :key="item.id"
         >
-          <rect
-            :x="-item.width / 2"
-            :y="-item.depth / 2"
-            :width="item.width"
-            :height="item.depth"
-            fill="none"
-            stroke="var(--ui-primary)"
-            stroke-width="1.5"
-            vector-effect="non-scaling-stroke"
-            pointer-events="none"
-          />
-          <rect
-            v-for="(zone, place) in rotateZones(item.width, item.depth)"
-            :key="`rotate-${place}`"
-            :x="zone.x"
-            :y="zone.y"
-            :width="zone.size"
-            :height="zone.size"
-            fill="transparent"
-            data-kind="item"
-            :data-id="item.id"
-            data-handle="rotate"
-            :data-testid="`rotate-zone-${place}`"
-            class="cursor-alias"
-          />
           <g
-            v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width, item.depth))"
-            :key="handle"
+            v-if="isSelected('item', item.id)"
+            :transform="transform(item)"
           >
             <rect
-              :x="point.x - 6 * perPixel"
-              :y="point.y - 6 * perPixel"
-              :width="12 * perPixel"
-              :height="12 * perPixel"
-              fill="var(--ui-bg)"
+              :x="-item.width / 2"
+              :y="-item.depth / 2"
+              :width="item.width"
+              :height="item.depth"
+              fill="none"
               stroke="var(--ui-primary)"
-              stroke-width="2"
+              stroke-width="1.5"
               vector-effect="non-scaling-stroke"
               pointer-events="none"
             />
             <rect
-              :x="point.x - 16 * perPixel"
-              :y="point.y - 16 * perPixel"
-              :width="32 * perPixel"
-              :height="32 * perPixel"
+              v-for="(zone, place) in rotateZones(item.width, item.depth)"
+              :key="`rotate-${place}`"
+              :x="zone.x"
+              :y="zone.y"
+              :width="zone.size"
+              :height="zone.size"
               fill="transparent"
               data-kind="item"
               :data-id="item.id"
-              data-handle="resize"
-              :data-corner="handle"
-              :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+              data-handle="rotate"
+              :data-testid="`rotate-zone-${place}`"
+              class="cursor-alias"
             />
+            <g
+              v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width, item.depth))"
+              :key="handle"
+            >
+              <rect
+                :x="point.x - 6 * perPixel"
+                :y="point.y - 6 * perPixel"
+                :width="12 * perPixel"
+                :height="12 * perPixel"
+                fill="var(--ui-bg)"
+                stroke="var(--ui-primary)"
+                stroke-width="2"
+                vector-effect="non-scaling-stroke"
+                pointer-events="none"
+              />
+              <rect
+                :x="point.x - 16 * perPixel"
+                :y="point.y - 16 * perPixel"
+                :width="32 * perPixel"
+                :height="32 * perPixel"
+                fill="transparent"
+                data-kind="item"
+                :data-id="item.id"
+                data-handle="resize"
+                :data-corner="handle"
+                :class="handle % 2 ? 'cursor-nesw-resize' : 'cursor-nwse-resize'"
+              />
+            </g>
           </g>
-        </g>
+        </template>
       </template>
-    </template>
 
-    <!-- Draw outline, editing (3A): the shape's lines, edge lengths, corner and edge handles. -->
-    <template v-if="mode === 'outline' && !drawing">
-      <polygon
-        :points="points(shape.outline)"
-        fill="none"
-        stroke="var(--ui-primary)"
-        stroke-width="3"
-        stroke-linejoin="round"
-        vector-effect="non-scaling-stroke"
-        pointer-events="none"
-      />
-      <g
-        v-for="edge in edges"
-        :key="`label-${edge.index}`"
-        data-kind="edge-length"
-        :data-id="edge.index"
-        class="cursor-text"
-      >
-        <title>Click to type the length</title>
-        <rect
-          :x="edge.label.x - chipSize(metres(edge.length)).width / 2"
-          :y="edge.label.y - chipSize(metres(edge.length)).height / 2"
-          :width="chipSize(metres(edge.length)).width"
-          :height="chipSize(metres(edge.length)).height"
-          :rx="4 * perPixel"
-          fill="var(--ui-bg)"
-          stroke="var(--ui-border-accented)"
+      <!-- Draw outline, editing (3A): the shape's lines, edge lengths, corner and edge handles. -->
+      <template v-if="mode === 'outline' && !drawing">
+        <polygon
+          :points="points(shape.outline)"
+          fill="none"
+          stroke="var(--ui-primary)"
+          stroke-width="3"
+          stroke-linejoin="round"
           vector-effect="non-scaling-stroke"
+          pointer-events="none"
+        />
+        <g
+          v-for="edge in edges"
+          :key="`label-${edge.index}`"
+          data-kind="edge-length"
+          :data-id="edge.index"
+          class="cursor-text"
+        >
+          <title>Click to type the length</title>
+          <rect
+            :x="edge.label.x - chipSize(metres(edge.length)).width / 2"
+            :y="edge.label.y - chipSize(metres(edge.length)).height / 2"
+            :width="chipSize(metres(edge.length)).width"
+            :height="chipSize(metres(edge.length)).height"
+            :rx="4 * perPixel"
+            fill="var(--ui-bg)"
+            stroke="var(--ui-border-accented)"
+            vector-effect="non-scaling-stroke"
+          />
+          <text
+            :x="edge.label.x"
+            :y="edge.label.y"
+            text-anchor="middle"
+            dominant-baseline="central"
+            :font-size="chipSize('').font"
+            font-weight="600"
+            fill="var(--ui-text-highlighted)"
+            :data-testid="`plan-edge-length-${edge.index}`"
+          >{{ metres(edge.length) }}</text>
+        </g>
+        <circle
+          v-for="edge in edges"
+          :key="`mid-${edge.index}`"
+          :cx="edge.middle.x"
+          :cy="edge.middle.y"
+          :r="7 * perPixel"
+          fill="var(--ui-bg)"
+          stroke="var(--ui-primary)"
+          stroke-width="2"
+          vector-effect="non-scaling-stroke"
+          data-kind="midpoint"
+          :data-id="edge.index"
+          :data-testid="`plan-midpoint-${edge.index}`"
+          class="cursor-copy"
+        >
+          <title>Add a corner here</title>
+        </circle>
+        <rect
+          v-for="(point, index) in shape.outline"
+          :key="`corner-${index}`"
+          :x="point.x - 9 * perPixel"
+          :y="point.y - 9 * perPixel"
+          :width="18 * perPixel"
+          :height="18 * perPixel"
+          :rx="3 * perPixel"
+          :fill="corner === index ? 'var(--ui-primary)' : 'var(--ui-bg)'"
+          stroke="var(--ui-primary)"
+          stroke-width="2.5"
+          vector-effect="non-scaling-stroke"
+          data-kind="corner"
+          :data-id="index"
+          :data-testid="`plan-corner-${index}`"
+          class="cursor-move"
+        />
+      </template>
+
+      <!-- Draw outline, a new shape: corners so far and the next one under the pointer. -->
+      <template v-if="drawing">
+        <polyline
+          :points="points(drawingPreview)"
+          fill="none"
+          stroke="var(--ui-primary)"
+          stroke-width="3"
+          stroke-linejoin="round"
+          vector-effect="non-scaling-stroke"
+          pointer-events="none"
+        />
+        <rect
+          v-for="(point, index) in drawn"
+          :key="index"
+          :x="point.x - 9 * perPixel"
+          :y="point.y - 9 * perPixel"
+          :width="18 * perPixel"
+          :height="18 * perPixel"
+          :rx="3 * perPixel"
+          :fill="index === 0 && drawn.length >= 3 ? 'var(--ui-primary)' : 'var(--ui-bg)'"
+          stroke="var(--ui-primary)"
+          stroke-width="2.5"
+          vector-effect="non-scaling-stroke"
+          :data-kind="index === 0 && drawn.length >= 3 ? 'first-corner' : undefined"
+          :class="index === 0 && drawn.length >= 3 && 'cursor-pointer'"
+        />
+      </template>
+
+      <!-- Draw wall: the wall so far, with its length. -->
+      <g
+        v-if="wallPreview"
+        pointer-events="none"
+      >
+        <line
+          :x1="wallPreview.from.x"
+          :y1="wallPreview.from.y"
+          :x2="wallPreview.to.x"
+          :y2="wallPreview.to.y"
+          stroke="var(--ui-primary)"
+          stroke-width="12"
+          stroke-linecap="square"
+          opacity="0.7"
+        />
+        <rect
+          :x="(wallPreview.from.x + wallPreview.to.x) / 2 - chipSize(metres(wallPreview.length)).width / 2"
+          :y="(wallPreview.from.y + wallPreview.to.y) / 2 - 40 * perPixel"
+          :width="chipSize(metres(wallPreview.length)).width"
+          :height="chipSize('').height"
+          :rx="4 * perPixel"
+          fill="var(--ui-text-highlighted)"
         />
         <text
-          :x="edge.label.x"
-          :y="edge.label.y"
+          :x="(wallPreview.from.x + wallPreview.to.x) / 2"
+          :y="(wallPreview.from.y + wallPreview.to.y) / 2 - 40 * perPixel + chipSize('').height / 2"
           text-anchor="middle"
           dominant-baseline="central"
           :font-size="chipSize('').font"
-          font-weight="600"
-          fill="var(--ui-text-highlighted)"
-          :data-testid="`plan-edge-length-${edge.index}`"
-        >{{ metres(edge.length) }}</text>
+          fill="var(--ui-bg)"
+        >{{ metres(wallPreview.length) }}</text>
       </g>
       <circle
-        v-for="edge in edges"
-        :key="`mid-${edge.index}`"
-        :cx="edge.middle.x"
-        :cy="edge.middle.y"
+        v-if="mode === 'wall' && wallStart"
+        :cx="wallStart.x"
+        :cy="wallStart.y"
         :r="7 * perPixel"
-        fill="var(--ui-bg)"
+        fill="var(--ui-primary)"
+        pointer-events="none"
+      />
+      <circle
+        v-if="(drawing || mode === 'wall') && hover"
+        :cx="hover.x"
+        :cy="hover.y"
+        :r="5 * perPixel"
+        fill="none"
         stroke="var(--ui-primary)"
         stroke-width="2"
         vector-effect="non-scaling-stroke"
-        data-kind="midpoint"
-        :data-id="edge.index"
-        :data-testid="`plan-midpoint-${edge.index}`"
-        class="cursor-copy"
-      >
-        <title>Add a corner here</title>
-      </circle>
-      <rect
-        v-for="(point, index) in shape.outline"
-        :key="`corner-${index}`"
-        :x="point.x - 9 * perPixel"
-        :y="point.y - 9 * perPixel"
-        :width="18 * perPixel"
-        :height="18 * perPixel"
-        :rx="3 * perPixel"
-        :fill="corner === index ? 'var(--ui-primary)' : 'var(--ui-bg)'"
-        stroke="var(--ui-primary)"
-        stroke-width="2.5"
-        vector-effect="non-scaling-stroke"
-        data-kind="corner"
-        :data-id="index"
-        :data-testid="`plan-corner-${index}`"
-        class="cursor-move"
-      />
-    </template>
-
-    <!-- Draw outline, a new shape: corners so far and the next one under the pointer. -->
-    <template v-if="drawing">
-      <polyline
-        :points="points(drawingPreview)"
-        fill="none"
-        stroke="var(--ui-primary)"
-        stroke-width="3"
-        stroke-linejoin="round"
-        vector-effect="non-scaling-stroke"
         pointer-events="none"
       />
-      <rect
-        v-for="(point, index) in drawn"
-        :key="index"
-        :x="point.x - 9 * perPixel"
-        :y="point.y - 9 * perPixel"
-        :width="18 * perPixel"
-        :height="18 * perPixel"
-        :rx="3 * perPixel"
-        :fill="index === 0 && drawn.length >= 3 ? 'var(--ui-primary)' : 'var(--ui-bg)'"
-        stroke="var(--ui-primary)"
-        stroke-width="2.5"
-        vector-effect="non-scaling-stroke"
-        :data-kind="index === 0 && drawn.length >= 3 ? 'first-corner' : undefined"
-        :class="index === 0 && drawn.length >= 3 && 'cursor-pointer'"
-      />
-    </template>
 
-    <!-- Draw wall: the wall so far, with its length. -->
-    <g
-      v-if="wallPreview"
-      pointer-events="none"
-    >
-      <line
-        :x1="wallPreview.from.x"
-        :y1="wallPreview.from.y"
-        :x2="wallPreview.to.x"
-        :y2="wallPreview.to.y"
-        stroke="var(--ui-primary)"
-        stroke-width="12"
-        stroke-linecap="square"
-        opacity="0.7"
-      />
-      <rect
-        :x="(wallPreview.from.x + wallPreview.to.x) / 2 - chipSize(metres(wallPreview.length)).width / 2"
-        :y="(wallPreview.from.y + wallPreview.to.y) / 2 - 40 * perPixel"
-        :width="chipSize(metres(wallPreview.length)).width"
-        :height="chipSize('').height"
-        :rx="4 * perPixel"
-        fill="var(--ui-text-highlighted)"
-      />
-      <text
-        :x="(wallPreview.from.x + wallPreview.to.x) / 2"
-        :y="(wallPreview.from.y + wallPreview.to.y) / 2 - 40 * perPixel + chipSize('').height / 2"
-        text-anchor="middle"
-        dominant-baseline="central"
-        :font-size="chipSize('').font"
-        fill="var(--ui-bg)"
-      >{{ metres(wallPreview.length) }}</text>
-    </g>
-    <circle
-      v-if="mode === 'wall' && wallStart"
-      :cx="wallStart.x"
-      :cy="wallStart.y"
-      :r="7 * perPixel"
-      fill="var(--ui-primary)"
-      pointer-events="none"
-    />
-    <circle
-      v-if="(drawing || mode === 'wall') && hover"
-      :cx="hover.x"
-      :cy="hover.y"
-      :r="5 * perPixel"
-      fill="none"
-      stroke="var(--ui-primary)"
-      stroke-width="2"
-      vector-effect="non-scaling-stroke"
-      pointer-events="none"
-    />
-
-    <!-- A piece on its way from the library: see-through, snapped. -->
-    <g
-      v-if="ghostView"
-      :transform="`translate(${ghostView.x} ${ghostView.y})`"
-      opacity="0.6"
-      pointer-events="none"
-      stroke-dasharray="8 5"
-      :stroke="ghostWarning ? 'var(--ui-warning)' : 'var(--ui-primary)'"
-      data-testid="plan-ghost"
-    >
-      <template v-if="ghostView.kind === 'table'">
-        <rect
-          v-for="(chair, index) in ghostView.chairs"
-          :key="index"
-          v-bind="chairRect(ghostView.look.chair)"
-          rx="8"
-          :transform="transform(chair)"
-          fill="var(--ui-bg)"
-          stroke-width="2.5"
-        />
-        <template v-if="ghostView.look.shape === 'booth'">
+      <!-- A piece on its way from the library: see-through, snapped. -->
+      <g
+        v-if="ghostView"
+        :transform="`translate(${ghostView.x} ${ghostView.y})`"
+        opacity="0.6"
+        pointer-events="none"
+        stroke-dasharray="8 5"
+        :stroke="ghostWarning ? 'var(--ui-warning)' : 'var(--ui-primary)'"
+        data-testid="plan-ghost"
+      >
+        <template v-if="ghostView.kind === 'table'">
           <rect
-            v-for="side in [1, -1]"
-            :key="side"
-            :x="-ghostView.width / 2 - 5"
-            :y="side > 0 ? ghostView.depth / 2 : -ghostView.depth / 2 - BOOTH_BENCH_DEPTH_CM"
-            :width="ghostView.width + 10"
-            :height="BOOTH_BENCH_DEPTH_CM"
-            rx="12"
+            v-for="(chair, index) in ghostView.chairs"
+            :key="index"
+            v-bind="chairRect(ghostView.look.chair)"
+            rx="8"
+            :transform="transform(chair)"
             fill="var(--ui-bg)"
             stroke-width="2.5"
           />
+          <template v-if="ghostView.look.shape === 'booth'">
+            <rect
+              v-for="side in [1, -1]"
+              :key="side"
+              :x="-ghostView.width / 2 - 5"
+              :y="side > 0 ? ghostView.depth / 2 : -ghostView.depth / 2 - BOOTH_BENCH_DEPTH_CM"
+              :width="ghostView.width + 10"
+              :height="BOOTH_BENCH_DEPTH_CM"
+              rx="12"
+              fill="var(--ui-bg)"
+              stroke-width="2.5"
+            />
+          </template>
+          <ellipse
+            v-if="ghostView.look.shape === 'round'"
+            :rx="ghostView.width / 2"
+            :ry="ghostView.depth / 2"
+            fill="color-mix(in oklab, var(--ui-primary) 25%, var(--ui-bg))"
+            stroke-width="3"
+          />
+          <rect
+            v-else
+            :x="-ghostView.width / 2"
+            :y="-ghostView.depth / 2"
+            :width="ghostView.width"
+            :height="ghostView.depth"
+            rx="10"
+            fill="color-mix(in oklab, var(--ui-primary) 25%, var(--ui-bg))"
+            stroke-width="3"
+          />
+          <text
+            text-anchor="middle"
+            dominant-baseline="central"
+            font-size="26"
+            font-weight="600"
+            fill="var(--ui-text-highlighted)"
+            stroke="none"
+          >{{ ghostView.label }}</text>
         </template>
         <ellipse
-          v-if="ghostView.look.shape === 'round'"
+          v-else-if="ITEM_SPECS[ghostView.itemKind].footprint === 'round'"
           :rx="ghostView.width / 2"
           :ry="ghostView.depth / 2"
-          fill="color-mix(in oklab, var(--ui-primary) 25%, var(--ui-bg))"
+          fill="var(--ui-bg-elevated)"
           stroke-width="3"
         />
         <rect
@@ -2403,36 +2501,12 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :y="-ghostView.depth / 2"
           :width="ghostView.width"
           :height="ghostView.depth"
-          rx="10"
-          fill="color-mix(in oklab, var(--ui-primary) 25%, var(--ui-bg))"
+          rx="8"
+          fill="var(--ui-bg-elevated)"
           stroke-width="3"
         />
-        <text
-          text-anchor="middle"
-          dominant-baseline="central"
-          font-size="26"
-          font-weight="600"
-          fill="var(--ui-text-highlighted)"
-          stroke="none"
-        >{{ ghostView.label }}</text>
-      </template>
-      <ellipse
-        v-else-if="ITEM_SPECS[ghostView.itemKind].footprint === 'round'"
-        :rx="ghostView.width / 2"
-        :ry="ghostView.depth / 2"
-        fill="var(--ui-bg-elevated)"
-        stroke-width="3"
-      />
-      <rect
-        v-else
-        :x="-ghostView.width / 2"
-        :y="-ghostView.depth / 2"
-        :width="ghostView.width"
-        :height="ghostView.depth"
-        rx="8"
-        fill="var(--ui-bg-elevated)"
-        stroke-width="3"
-      />
+      </g>
+
     </g>
 
     <!-- Alt+drag (ISS-014): the copy at the pointer, while the original stays. -->

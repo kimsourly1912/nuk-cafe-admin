@@ -241,6 +241,21 @@ describe('the shop designer on saved layouts', () => {
     const floorSettings = page.getByTestId('floor-settings')
     await floorSettings.getByRole('switch', { name: 'Roof over this floor' }).click()
 
+    // The floor is a frame (ISS-035): dragged by its name, it moves; its drawing keeps its own coordinates.
+    const label = (await plan(page).getByTestId('plan-frame-label').boundingBox())!
+    const cm = await plan(page).evaluate(svg => (svg as SVGSVGElement).getScreenCTM()!.a)
+    await page.mouse.move(label.x + 10, label.y + label.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(label.x + 10 + 120 * cm, label.y + label.height / 2, { steps: 6 })
+    await page.mouse.up()
+    await expect.poll(async () => Math.abs(Number(await floorSettings.getByLabel('Frame X (cm)').inputValue()) - 120)).toBeLessThanOrEqual(1)
+    // Floor order (owner: it matters): the new top floor goes down one and back up.
+    await floorSettings.getByText('Order: 3 of 3').waitFor()
+    await floorSettings.getByTestId('floor-down').click()
+    await floorSettings.getByText('Order: 2 of 3').waitFor()
+    await floorSettings.getByTestId('floor-up').click()
+    await floorSettings.getByText('Order: 3 of 3').waitFor()
+
     await placeTable(page, 'L2')
     await plan(page).getByTestId('plan-table-L2').waitFor()
     await plan(page).press('Escape')
@@ -279,6 +294,8 @@ describe('the shop designer on saved layouts', () => {
     const saved = await savedLayout(page)
     const loft = saved.floors[2]!
     expect(loft).toMatchObject({ name: 'Loft', hasRoof: false })
+    expect(Math.abs((loft.canvasX ?? 0) - 120)).toBeLessThanOrEqual(1)
+    expect(loft.outline).toEqual(saved.floors[1]!.outline)
     expect(loft.edges[0]).toMatchObject({ kind: 'railing', openings: [{ kind: 'door' }] })
     expect(loft.walls).toEqual([expect.objectContaining({ from: { x: 300, y: 100 }, to: { x: 300, y: 400 } })])
     expect(saved.placements.find(placement => placement.floorId === loft.id)).toBeTruthy()
@@ -672,7 +689,7 @@ describe('the shop designer on saved layouts', () => {
     await plan(page).getByTestId('plan-table-L1').click()
     const panel = page.getByRole('complementary', { name: 'Properties' })
     const before = await positionOf(page, 'L1')
-    const x = panel.getByLabel('X (cm)')
+    const x = panel.getByLabel('X (cm)', { exact: true })
     const angle = panel.getByLabel('Rotation (°)')
     const turnedBefore = await angle.inputValue()
 
@@ -734,7 +751,7 @@ describe('the shop designer on saved layouts', () => {
     expect((await positionOf(page, 'L1')).y).toBe(before.y)
     await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
     // Properties' fields (ISS-020, Figma): math, Shift+arrow 10, out of range kept with a message, letters ignored.
-    const xField = page.getByRole('complementary', { name: 'Properties' }).getByLabel('X (cm)')
+    const xField = page.getByRole('complementary', { name: 'Properties' }).getByLabel('X (cm)', { exact: true })
     const typedFrom = await positionOf(page, 'L1')
     await xField.fill(`${typedFrom.x}+20`)
     await xField.press('Enter')
@@ -862,20 +879,20 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Place at center' }).click()
     const panel = page.getByRole('complementary', { name: 'Properties' })
     for (const [label, value] of [['X (cm)', wallX - 15], ['Y (cm)', wallY]] as const) {
-      await panel.getByLabel(label).fill(String(value))
-      await panel.getByLabel(label).press('Enter')
+      await panel.getByLabel(label, { exact: true }).fill(String(value))
+      await panel.getByLabel(label, { exact: true }).press('Enter')
     }
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     await page.keyboard.press('Escape')
-    await expect.poll(() => panel.getByLabel('X (cm)').count()).toBe(0)
+    await expect.poll(() => panel.getByLabel('X (cm)', { exact: true }).count()).toBe(0)
     await clickPlan(page, { x: wallX - 15, y: wallY })
-    await expect.poll(() => panel.getByLabel('X (cm)').inputValue()).toBe(String(wallX - 15))
+    await expect.poll(() => panel.getByLabel('X (cm)', { exact: true }).inputValue()).toBe(String(wallX - 15))
     expect(await plan(page).getByTestId('plan-edge-selected').count()).toBe(0)
 
     // Dragged near the wall, the plant snaps flush against its inner face (ISS-034): its right edge
     // (25 cm from its centre) on the wall, no gap.
     await dragPlan(page, { x: wallX - 15, y: wallY }, { x: wallX - 29, y: wallY + 40 })
-    await expect.poll(() => panel.getByLabel('X (cm)').inputValue()).toBe(String(wallX - 25))
+    await expect.poll(() => panel.getByLabel('X (cm)', { exact: true }).inputValue()).toBe(String(wallX - 25))
     // The outline's walls are drawn as mitred bands, one shape per wall edge (clean corners).
     expect(await plan(page).locator('[data-testid^="plan-outline-band-"]').count()).toBeGreaterThan(0)
     await page.getByRole('button', { name: 'Undo' }).click()
@@ -1008,8 +1025,8 @@ describe('the shop designer on saved layouts', () => {
     const tableBefore = await positionOf(page, 'L1')
     // Put the plant clear of L1, 150 cm to its right.
     for (const [label, value] of [['X (cm)', tableBefore.x + 150], ['Y (cm)', tableBefore.y]] as const) {
-      await properties.getByLabel(label).fill(String(value))
-      await properties.getByLabel(label).press('Enter')
+      await properties.getByLabel(label, { exact: true }).fill(String(value))
+      await properties.getByLabel(label, { exact: true }).press('Enter')
     }
     await expect.poll(plantAt).toEqual({ x: tableBefore.x + 150, y: tableBefore.y })
     const plantBefore = await plantAt()

@@ -744,6 +744,39 @@ function renameFloor() {
   changeFloor(target => void (target.name = name))
 }
 
+/** The frame moved, by its name on the plan or by Frame X and Y (ISS-035): one undo step; 0 is left out. */
+function setFrame(at: Point) {
+  changeFloor((target) => {
+    if (at.x) target.canvasX = at.x
+    else delete target.canvasX
+    if (at.y) target.canvasY = at.y
+    else delete target.canvasY
+  })
+}
+function moveFrame(delta: Point) {
+  const current = floor.value
+  if (current && !current.locked) setFrame({ x: (current.canvasX ?? 0) + delta.x, y: (current.canvasY ?? 0) + delta.y })
+}
+
+/**
+ * Moves the floor shown one place up or down (owner: the order matters; the first is the ground
+ * floor, 3D stacks them in order). Explore's street door is on the ground floor: a move that would
+ * take it from there is refused, with why.
+ */
+function moveFloor(step: 1 | -1) {
+  const at = floorIndex.value
+  const to = at + step
+  if (at < 0 || to < 0 || to >= floors.value.length) return
+  if ((at === 0 || to === 0) && layout.value.scene?.entrance) {
+    toast.add({ title: 'Floor not moved', description: 'Explore\'s street door is on the ground floor. Choose no street door in Explore settings first.', color: 'neutral', icon: 'i-lucide-info' })
+    return
+  }
+  draft.change((next) => {
+    const [moved] = next.floors.splice(at, 1)
+    if (moved) next.floors.splice(to, 0, moved)
+  })
+}
+
 function setHeight(value: number | null | undefined) {
   if (typeof value === 'number' && Number.isFinite(value) && value !== floor.value?.height) changeFloor(target => void (target.height = Math.round(value)))
 }
@@ -2399,6 +2432,65 @@ const pendingLabel = computed(() => {
           label="Show floor below"
           description="On the plan only, to line this floor up."
         />
+        <!-- The floor as a frame on Studio's canvas (ISS-035): design-only, 3D stacks floors by order. -->
+        <div
+          class="grid grid-cols-2 gap-2"
+          role="group"
+          aria-label="Frame on the canvas"
+        >
+          <UFormField label="Frame X (cm)">
+            <StudioNumberField
+              :model-value="floor.canvasX ?? 0"
+              label="Frame X"
+              unit="cm"
+              :min="-LAYOUT_MAX_EXTENT_CM"
+              :max="LAYOUT_MAX_EXTENT_CM"
+              :disabled="floor.locked"
+              class="w-full"
+              @update:model-value="value => setFrame({ x: value, y: floor!.canvasY ?? 0 })"
+            />
+          </UFormField>
+          <UFormField label="Frame Y (cm)">
+            <StudioNumberField
+              :model-value="floor.canvasY ?? 0"
+              label="Frame Y"
+              unit="cm"
+              :min="-LAYOUT_MAX_EXTENT_CM"
+              :max="LAYOUT_MAX_EXTENT_CM"
+              :disabled="floor.locked"
+              class="w-full"
+              @update:model-value="value => setFrame({ x: floor!.canvasX ?? 0, y: value })"
+            />
+          </UFormField>
+        </div>
+        <!-- Floor order (owner: it matters): the ground floor first; 3D and stairs follow it. -->
+        <div
+          class="flex items-center gap-2"
+          role="group"
+          aria-label="Floor order"
+        >
+          <span class="flex-1 text-sm text-default">Order: {{ floorIndex + 1 }} of {{ floors.length }}</span>
+          <UButton
+            icon="i-lucide-arrow-down"
+            label="Down"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            :disabled="floorIndex <= 0"
+            data-testid="floor-down"
+            @click="moveFloor(-1)"
+          />
+          <UButton
+            icon="i-lucide-arrow-up"
+            label="Up"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            :disabled="floorIndex >= floors.length - 1"
+            data-testid="floor-up"
+            @click="moveFloor(1)"
+          />
+        </div>
         <UButton
           label="Remove floor…"
           icon="i-lucide-trash-2"
@@ -2670,6 +2762,7 @@ const pendingLabel = computed(() => {
                 @move-group="moveGroup"
                 @edit-points="startTool('outline')"
                 @edit-length="editLength"
+                @move-frame="moveFrame"
               />
             </div>
           </UContextMenu>
