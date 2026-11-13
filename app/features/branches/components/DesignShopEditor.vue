@@ -20,7 +20,7 @@ import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
-import { duplicateSelected, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
 import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
@@ -722,6 +722,33 @@ async function placeLook(lookId: string, at: Point) {
  * Duplicate look (2B): the same look, size and turn for another real table, beside this one. It
  * asks which table, as a look from the library does; it never copies this table or its QR code.
  */
+/**
+ * Ctrl/⌘+V (ISS-022): new copies of what Ctrl/⌘+C copied, 50 cm on, one undo step. One table alone
+ * asks which table the copy is, as Duplicate look does; tables in a set are not copied (each has
+ * its own QR code). Pasting on another floor is not offered yet.
+ */
+function pasteCopied() {
+  const clipboard = props.editor.clipboard.value
+  const current = floor.value
+  if (!clipboard || !current) return
+  if (clipboard.floorId !== current.id) {
+    const source = layout.value.floors.find(candidate => candidate.id === clipboard.floorId)
+    toast.add({ title: 'Not pasted', description: source ? `Show the ${source.name} floor to paste what you copied there.` : 'The floor you copied from is gone.', color: 'neutral', icon: 'i-lucide-info' })
+    return
+  }
+  if (!clipboard.items.length && !clipboard.walls.length) {
+    const [tableId] = clipboard.tableIds
+    if (clipboard.tableIds.length === 1 && tableId && placedIds.value.has(tableId)) void duplicateLook(tableId)
+    else toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
+    return
+  }
+  const offset = props.editor.nextPasteOffset()
+  let copies: PlanSelection[] = []
+  draft.change(next => void (copies = pasteClipboard(next, clipboard, offset)))
+  if (clipboard.tableIds.length) toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
+  props.editor.selectMany(copies)
+}
+
 async function duplicateLook(tableId: string, to?: Point) {
   const source = layout.value.placements.find(placement => placement.tableId === tableId)
   if (!source) return
@@ -987,6 +1014,9 @@ function onStudioKey(event: KeyboardEvent) {
   if (command && !event.altKey) {
     const key = event.key.toLowerCase()
     if (key === 'd' && !event.shiftKey) return run(duplicateSelection)
+    // Copy and paste (ISS-022): in memory, on the floor copied from.
+    if (key === 'c' && !event.shiftKey && mode.value === 'select' && props.editor.selected.value.length) return run(() => props.editor.copy())
+    if (key === 'v' && !event.shiftKey && mode.value === 'select' && props.editor.clipboard.value) return run(pasteCopied)
     if (key === 'a' && !event.shiftKey && mode.value === 'select') return run(selectAll)
     if (key === '=' || key === '+') return run(() => plan?.zoom(1))
     if (key === '-') return run(() => plan?.zoom(-1))

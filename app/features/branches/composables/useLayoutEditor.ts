@@ -2,6 +2,8 @@ import * as v from 'valibot'
 import { layoutSchema, NO_SCENE } from '#shared/contracts/shop-layout'
 import type { BranchLayout, ItemLook, LayoutItem, LayoutTable, Placement, ScenePreset, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, NEW_TABLE_LOOK } from '../designer/catalog'
+import { copySelected } from '../designer/group'
+import type { PlanClipboard } from '../designer/group'
 import type { PlanSelection } from '../designer/plan'
 import { fetchBranchLayout, useBranchLayout, useItemLooks, useLayoutMutations, useLooks } from './useBranches'
 import { useLayoutDraft } from './useLayoutDraft'
@@ -73,6 +75,24 @@ export function useLayoutEditor(branchId: string) {
   }, { flush: 'sync' })
   /** Everything selected: the set, or the one selection, or nothing. */
   const selected = computed<PlanSelection[]>(() => (group.value.length ? group.value : selection.value ? [selection.value] : []))
+  /**
+   * Ctrl/⌘+C (ISS-022): a copy of what was selected, in memory only, dropped with the editor
+   * (leaving the page; changing cafes is a full page load). Each paste lands 50 cm further on.
+   */
+  const clipboard = shallowRef<PlanClipboard | null>(null)
+  let pastes = 0
+  function copy(): boolean {
+    const id = floorId.value
+    const copied = id ? copySelected(draft.layout.value, id, selected.value) : null
+    if (!copied) return false
+    clipboard.value = copied
+    pastes = 0
+    return true
+  }
+  function nextPasteOffset() {
+    pastes += 1
+    return { x: 50 * pastes, y: 50 * pastes }
+  }
   /** Selects these together (one of them becomes `selection`); one or none is a plain selection. */
   function selectMany(targets: readonly PlanSelection[]) {
     const unique = targets.filter((target, index) => targets.findIndex(other => other.kind === target.kind && other.id === target.id) === index)
@@ -310,6 +330,9 @@ export function useLayoutEditor(branchId: string) {
     group: readonly(group),
     selected,
     selectMany,
+    clipboard: computed(() => clipboard.value),
+    copy,
+    nextPasteOffset,
     load,
     save,
     discard: () => applied && start(applied),

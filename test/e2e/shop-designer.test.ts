@@ -1017,6 +1017,17 @@ describe('the shop designer on saved layouts', () => {
     expect(await originalAt()).toBe(originalRest)
     await page.getByRole('button', { name: 'Undo' }).click()
     await expect.poll(() => plants.count()).toBe(count)
+
+    // Ctrl+C, then Ctrl+V twice (ISS-022): two copies, each one undo step.
+    await original.click()
+    await page.keyboard.press('Control+c')
+    await page.keyboard.press('Control+v')
+    await expect.poll(() => plants.count()).toBe(count + 1)
+    await page.keyboard.press('Control+v')
+    await expect.poll(() => plants.count()).toBe(count + 2)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => plants.count()).toBe(count)
   })
 
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {

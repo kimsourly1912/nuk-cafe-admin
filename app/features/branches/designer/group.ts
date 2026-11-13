@@ -96,3 +96,49 @@ export function duplicateSelected(layout: ShopLayout, floorId: string, targets: 
   floor.walls.push(...wallCopies)
   return copies
 }
+
+/**
+ * Ctrl/⌘+C (ISS-022): a copy of the selected pieces and inside walls as they are now, so a paste
+ * still works after the originals moved or were deleted, like Figma. Tables are kept by id only:
+ * a copy of a table is another table (its own QR code), chosen when pasting, as Duplicate look does.
+ * In memory only, never the system clipboard.
+ */
+export interface PlanClipboard {
+  floorId: string
+  items: LayoutItem[]
+  walls: InnerWall[]
+  tableIds: string[]
+}
+
+export function copySelected(layout: ShopLayout, floorId: string, targets: readonly PlanSelection[]): PlanClipboard | null {
+  const floor = layout.floors.find(candidate => candidate.id === floorId)
+  if (!floor) return null
+  const items = ids(targets, 'item')
+  const walls = ids(targets, 'wall')
+  const tables = ids(targets, 'table')
+  const clipboard: PlanClipboard = {
+    floorId,
+    items: floor.items.filter(item => items.has(item.id)).map(item => structuredClone(item)),
+    walls: floor.walls.filter(wall => walls.has(wall.id)).map(wall => structuredClone(wall)),
+    tableIds: layout.placements.filter(placement => placement.floorId === floorId && tables.has(placement.tableId)).map(placement => placement.tableId),
+  }
+  return clipboard.items.length || clipboard.walls.length || clipboard.tableIds.length ? clipboard : null
+}
+
+/** Ctrl/⌘+V (ISS-022): new copies of the clipboard's pieces and walls on its floor, moved by `offset`. Tables are not pasted here. */
+export function pasteClipboard(layout: ShopLayout, clipboard: PlanClipboard, offset: Point): PlanSelection[] {
+  const floor = layout.floors.find(candidate => candidate.id === clipboard.floorId)
+  if (!floor) return []
+  const copies: PlanSelection[] = []
+  for (const item of clipboard.items) {
+    const id = newLayoutId('item')
+    copies.push({ kind: 'item', id })
+    floor.items.push({ ...structuredClone(item), id, x: item.x + offset.x, y: item.y + offset.y })
+  }
+  for (const wall of clipboard.walls) {
+    const id = newLayoutId('wall')
+    copies.push({ kind: 'wall', id })
+    floor.walls.push({ ...structuredClone(wall), id, from: { x: wall.from.x + offset.x, y: wall.from.y + offset.y }, to: { x: wall.to.x + offset.x, y: wall.to.y + offset.y } })
+  }
+  return copies
+}
