@@ -30,7 +30,7 @@ Each is its own step and branch.
 - **First-load rule (D238):** check other pages against the UI checklist item, one page per branch ([progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30)).
 - **KHQR recovery follow-ups (D266):** an owner "check again" action, a Telegram alert for new review cases, explicit Bakong 429 handling. The next free migration number is `0062`.
 - **CSP `script-src 'unsafe-inline'`:** still pending a hash/nonce policy ([security → Request protection](server/security.md)). The customer menu is server-rendered and edge-cached (`swr`), so per-request nonces don't fit; a hash policy needs its own decision.
-- **Upgrade follow-ups:** nuxt 4.6.3 in its own run; remove the four unused `simple-git` audit exemptions (D54) from `pnpm-workspace.yaml`.
+- **Upgrade follow-ups:** nuxt 4.6.3 in its own run. (The unused `simple-git` audit exemptions were removed, 2026-11-13.)
 - **Left open after D253:** the menu's lazy-load candidates (measure first) and Wrangler's `Duplicate key "payload"` warning.
 - **Audit N9 remainder:** expired Telegram/marketing link cleanup is bounded (500 per call) but still runs in the Connect request across cafes, not in scheduled maintenance. Low priority.
 - **Live updates:** other devices' changes show on tab return or navigation; pushes are planned ([plan](plans/live-updates.md)).
