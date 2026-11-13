@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StudioNumberField from './StudioNumberField.vue'
 /**
  * Design shop (D273, frames 1–3, 6A–6C, 9A–9C): a branch's saved layout with its real tables. The
  * library (Unplaced tables, table looks, furniture), the floor plan with its floors, Draw outline
@@ -1311,15 +1312,6 @@ function setRotation(value: number | null | undefined) {
   if (next !== current.rotation) rotate(target, next)
 }
 
-/** Escape puts back what the field showed and leaves it, so nothing changes. */
-function revertField(event: KeyboardEvent, value: number) {
-  const input = event.target
-  if (!(input instanceof HTMLInputElement)) return
-  input.value = String(value)
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-  input.blur()
-}
-
 const swatch = (finish: Finish) => FINISH_SWATCHES[finish]
 
 function chooseStarter(starter: Starter) {
@@ -1749,7 +1741,7 @@ const pendingLabel = computed(() => {
   </DefineLibrary>
 
   <!-- What's selected (md and up beside the plan; below, in a slide-over). -->
-  <!-- Position and turn (D277): typed, no steppers or wheel; Enter or leaving commits, Escape reverts. -->
+  <!-- Position and turn (D277): typed (math too, ISS-020), arrows 1 or 10, a drag on the handle scrubs; Enter or leaving commits, Escape reverts. -->
   <DefineTransform v-slot="{ x, y, rotation }">
     <div
       class="flex flex-col gap-3"
@@ -1758,44 +1750,38 @@ const pendingLabel = computed(() => {
     >
       <div class="grid grid-cols-2 gap-2">
         <UFormField label="X (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="x"
+            label="X"
+            unit="cm"
             :min="-LAYOUT_MAX_EXTENT_CM"
             :max="LAYOUT_MAX_EXTENT_CM"
-            :increment="false"
-            :decrement="false"
-            disable-wheel-change
             class="w-full"
             @update:model-value="value => setPosition('x', value)"
-            @keydown.esc.stop.prevent="revertField($event, x)"
           />
         </UFormField>
         <UFormField label="Y (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="y"
+            label="Y"
+            unit="cm"
             :min="-LAYOUT_MAX_EXTENT_CM"
             :max="LAYOUT_MAX_EXTENT_CM"
-            :increment="false"
-            :decrement="false"
-            disable-wheel-change
             class="w-full"
             @update:model-value="value => setPosition('y', value)"
-            @keydown.esc.stop.prevent="revertField($event, y)"
           />
         </UFormField>
       </div>
       <UFormField label="Rotation (°)">
         <div class="flex gap-2">
-          <UInputNumber
+          <StudioNumberField
             :model-value="rotation"
+            label="Rotation"
+            unit="°"
             :min="-360"
             :max="720"
-            :increment="false"
-            :decrement="false"
-            disable-wheel-change
             class="min-w-0 flex-1"
             @update:model-value="setRotation"
-            @keydown.esc.stop.prevent="revertField($event, rotation)"
           />
           <UTooltip text="Turn 90° left">
             <UButton
@@ -2010,20 +1996,22 @@ const pendingLabel = computed(() => {
       />
       <div class="grid grid-cols-2 gap-2">
         <UFormField label="Width (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="selectedPlacement.width"
+            label="Width"
+            unit="cm"
             :min="40"
             :max="600"
-            :step="5"
             @update:model-value="value => setNumber(value, selectedPlacement!.width, width => updateTable(selectedPlacement!.tableId, { width, ...(selectedLook!.shape === 'round' ? { depth: width } : {}) }))"
           />
         </UFormField>
         <UFormField label="Depth (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="selectedPlacement.depth"
+            label="Depth"
+            unit="cm"
             :min="40"
             :max="600"
-            :step="5"
             :disabled="selectedLook.shape === 'round'"
             @update:model-value="value => setNumber(value, selectedPlacement!.depth, depth => updateTable(selectedPlacement!.tableId, { depth }))"
           />
@@ -2125,20 +2113,22 @@ const pendingLabel = computed(() => {
         class="grid grid-cols-2 gap-2"
       >
         <UFormField label="Width (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="selectedItem.width"
+            label="Width"
+            unit="cm"
             :min="10"
             :max="2000"
-            :step="5"
             @update:model-value="value => setNumber(value, selectedItem!.width, width => updateItem(selectedItem!.id, { width, ...(keepsCircle(selectedItem!.kind) ? { depth: width } : {}) }))"
           />
         </UFormField>
         <UFormField label="Depth (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="selectedItem.depth"
+            label="Depth"
+            unit="cm"
             :min="10"
             :max="2000"
-            :step="5"
             :disabled="keepsCircle(selectedItem.kind)"
             @update:model-value="value => setNumber(value, selectedItem!.depth, depth => updateItem(selectedItem!.id, { depth }))"
           />
@@ -2163,11 +2153,12 @@ const pendingLabel = computed(() => {
           :help="`${itemHeightRange(selectedItem.kind)!.min} to ${itemHeightRange(selectedItem.kind)!.max} cm`"
           class="col-span-2"
         >
-          <UInputNumber
+          <StudioNumberField
             :model-value="pieceHeight(selectedItem)"
+            label="Height"
+            unit="cm"
             :min="itemHeightRange(selectedItem.kind)!.min"
             :max="itemHeightRange(selectedItem.kind)!.max"
-            :step="5"
             @update:model-value="value => setNumber(value, pieceHeight(selectedItem!), height => updateItem(selectedItem!.id, { height }))"
           />
         </UFormField>
@@ -2293,11 +2284,12 @@ const pendingLabel = computed(() => {
           label="Floor height (cm)"
           help="The wall height in 3D."
         >
-          <UInputNumber
+          <StudioNumberField
             :model-value="floor.height"
+            label="Floor height"
+            unit="cm"
             :min="200"
             :max="800"
-            :step="10"
             class="w-full"
             @update:model-value="setHeight"
           />

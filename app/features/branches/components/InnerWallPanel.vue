@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StudioNumberField from './StudioNumberField.vue'
 /**
  * An inside wall, selected (D278): what it is (Wall, Railing, Half wall or Glass), its length, and
  * its doors and windows, like an outline edge's panel. Each change is one undo step, emitted as
@@ -102,11 +103,12 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
       label="Length (cm)"
       help="Moves the wall's end along it. Drag an end on the plan to turn it."
     >
-      <UInputNumber
+      <StudioNumberField
         :model-value="length"
+        label="Length"
+        unit="cm"
         :min="10"
         :max="10000"
-        :step="5"
         @update:model-value="value => setNumber(value, length, next => setInnerWallLength(walls, wall.id, next))"
       />
     </UFormField>
@@ -157,20 +159,22 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
       </div>
       <div class="grid grid-cols-2 gap-3">
         <UFormField label="Width (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="opening.width"
+            label="Width"
+            unit="cm"
             :min="OPENING_MIN_WIDTH"
             :max="length"
-            :step="5"
             @update:model-value="value => setNumber(value, opening.width, width => updateInnerOpening(walls, wall.id, opening.id, { width }))"
           />
         </UFormField>
         <UFormField label="From the start (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="opening.offset"
+            label="From the start"
+            unit="cm"
             :min="0"
             :max="Math.max(0, length - opening.width)"
-            :step="5"
             @update:model-value="value => setNumber(value, opening.offset, offset => updateInnerOpening(walls, wall.id, opening.id, { offset }))"
           />
         </UFormField>
