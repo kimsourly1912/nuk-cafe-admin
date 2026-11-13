@@ -275,12 +275,25 @@ describe('the order beside the menu and in its drawer (D124)', () => {
     const page = await openWithLongOrder(1440, 2400)
     await panel(page).getByText('12 items').waitFor()
     const lines = panel(page).getByRole('list', { name: 'Items in your order' })
+    // How far the box's height animation travels when the first line goes: read from the animation
+    // itself, not sampled mid-way. "12 items" shows while the panel still slides open from the empty
+    // state, so first wait until nothing in it moves: a removal during that slide continues it, and
+    // the test measured the opening instead. None within a second: 0.
     const removeFirst = () => lines.evaluate(async (list) => {
-      const content = list.parentElement!
+      const box = list.parentElement!.parentElement!
+      for (let frame = 0; frame < 120 && box.getAnimations({ subtree: true }).length; frame++) {
+        await new Promise(resolve => requestAnimationFrame(resolve))
+      }
       list.querySelector<HTMLButtonElement>(':scope > li:not([aria-hidden]) button[aria-label^="Remove "]')!.click()
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-      // The content has its final height already: the box around it is what is still on its way.
-      return content.parentElement!.getBoundingClientRect().height - content.getBoundingClientRect().height
+      for (let frame = 0; frame < 60; frame++) {
+        await new Promise(resolve => requestAnimationFrame(resolve))
+        const slide = box.getAnimations().find(animation => (animation.effect as KeyframeEffect | null)?.getKeyframes().some(keyframe => 'height' in keyframe))
+        if (slide) {
+          const keyframes = (slide.effect as KeyframeEffect).getKeyframes()
+          return Number.parseFloat(String(keyframes[0]!.height)) - Number.parseFloat(String(keyframes.at(-1)!.height))
+        }
+      }
+      return 0
     })
 
     expect(await removeFirst()).toBeGreaterThan(20)
