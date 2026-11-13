@@ -3,6 +3,14 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio editing follows Figma: handles, shapes, flips (D280, 2026-11-13)
+
+Branch `ccr-37de3d9f-irv8nw`, one PR (owner: all findings together, Claude's recommendations). Builds the [Studio editor QA](qa/studio-editor-evidence/README.md) findings ED-01 to ED-11.
+
+- **Built:** side resize and turn just outside a corner (ED-01, ED-02), handles at any zoom from `designer/handles.ts` (ED-03), a size badge under the selection (ED-04), corner radius for a block (ED-05), arc, start and ring for a round block (ED-06), Flip horizontal and vertical with Shift+H and Shift+V (ED-07), shape names that fit (ED-09), align one piece to its floor (ED-11). Radius, arc and flips are optional item fields in the floor's JSON (no migration) and 3D draws the same outline. Not built: frame constraints (ED-08, D280); ED-10 was correct.
+- **How to verify:** on staging, Studio 2D with a mouse: select a block, drag its right side (wider, left side stays), Shift+drag a side; drag from just outside a corner (it turns); zoom out until a 1 m piece is small and resize it from just outside a corner; read the size under it; align it left to the floor; drag a dot inside a corner (Radius label), type a Corner radius; Shift+H, Shift+V; on a round block drag the edge dot back (Sweep), the start dot, the middle dot (Ratio); open 3D (same shapes, flips mirrored).
+- **Evidence (local):** `pnpm lint` and `pnpm typecheck` clean. `pnpm test:unit`: 198 files, 3,016 passed, 1 skipped. New unit files `designer-handles`, `designer-shapes`; contract and 3D checks in `designer-scene`; side resize and cursors in `designer-geometry`; align to a floor in `designer-group`. `test/e2e/shop-designer.test.ts` (Playwright's Chromium): 31 passed, one new (side resize, turn outside a corner, badge, align, radius, arc, ring, flips, save, 3D). No real mouse, trackpad or touch device was used.
+
 ### Studio editor QA: Figma references compared with Studio (2026-11-13)
 
 Documentation only. The [Studio editor QA folder](qa/studio-editor-evidence/README.md) (RECT-01, CIRC-01, GUIDE-01 and the Position inspector reference) is taken from PR #306 alone; that branch's older copy of `qa/studio-figma` is left out. Claude ran each check's steps in Studio and filled in the Studio results with screenshots. Findings ED-01 to ED-11: edge resize missing; just outside a corner still resizes; no handles under 56 px on screen; no size badge; no corner radius, arc, flips or constraints; Shape names overflow small shapes; one piece can't align to its floor. Alt distances and drag guides match Figma.

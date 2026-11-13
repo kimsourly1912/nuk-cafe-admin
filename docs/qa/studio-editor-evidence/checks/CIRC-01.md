@@ -1,7 +1,7 @@
 # CIRC-01 · Circle arc and ring controls
 
 - Date: 2026-11-13
-- Status: Fail (compared 2026-11-13; finding ED-06)
+- Status: Fixed, needs retest (D280, 2026-11-13). Was: Fail (compared 2026-11-13; finding ED-06)
 - Figma reference: [Wireframe scratch file](https://www.figma.com/design/sOEIGbUssGCpJIkm5dSNsP/Wireframe)
 - Source: [35-second circle recording](https://chatgpt.com/library?file_id=libfile_36d13fd676a08191aae494d3c6cba2c3&account_id=personal)
 

@@ -1,7 +1,7 @@
 # GUIDE-01 · Frame constraints, Alt distances and drag alignment
 
 - Date: 2026-11-13
-- Status: Mostly pass (compared 2026-11-13; ED-08 constraints, ED-10 to check)
+- Status: Fixed, needs retest (D280, 2026-11-13). Was: Mostly pass (compared 2026-11-13; ED-08 constraints, ED-10 to check)
 - Source: owner's Figma screenshots and explanation, 2026-11-13
 - Figma reference: [Wireframe scratch file](https://www.figma.com/design/sOEIGbUssGCpJIkm5dSNsP/Wireframe)
 

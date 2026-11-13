@@ -1,7 +1,7 @@
 # RECT-01 · Rectangle selection and transforms
 
 - Date: 2026-11-13
-- Status: Fail (compared 2026-11-13; findings ED-01 to ED-05, ED-09)
+- Status: Fixed, needs retest (D280, 2026-11-13). Was: Fail (compared 2026-11-13; findings ED-01 to ED-05, ED-09)
 - Figma reference: existing square in the [Wireframe scratch file](https://www.figma.com/design/sOEIGbUssGCpJIkm5dSNsP/Wireframe?node-id=79-89)
 - Source: [53-second Figma recording](https://chatgpt.com/library?file_id=libfile_f15535c76fc08191a363778f4c4c7b33&account_id=personal)
 

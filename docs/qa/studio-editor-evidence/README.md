@@ -16,19 +16,21 @@ This folder records how Figma's editing tools behave and gives Claude Code steps
 
 From the Studio run of 2026-11-13 (local build of `main` at `36cc911`). Owner, 2026-11-13: build corner radius, flips, the circle's arc and ring, frame constraints, and more of Figma where it fits a floor plan. Each new stored property changes the saved layout and needs a matching 3D look.
 
+Built in one PR (D280, 2026-11-13; owner: all in one PR, Claude's recommendations): status **Fixed, needs retest** unless noted. Retest each check's steps on staging with a real mouse and trackpad.
+
 | ID | Severity | Type | Finding | Check |
 |---|---|---|---|---|
-| ED-01 | Medium | Gap | No edge resize: a drag on a side moves the piece; only the four corners resize. | RECT-01 steps 3, 5 |
-| ED-02 | Medium | Bug | Just outside a corner still resizes: the resize hit area reaches 16 px past the corner and rotation starts at 12 px, so 10–16 px out resizes. | RECT-01 step 7 |
-| ED-03 | Medium | Gap | No handles while a piece is under 56 px on screen: at the default fit zoom a 1 m piece can only be moved. | RECT-01 step 2 |
-| ED-04 | Low | Gap | No size badge under a selected piece; the size shows only beside the pointer while resizing. | RECT-01 steps 2, 4 |
-| ED-05 | Medium | Gap (owner: build) | No corner radius for the rectangle Shape (dots inside the corners, Radius label, Properties field, 3D). | RECT-01 step 6 |
-| ED-06 | Medium | Gap (owner: build) | No arc for the round Shape: sweep, start angle and inner ratio (ring). | CIRC-01 |
-| ED-07 | Low | Gap (owner: build) | No Flip horizontal or Flip vertical. | Position §4 |
-| ED-08 | Low | Gap (owner: build, see question) | No frame constraints. They only act when a frame is resized, and a Studio floor is never resized with its contents. | GUIDE-01, Position §3 |
-| ED-09 | Low | Bug | A Shape's name label runs past a small or round shape ("Round block" on a 1 m circle). | CIRC-01 |
-| ED-10 | Low | Needs check | The middle drag guide runs on to the far wall instead of stopping at the aligned piece. Check against Figma's guide length first. | GUIDE-01 |
-| ED-11 | Low | Gap | Align works only with several selected; Figma aligns one piece to its frame (here: the floor). | Position §1 |
+| ED-01 | Medium | Gap | No edge resize: a drag on a side moves the piece; only the four corners resize. **Fixed: sides resize (Shift scales about the middle).** | RECT-01 steps 3, 5 |
+| ED-02 | Medium | Bug | Just outside a corner still resizes: the resize hit area reaches 16 px past the corner and rotation starts at 12 px, so 10–16 px out resizes. **Fixed: the corner target reaches 8 px out, the turn area starts there.** | RECT-01 step 7 |
+| ED-03 | Medium | Gap | No handles while a piece is under 56 px on screen: at the default fit zoom a 1 m piece can only be moved. **Fixed: handles at any size; under 40 px they sit outside the piece; under 8 px move and turn only.** | RECT-01 step 2 |
+| ED-04 | Low | Gap | No size badge under a selected piece; the size shows only beside the pointer while resizing. **Fixed: a size badge under the selection, live while resizing.** | RECT-01 steps 2, 4 |
+| ED-05 | Medium | Gap (owner: build) | No corner radius for the rectangle Shape (dots inside the corners, Radius label, Properties field, 3D). **Fixed: `radius`, dots inside the corners, Properties, 3D.** | RECT-01 step 6 |
+| ED-06 | Medium | Gap (owner: build) | No arc for the round Shape: sweep, start angle and inner ratio (ring). **Fixed: `arcStart`, `arcSweep`, `arcInner`, three dots, Properties, 3D.** | CIRC-01 |
+| ED-07 | Low | Gap (owner: build) | No Flip horizontal or Flip vertical. **Fixed: `flipX`, `flipY`; Shift+H, Shift+V, Properties, menu, 3D.** | Position §4 |
+| ED-08 | Low | Gap (owner: build, see question) | No frame constraints. They only act when a frame is resized, and a Studio floor is never resized with its contents. **Won't build now: a floor is never resized with its contents, so constraints would do nothing (D280).** | GUIDE-01, Position §3 |
+| ED-09 | Low | Bug | A Shape's name label runs past a small or round shape ("Round block" on a 1 m circle). **Fixed: the name is sized to fit, or left out.** | CIRC-01 |
+| ED-10 | Low | Needs check | The middle drag guide runs on to the far wall instead of stopping at the aligned piece. Check against Figma's guide length first. **No change: the guide matched the wall's middle (the floor is 600 cm deep, the block's middle at 300).** | GUIDE-01 |
+| ED-11 | Low | Gap | Align works only with several selected; Figma aligns one piece to its frame (here: the floor). **Fixed: the align row aligns one piece to its floor.** | Position §1 |
 
 ## Workflow
 
