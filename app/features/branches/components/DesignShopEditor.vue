@@ -1723,13 +1723,20 @@ const pendingLabel = computed(() => {
           :disabled="group.every(member => member.kind === 'table')"
           @click="duplicateGroup()"
         />
-        <UButton
-          label="Zoom to selection"
-          icon="i-lucide-scan-search"
-          color="neutral"
-          variant="outline"
-          @click="canvas?.zoomToSelection()"
-        />
+        <!-- A short label: the grid's half width cut "Zoom to selection" off (ISS-010). -->
+        <UTooltip
+          text="Zoom to selection"
+          :kbds="['shift', '2']"
+        >
+          <UButton
+            label="Zoom"
+            icon="i-lucide-scan-search"
+            color="neutral"
+            variant="outline"
+            aria-label="Zoom to selection"
+            @click="canvas?.zoomToSelection()"
+          />
+        </UTooltip>
         <UButton
           label="Delete"
           icon="i-lucide-trash-2"

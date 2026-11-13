@@ -1114,11 +1114,12 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
 </script>
 
 <template>
+  <!-- No focus ring around the plan (ISS-009, owner): like Figma, the selection's frame shows where keys go. -->
   <svg
     ref="svg"
     :viewBox="viewBox"
     preserveAspectRatio="xMinYMin meet"
-    class="size-full touch-none select-none outline-none data-panning:**:cursor-[inherit] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+    class="size-full touch-none select-none outline-none data-panning:**:cursor-[inherit]"
     :class="panning ? 'cursor-grabbing' : spaceHeld || mode === 'hand' ? 'cursor-grab' : mode !== 'select' && 'cursor-crosshair'"
     :data-panning="spaceHeld || panning ? 'yes' : undefined"
     role="application"
