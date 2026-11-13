@@ -5,6 +5,7 @@ This folder records how Figma's editing tools behave and gives Claude Code steps
 | Check ID | Tool | Figma reference | Studio comparison |
 |---|---|---|---|
 | [RECT-01](checks/RECT-01.md) | Rectangle | [Final mockup](evidence/RECT-01/rectangle-tool-states.png) | Needs test |
+| [CIRC-01](checks/CIRC-01.md) | Circle | [Final mockup](evidence/CIRC-01/circle-tool-states.png) | Needs test |
 
 ## Workflow
 

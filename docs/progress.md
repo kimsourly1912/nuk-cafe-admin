@@ -3,6 +3,10 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Circle tool Figma reference (CIRC-01, 2026-11-13)
+
+[Circle QA check](qa/studio-editor-evidence/checks/CIRC-01.md) records the 35-second Figma baseline: hover/selection, separate resize and rotate hover targets, arc sweep, start angle, and inner ratio. One consolidated image is published under `evidence/CIRC-01/`. Studio comparison, persistence, and completed resize/rotation are pending; no app code changed.
+
 ### Studio vs Figma QA folder (2026-11-13)
 
 Documentation only. [docs/qa/studio-figma](qa/studio-figma/README.md) holds the standard test flow, an issue template and issue files ISS-001 to ISS-005 from manual testing of Figma and staging Studio (zoom and pan so far). Each issue lists steps, expected (Figma), actual (Studio), suspected cause, fix direction and how to verify. Images go in `evidence/ISS-xxx/`; none are added yet.
