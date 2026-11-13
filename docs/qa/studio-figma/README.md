@@ -67,6 +67,6 @@ Read the issue file, fix only what it describes, run its "How to verify", then u
 | [ISS-025](issues/ISS-025.md) | Low | Gap | No Ctrl+/ command search and no shortcut list |
 | [ISS-026](issues/ISS-026.md) | Low | Gap | No align and distribute buttons |
 | [ISS-027](issues/ISS-027.md) | Low | Gap | Manual Save layout, no autosave or version history |
-| [ISS-028](issues/ISS-028.md) | Medium | Bug | Zoom and position change when a panel hides or shows |
+| [ISS-028](issues/ISS-028.md) | High | Bug | The canvas breaks when a panel hides or shows |
 | [ISS-029](issues/ISS-029.md) | Medium | Gap | No live size label while drawing or resizing |
 | [ISS-030](issues/ISS-030.md) | Low | Improvement | Cursors do not match tools and handles well |
