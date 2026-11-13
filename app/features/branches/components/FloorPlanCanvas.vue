@@ -24,7 +24,7 @@ import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
-import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
@@ -199,6 +199,28 @@ const roomPreview = shallowRef<{ bounds: Bounds, cut: boolean } | null>(null)
 const liveWalls = shallowRef<InnerWall[] | null>(null)
 const walls = computed(() => liveWalls.value ?? floor.value.walls)
 /** Each inside wall as drawn: its solid spans, its doors (gaps with a swing) and windows. */
+/** An inside wall's thickness as built in 3D: glass is thin, the others a full wall's. */
+const innerThickness = (wall: InnerWall) => (innerWallKind(wall) === 'glass' ? GLASS_THICKNESS_CM : INNER_WALL_THICKNESS_CM)
+
+/** Inside walls joined end to end: where exactly two solid walls meet, the other one (ISS-034). */
+const pointKey = (point: Point) => `${point.x},${point.y}`
+const solidEnds = computed(() => {
+  const ends = new Map<string, InnerWall[]>()
+  for (const wall of walls.value) {
+    if (innerWallKind(wall) !== 'wall') continue
+    for (const point of [wall.from, wall.to]) ends.set(pointKey(point), [...(ends.get(pointKey(point)) ?? []), wall])
+  }
+  return ends
+})
+/** The other solid wall joined at `point`, turned to run into it (`into`) or out of it; none at a T. */
+function joinedAt(wall: InnerWall, point: Point, into: boolean) {
+  const others = (solidEnds.value.get(pointKey(point)) ?? []).filter(other => other.id !== wall.id)
+  if (others.length !== 1) return undefined
+  const other = others[0]!
+  const endsHere = pointKey(other.to) === pointKey(point)
+  return into === endsHere ? { from: other.from, to: other.to } : { from: other.to, to: other.from }
+}
+
 const innerWalls = computed(() => walls.value.map((wall) => {
   const length = innerWallLength(wall)
   const along = (offset: number) => ({ x: wall.from.x + (wall.to.x - wall.from.x) * offset / Math.max(length, 1), y: wall.from.y + (wall.to.y - wall.from.y) * offset / Math.max(length, 1) })
@@ -212,10 +234,19 @@ const innerWalls = computed(() => walls.value.map((wall) => {
     if (opening.kind === 'door') cursor = opening.offset + opening.width
   }
   if (cursor < length) spans.push({ from: along(cursor), to: wall.to })
+  const kind = innerWallKind(wall)
+  // A solid wall's pieces as bands, mitred where it meets another solid wall end to end (ISS-034).
+  const half = INNER_WALL_THICKNESS_CM / 2
+  const before = kind === 'wall' ? joinedAt(wall, wall.from, true) : undefined
+  const after = kind === 'wall' ? joinedAt(wall, wall.to, false) : undefined
+  const bands = kind === 'wall'
+    ? spans.map(span => wallStrip(span, -half, half, pointKey(span.from) === pointKey(wall.from) ? before : undefined, pointKey(span.to) === pointKey(wall.to) ? after : undefined))
+    : []
   return {
     ...wall,
-    kind: innerWallKind(wall),
+    kind,
     spans,
+    bands,
     windows: openings.filter(opening => opening.kind === 'window').map(opening => ({ id: opening.id, from: along(opening.offset), to: along(opening.offset + opening.width) })),
     doors: openings.filter(opening => opening.kind === 'door').map((opening) => {
       const hinge = along(opening.offset)
@@ -264,6 +295,9 @@ watch(() => [props.mode, props.floorId], () => {
   endWallChain()
 })
 
+/** The outline's walls as bands with clean corners (ISS-034); null for a railing or an open edge. */
+const wallBands = computed(() => (shape.value.outline.length >= 3 ? outlineWallBands(shape.value.outline, shape.value.edges.map(edge => edge.kind === 'wall')) : []))
+
 const edges = computed(() => shape.value.edges.map((edge, index) => {
   const outline = shape.value.outline
   const from = outline[index]!
@@ -276,6 +310,7 @@ const edges = computed(() => shape.value.edges.map((edge, index) => {
   return {
     index,
     kind: edge.kind,
+    band: wallBands.value[index] ?? null,
     from: at(from),
     to: at(to),
     length,
@@ -359,7 +394,9 @@ function isSelected(kind: PlanSelection['kind'], id: string): boolean {
 const pieceBoxes = computed((): { target: PlanSelection, bounds: Bounds, from?: Point, to?: Point }[] => [
   ...placed.value.map(table => ({ target: { kind: 'table' as const, id: table.tableId }, bounds: boundsOf(rectCorners(table, table.extent.width, table.extent.depth, table.rotation)) })),
   ...items.value.map(item => ({ target: { kind: 'item' as const, id: item.id }, bounds: boundsOf(rectCorners(item, item.width, item.depth, item.rotation)) })),
-  ...walls.value.map(wall => ({ target: { kind: 'wall' as const, id: wall.id }, bounds: boundsOf([wall.from, wall.to]), from: wall.from, to: wall.to })),
+  // A wall's box is its band, faces included, not its centre line (ISS-034): pieces line up with
+  // its faces and can sit flush against it.
+  ...walls.value.map(wall => ({ target: { kind: 'wall' as const, id: wall.id }, bounds: boundsOf(wallStrip(wall, -innerThickness(wall) / 2, innerThickness(wall) / 2)), from: wall.from, to: wall.to })),
 ])
 const boxOf = (target: PlanSelection) => pieceBoxes.value.find(box => box.target.kind === target.kind && box.target.id === target.id)?.bounds
 const union = (list: readonly Bounds[]): Bounds | null => (list.length ? boundsOf(list.flatMap(bounds => [{ x: bounds.minX, y: bounds.minY }, { x: bounds.maxX, y: bounds.maxY }])) : null)
@@ -375,7 +412,9 @@ function guided(moving: Bounds, exclude: (target: PlanSelection) => boolean, fin
     guides.value = []
     return { x: 0, y: 0 }
   }
-  const targets = [...pieceBoxes.value.filter(box => !exclude(box.target)).map(box => box.bounds), ...cornerBounds(shape.value.outline)]
+  // Pieces, the floor's corners (its walls' inner faces) and its wall bands (their outer faces too).
+  const bands = wallBands.value.filter((band): band is Point[] => !!band).map(band => boundsOf(band))
+  const targets = [...pieceBoxes.value.filter(box => !exclude(box.target)).map(box => box.bounds), ...cornerBounds(shape.value.outline), ...bands]
   const snapped = snapToGuides(moving, targets, 8 * perPixel.value)
   guides.value = snapped.guides
   return { x: snapped.dx, y: snapped.dy }
@@ -1358,8 +1397,14 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           stroke-width="30"
           stroke-linecap="round"
         />
+        <polygon
+          v-for="(band, index) in wall.bands"
+          :key="`band-${index}`"
+          :points="points(band)"
+          fill="var(--ui-text-toned)"
+        />
         <line
-          v-for="(span, index) in wall.spans"
+          v-for="(span, index) in (wall.kind === 'wall' ? [] : wall.spans)"
           :key="index"
           :x1="span.from.x"
           :y1="span.from.y"
@@ -1647,15 +1692,12 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         stroke-width="44"
         data-testid="plan-edge-selected"
       />
-      <line
-        v-if="edge.kind === 'wall'"
-        :x1="edge.from.x"
-        :y1="edge.from.y"
-        :x2="edge.to.x"
-        :y2="edge.to.y"
-        stroke="var(--ui-text-toned)"
-        :stroke-width="WALL_THICKNESS_CM"
-        stroke-linecap="square"
+      <!-- A wall band with mitred corners (ISS-034): square line caps left notches at corners. -->
+      <polygon
+        v-if="edge.kind === 'wall' && edge.band"
+        :points="points(edge.band)"
+        fill="var(--ui-text-toned)"
+        :data-testid="`plan-outline-band-${edge.index}`"
       />
       <template v-else-if="edge.kind === 'railing'">
         <line
