@@ -272,4 +272,30 @@ describe('shapes (D278)', () => {
     expect(issues({ kind: 'planter', name: 'Box' })).toEqual([])
     expect(issues({ kind: 'stairs', height: 40 })).toContain('Stairs, people and pets keep their own height')
   })
+
+  it('a rectangle takes a corner radius up to half its shorter side; a round one an arc; any piece flips (ED-05 to ED-07)', () => {
+    const issues = (item: Partial<LayoutItem>) => (v.safeParse(itemSchema, { id: 'i', kind: 'block', x: 0, y: 0, rotation: 0, width: 300, depth: 120, finishes: {}, ...item }).issues ?? []).map(issue => issue.message)
+    expect(issues({ radius: 60 })).toEqual([])
+    expect(issues({ radius: 61 })).toContain('The radius is more than half the shorter side')
+    expect(issues({ kind: 'block-round', width: 100, depth: 100, radius: 10 })).toContain('Only a rectangle shape has a corner radius')
+    expect(issues({ kind: 'block-round', width: 100, depth: 100, arcStart: 90, arcSweep: 180, arcInner: 50 })).toEqual([])
+    expect(issues({ arcSweep: 180 })).toContain('Only a round shape has an arc')
+    expect(issues({ kind: 'block-round', width: 100, depth: 100, arcSweep: 360 })).not.toEqual([])
+    expect(issues({ kind: 'block-round', width: 100, depth: 100, arcInner: 96 })).not.toEqual([])
+    expect(issues({ kind: 'stairs', flipX: true, flipY: true })).toEqual([])
+  })
+
+  it('3D draws the plan\'s outline: a rounded block, a half ring, a whole ring with its hole (ED-05, ED-06)', () => {
+    const footprint = (object: Object3D) => sizeOf(object)
+    const rounded = buildItem(context(), { kind: 'block', width: 200, depth: 100, height: 90, finishes: {}, shape: { radius: 50 } })
+    expect(Math.round(footprint(rounded).x * 100)).toBe(200)
+    expect(Math.round(new Box3().setFromObject(rounded).max.y * 100)).toBe(90)
+    // A half circle opening downwards on the plan (0° to 180° clockwise from the right): +z only.
+    const half = buildItem(context(), { kind: 'block-round', width: 200, depth: 200, height: 90, finishes: {}, shape: { arcSweep: 180 } })
+    const box = new Box3().setFromObject(half)
+    expect(Math.round(box.min.z * 100)).toBe(0)
+    expect(Math.round(box.max.z * 100)).toBe(100)
+    const ring = buildItem(context(), { kind: 'block-round', width: 200, depth: 200, height: 90, finishes: {}, shape: { arcInner: 50 } })
+    expect(Math.round(footprint(ring).x * 100)).toBe(200)
+  })
 })

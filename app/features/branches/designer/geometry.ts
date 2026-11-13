@@ -160,7 +160,10 @@ export interface Sized extends Pose {
 }
 
 export interface ResizeOptions {
-  /** Which corner is dragged, in `rectCorners` order (0 top-left before turning, then clockwise). */
+  /**
+   * Which handle is dragged: 0–3 a corner, in `rectCorners` order (0 top-left before turning, then
+   * clockwise); 4–7 a side (ED-01, like Figma): top, right, bottom, left. A side changes one size.
+   */
   corner: number
   /** How far the pointer moved, in plan centimetres. */
   delta: Point
@@ -174,15 +177,18 @@ export interface ResizeOptions {
   fromCenter?: boolean
 }
 
+/** Each handle's direction outwards from the centre, unturned: the four corners, then the four sides. */
+const HANDLE_SIGNS: readonly (readonly [number, number])[] = [[-1, -1], [1, -1], [1, 1], [-1, 1], [0, -1], [1, 0], [0, 1], [-1, 0]]
+
 /**
- * A corner handle dragged on the plan (D273, frame 2B): the opposite corner stays where it is, so
- * the centre moves by half the change. Sizes are whole centimetres within the limits; the
+ * A corner or side handle dragged on the plan (D273, frame 2B; sides ED-01): the opposite corner
+ * or side stays where it is, so the centre moves by half the change. With Shift a side scales the
+ * other size too, about the middle, like Figma. Sizes are whole centimetres within the limits; the
  * centre is rounded to whole centimetres, as the layout stores it.
  */
 export function resizeFromCorner(start: Sized, options: ResizeOptions): Sized {
   const { corner, delta, min, max, keepRatio, fromCenter } = options
-  const sx = corner === 1 || corner === 2 ? 1 : -1
-  const sy = corner >= 2 ? 1 : -1
+  const [sx, sy] = HANDLE_SIGNS[corner] ?? HANDLE_SIGNS[0]!
   // The pointer's move in the piece's own (unturned) directions, outwards from the centre; from
   // the centre, the far side moves as much, so the size changes twice as much.
   const local = rotatePoint(delta, -start.rotation)
@@ -191,14 +197,15 @@ export function resizeFromCorner(start: Sized, options: ResizeOptions): Sized {
   const fit = (value: number) => Math.min(max, Math.max(min, snap(value, SNAP_CM)))
   let width = fit(start.width + along.x)
   let depth = fit(start.depth + along.y)
-  if (options.round) width = depth = fit(start.width + (Math.abs(along.x) >= Math.abs(along.y) ? along.x : along.y))
+  if (options.round) width = depth = fit(start.width + (sy === 0 || (sx !== 0 && Math.abs(along.x) >= Math.abs(along.y)) ? along.x : along.y))
   else if (keepRatio) {
     // The axis the pointer moved most along leads; the other follows at the same scale, within the limits.
     const kx = (start.width + along.x) / start.width
     const ky = (start.depth + along.y) / start.depth
     const lowest = Math.max(min / start.width, min / start.depth)
     const highest = Math.min(max / start.width, max / start.depth)
-    const k = Math.min(highest, Math.max(lowest, Math.abs(kx - 1) >= Math.abs(ky - 1) ? kx : ky))
+    const leadX = sy === 0 || (sx !== 0 && Math.abs(kx - 1) >= Math.abs(ky - 1))
+    const k = Math.min(highest, Math.max(lowest, leadX ? kx : ky))
     width = fit(start.width * k)
     depth = fit(start.depth * k)
   }
@@ -474,12 +481,13 @@ export function outlineWallBands(outline: readonly Point[], isWall: readonly boo
 }
 
 /**
- * The resize cursor for a corner handle (ISS-030, like Figma's): the double arrow along the corner's
- * direction once the piece is turned. Corners in `rectCorners` order (0 top-left before turning).
+ * The resize cursor for a handle (ISS-030, like Figma's): the double arrow along the handle's
+ * direction once the piece is turned. Handles as in `resizeFromCorner` (0–3 corners, 4–7 sides).
  */
 export function resizeCursor(corner: number, rotation: number): 'ew-resize' | 'nwse-resize' | 'ns-resize' | 'nesw-resize' {
-  // A corner's direction from the centre, unturned: 225°, 315°, 45°, 135° (screen, y down).
-  const base = [225, 315, 45, 135][corner % 4]!
+  // A handle's direction from the centre, unturned (screen, y down): corners 225°, 315°, 45°,
+  // 135°; sides 270° (top), 0°, 90°, 180°.
+  const base = [225, 315, 45, 135, 270, 0, 90, 180][corner % 8]!
   const angle = (((base + rotation) % 180) + 180) % 180
   const step = Math.round(angle / 45) % 4
   return (['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'] as const)[step]!

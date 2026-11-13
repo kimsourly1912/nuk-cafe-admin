@@ -1,10 +1,12 @@
-import { BoxGeometry, CylinderGeometry, Group, IcosahedronGeometry, LatheGeometry, Mesh, Quaternion, TorusGeometry, Vector2, Vector3 } from 'three'
+import { BoxGeometry, CylinderGeometry, ExtrudeGeometry, Group, IcosahedronGeometry, LatheGeometry, Mesh, Path, Quaternion, Shape, TorusGeometry, Vector2, Vector3 } from 'three'
 import type { BufferGeometry, Material, Object3D } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Finish, ItemKind, TableLook } from '#shared/contracts/shop-layout'
 import { ITEM_SPECS, itemFinish, lookFinish } from '../catalog'
 import { BOOTH_BENCH_DEPTH_CM, chairPoses } from '../geometry'
+import { shapeOutline } from '../shapes'
+import type { ShapeFields } from '../shapes'
 import type { MaterialLibrary } from './materials'
 import { cm, yRotation } from './units'
 
@@ -113,6 +115,25 @@ export interface ItemBuild {
   height?: number
   /** The floor's height, for stairs. */
   floorHeight?: number
+  /** A shape's corner radius (ED-05) and a round shape's arc (ED-06). */
+  shape?: Omit<ShapeFields, 'kind' | 'width' | 'depth'>
+}
+
+/**
+ * A shape the plan draws as an outline (ED-05 rounded corners, ED-06 a sector or ring), stood up
+ * to `height`: the same points as the plan's, so 2D and 3D agree. Plan y becomes 3D z.
+ */
+function prism(context: BuildContext, outline: NonNullable<ReturnType<typeof shapeOutline>>, height: number): BufferGeometry {
+  const key = `prism:${height}:${outline.outer.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(';')}:${outline.hole?.length ?? 0}`
+  return cached(context, key, () => {
+    // Rotated -90° about x below, so the shape's y is flipped here to land on the plan's +z.
+    const toShape = (list: { x: number, y: number }[]) => list.map(point => new Vector2(cm(point.x), -cm(point.y)))
+    const shape = new Shape(toShape(outline.outer))
+    if (outline.hole) shape.holes.push(new Path(toShape(outline.hole)))
+    const geometry = new ExtrudeGeometry(shape, { depth: cm(height), bevelEnabled: false, curveSegments: 1 })
+    geometry.rotateX(-Math.PI / 2)
+    return geometry
+  })
 }
 
 export function buildItem(context: BuildContext, item: ItemBuild): Group {
@@ -185,9 +206,16 @@ export function buildItem(context: BuildContext, item: ItemBuild): Group {
       break
     // Shapes (D278): a solid block or round block of one finish, slightly rounded at its edges.
     case 'block':
-      group.add(part(box(context, item.width, height, item.depth, 1.5), finish('body'), { x: 0, y: height / 2, z: 0 }))
-      break
     case 'block-round': {
+      const outline = shapeOutline({ kind: item.kind, width: item.width, depth: item.depth, ...item.shape })
+      if (outline) {
+        group.add(part(prism(context, outline, height), finish('body'), { x: 0, y: 0, z: 0 }))
+        break
+      }
+      if (item.kind === 'block') {
+        group.add(part(box(context, item.width, height, item.depth, 1.5), finish('body'), { x: 0, y: height / 2, z: 0 }))
+        break
+      }
       // A circle or an ellipse (ISS-017): the cylinder stretched to the depth.
       const body = part(cylinder(context, item.width / 2, item.width / 2, height, 40), finish('body'), { x: 0, y: height / 2, z: 0 })
       body.scale.z = item.depth / item.width

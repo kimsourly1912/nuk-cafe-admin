@@ -21,10 +21,13 @@
  * gesture ends: then one event is emitted, one undo step.
  */
 import { useElementBounding, useEventListener } from '@vueuse/core'
-import type { Floor, InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import type { Floor, InnerWall, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, floorPageId, innerWallKind, layoutPages, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
-import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeCursor, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
+import { handleLayout, SMALL_PIECE_PX } from '../designer/handles'
+import { arcFromDrag, arcHandles, arcOf, radiusDot, radiusFromDrag, shapeLabelSize, shapeOutline, shapePath } from '../designer/shapes'
+import type { ArcHandle, ShapeEdit } from '../designer/shapes'
+import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeCursor, resizeFromCorner, rotatePoint, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, majorGridOpacity, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
@@ -68,6 +71,8 @@ const emit = defineEmits<{
   /** Alt+drag (D278): a copy of the piece goes there, the piece stays. */
   copy: [selection: PlanSelection, position: Point]
   rotate: [selection: PlanSelection, rotation: number]
+  /** A shape's radius or arc dot was dragged (ED-05, ED-06): what it stores now. */
+  shapeEdit: [selection: PlanSelection, change: ShapeEdit]
   /** A corner handle was dragged: the new size, and the centre that keeps the opposite corner. */
   resize: [selection: PlanSelection, size: Omit<Sized, 'rotation'>]
   remove: [selection: PlanSelection]
@@ -250,7 +255,7 @@ const frameLabel = computed(() => {
 const liveLabel = shallowRef<{ at: Point, text: string } | null>(null)
 
 /** A gesture's live result, drawn instead of the stored position until the gesture ends. */
-const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number, copy?: boolean } | null>(null)
+const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number, copy?: boolean, shape?: ShapeEdit } | null>(null)
 /** Alt+drag (ISS-014): the piece drawn again where the copy will land, moved by the drag. */
 const copyPreview = computed(() => {
   const live = preview.value
@@ -429,7 +434,7 @@ function posed<T extends Sized>(selection: PlanSelection, object: T): T {
   const live = preview.value
   // Alt+drag (ISS-014): the original stays where it is; the copy is drawn at the pointer instead.
   if (!live || live.copy || live.selection.kind !== selection.kind || live.selection.id !== selection.id) return object
-  return { ...object, x: live.x, y: live.y, rotation: live.rotation, width: live.width ?? object.width, depth: live.depth ?? object.depth }
+  return { ...object, ...live.shape, x: live.x, y: live.y, rotation: live.rotation, width: live.width ?? object.width, depth: live.depth ?? object.depth }
 }
 
 // Hidden in Layers (ISS-021): not drawn, picked or snapped to on the plan.
@@ -601,12 +606,50 @@ function toScreen(point: Point): Point {
   return planToScreen(camera.value, point)
 }
 
-/**
- * The four corner handles of a selection frame, in its own (unturned) directions. None while the
- * frame is small on screen: the handles would cover the piece, and a drag would resize it instead
- * of moving it.
- */
-const handleCorners = (width: number, depth: number) => (Math.min(width, depth) / perPixel.value >= 56 ? rectCorners({ x: 0, y: 0 }, width, depth, 0) : [])
+/** A shape's name and the font size that fits it inside (ED-09), or null. */
+function shapeLabel(item: LayoutItem) {
+  const text = item.name ?? ITEM_SPECS[item.kind].label
+  const size = shapeLabelSize(text, item.width, item.depth, item.kind === 'block-round')
+  return size === null ? null : { text, size }
+}
+
+/** A selected piece's handles at the current zoom (ED-01 to ED-03). */
+const handlesFor = (width: number, depth: number, resizable = true) => handleLayout(width, depth, perPixel.value, resizable)
+
+/** A plan point in a piece's own coordinates: unturned, and unflipped (ED-07), as its drawing is. */
+function toLocal(item: LayoutItem, plan: Point): Point {
+  const local = rotatePoint({ x: plan.x - item.x, y: plan.y - item.y }, -item.rotation)
+  return { x: item.flipX ? -local.x : local.x, y: item.flipY ? -local.y : local.y }
+}
+/** A flipped piece's mirror (ED-07), after its turn; '' when it is not flipped. */
+const flipOf = (item: LayoutItem) => (item.flipX || item.flipY ? ` scale(${item.flipX ? -1 : 1} ${item.flipY ? -1 : 1})` : '')
+/** A point of the drawing (flipped frame) where it shows inside the piece's turned frame. */
+const unflip = (item: LayoutItem, point: Point) => ({ x: item.flipX ? -point.x : point.x, y: item.flipY ? -point.y : point.y })
+
+/** The selected shape's own dots (ED-05, ED-06), while it is big enough on screen to grab them. */
+const shapeDots = computed(() => {
+  const selection = props.selection
+  if (props.mode !== 'select' || !selection || multi.value || selection.kind !== 'item') return null
+  const item = items.value.find(candidate => candidate.id === selection.id)
+  if (!item || !isShapeKind(item.kind) || isLocked('item', item.id) || Math.min(item.width, item.depth) / perPixel.value < SMALL_PIECE_PX) return null
+  // Hidden while the piece is resized, like Figma's.
+  if (preview.value?.width !== undefined) return null
+  if (item.kind === 'block') {
+    return { item, dots: [0, 1, 2, 3].map(corner => ({ handle: 'radius' as const, key: `radius-${corner}`, ...radiusDot(corner, item.width, item.depth, item.radius ?? 0, 12 * perPixel.value) })) }
+  }
+  const at = arcHandles(item)
+  const dots = (['sweep', 'start', 'ratio'] as const).flatMap(handle => (at[handle] ? [{ handle, key: `arc-${handle}`, ...unflip(item, at[handle]!) }] : []))
+  return { item, dots }
+})
+
+/** The tooltip while a shape's dot is dragged, like Figma's (Radius, Sweep, Start, Ratio). */
+function shapeEditText(handle: 'radius' | ArcHandle, shape: LayoutItem): string {
+  if (handle === 'radius') return `Radius ${shape.radius ?? 0} cm`
+  const arc = arcOf(shape)
+  if (handle === 'sweep') return `Sweep ${arc.sweep}°`
+  if (handle === 'start') return `Start ${arc.start}°`
+  return `Ratio ${Math.round(arc.inner * 100)} %`
+}
 
 /**
  * Figma's rotate cursor (ISS-030): a curved arrow, dark with a light edge so it shows on any
@@ -616,23 +659,6 @@ const ROTATE_CURSOR = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns=
 
 /** A Shape tool click's shape, each way (ISS-016, Figma's 100 × 100). */
 const SHAPE_CLICK_CM = 100
-
-/** Rotate zones' size and how far they sit out from the corner, in screen pixels (ISS-033): past the resize handle's 16 px reach. */
-const ROTATE_ZONE_PX = 20
-const ROTATE_ZONE_OFFSET_PX = 12
-/**
- * The square just outside each corner of a frame, in its own (unturned) directions, where a drag
- * turns the piece (Figma's rotate area). Behind the resize handles, so a corner still resizes.
- */
-function rotateZones(width: number, depth: number) {
-  const size = ROTATE_ZONE_PX * perPixel.value
-  const gap = ROTATE_ZONE_OFFSET_PX * perPixel.value
-  return rectCorners({ x: 0, y: 0 }, width, depth, 0).map(corner => ({
-    x: corner.x > 0 ? corner.x + gap : corner.x - gap - size,
-    y: corner.y > 0 ? corner.y + gap : corner.y - gap - size,
-    size,
-  }))
-}
 
 /** Screen → plan centimetres; null when the pointer is outside the plan. */
 function toPlan(clientX: number, clientY: number, inside = false): Point | null {
@@ -666,6 +692,7 @@ type Gesture
   = | { type: 'drag', selection: PlanSelection, startPlan: Point, origin: { x: number, y: number, rotation: number }, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'rotate', selection: PlanSelection, center: Point, start: Point, origin: number, rotation: number }
     | { type: 'resize', selection: PlanSelection, corner: number, startPlan: Point, origin: Sized, round: boolean, min: number, max: number }
+    | { type: 'shape-edit', selection: PlanSelection, handle: 'radius' | ArcHandle, origin: LayoutItem, change: ShapeEdit }
     | { type: 'corner', index: number, startPlan: Point, origin: Point, startClient: Point, moved: boolean }
     | { type: 'wall-end', id: string, end: 'from' | 'to', startClient: Point, moved: boolean }
     | { type: 'wall', id: string, startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
@@ -875,6 +902,13 @@ function onPointerDown(event: PointerEvent) {
     gesture = { type: 'rotate', selection, center: { x: origin.x, y: origin.y }, start: plan, origin: origin.rotation, rotation: origin.rotation }
     return
   }
+  if (target.dataset.handle === 'radius' || target.dataset.handle === 'arc') {
+    const item = floor.value.items.find(candidate => candidate.id === selection.id)
+    if (!item) return
+    const handle = target.dataset.handle === 'radius' ? 'radius' : target.dataset.arc as ArcHandle
+    gesture = { type: 'shape-edit', selection, handle, origin: item, change: {} }
+    return
+  }
   if (target.dataset.handle === 'resize') {
     gesture = { type: 'resize', selection, corner: Number(target.dataset.corner), startPlan: plan, origin: { ...origin }, ...sizeRules(selection) }
     return
@@ -955,11 +989,20 @@ function followPointer(event: PointerMove) {
     liveLabel.value = { at: plan, text: `${rotation}°` }
     return
   }
+  if (gesture.type === 'shape-edit') {
+    const { origin } = gesture
+    const local = toLocal(origin, plan)
+    const current = { ...origin, ...gesture.change }
+    gesture.change = gesture.handle === 'radius' ? { radius: radiusFromDrag(local, origin.width, origin.depth) || undefined } : arcFromDrag(gesture.handle, local, current)
+    preview.value = { selection: gesture.selection, x: origin.x, y: origin.y, rotation: origin.rotation, shape: gesture.change }
+    liveLabel.value = { at: plan, text: shapeEditText(gesture.handle, { ...origin, ...gesture.change }) }
+    return
+  }
   if (gesture.type === 'resize') {
     const delta = { x: plan.x - gesture.startPlan.x, y: plan.y - gesture.startPlan.y }
     const resized = resizeFromCorner(gesture.origin, { corner: gesture.corner, delta, round: gesture.round, min: gesture.min, max: gesture.max, keepRatio: event.shiftKey, fromCenter: event.altKey })
+    // The size shows live in the badge under the piece (ED-04).
     preview.value = { selection: gesture.selection, ...resized }
-    liveLabel.value = { at: plan, text: `${resized.width} × ${resized.depth} cm` }
     return
   }
   if (!gesture.moved && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
@@ -1121,6 +1164,10 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     else emit('move', finished.selection, { x: live.x, y: live.y })
   }
   if (finished.type === 'rotate' && live) emit('rotate', finished.selection, live.rotation)
+  if (finished.type === 'shape-edit' && live?.shape) {
+    const { origin, change } = finished
+    if ((Object.keys(change) as (keyof ShapeEdit)[]).some(key => change[key] !== origin[key])) emit('shapeEdit', finished.selection, change)
+  }
   if (finished.type === 'resize' && live?.width !== undefined && live.depth !== undefined && (live.width !== finished.origin.width || live.depth !== finished.origin.depth)) {
     emit('resize', finished.selection, { x: live.x, y: live.y, width: live.width, depth: live.depth })
   }
@@ -1142,7 +1189,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
 }
 
 /** Gestures that change something when released; Escape before the release drops them. */
-const CANCELLABLE: ReadonlySet<string> = new Set(['frame', 'join', 'drag', 'group', 'wall', 'wall-end', 'side', 'corner', 'resize', 'rotate', 'room', 'marquee'])
+const CANCELLABLE: ReadonlySet<string> = new Set(['frame', 'join', 'drag', 'group', 'wall', 'wall-end', 'side', 'corner', 'resize', 'rotate', 'shape-edit', 'room', 'marquee'])
 
 /**
  * Escape while dragging (ISS-012, like Figma): the piece goes back, nothing is emitted and no undo
@@ -1392,6 +1439,22 @@ const metres = (cm: number) => `${Math.round(cm)} cm`
 /** A drawn rectangle's size, as the live label shows it (ISS-029). */
 const sizeText = (bounds: Bounds) => `${bounds.maxX - bounds.minX} × ${bounds.maxY - bounds.minY} cm`
 const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.value, height: 22 * perPixel.value, font: 12 * perPixel.value })
+
+/**
+ * The selection's size under it, like Figma's badge (ED-04): one piece's own width × depth, or the
+ * whole set's bounds; live while it is resized. None for walls and edges (their length shows).
+ */
+const sizeBadge = computed(() => {
+  if (props.mode !== 'select') return null
+  const frame = selectionFrames.value
+  const points = selectionPoints.value
+  if (!points || (!frame && !multi.value)) return null
+  const bounds = boundsOf(points)
+  // A table's own size, as Properties shows it, not its chairs' reach.
+  const text = frame ? `${Math.round(frame.pose.width)} × ${Math.round(frame.pose.depth)} cm` : `${Math.round(bounds.maxX - bounds.minX)} × ${Math.round(bounds.maxY - bounds.minY)} cm`
+  const chip = chipSize(text)
+  return { text, x: (bounds.minX + bounds.maxX) / 2 - chip.width / 2, y: bounds.maxY + 8 * perPixel.value, width: chip.width, height: chip.height, font: chip.font }
+})
 </script>
 
 <template>
@@ -1687,7 +1750,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :id="pieceId({ kind: 'item', id: item.id })"
           :key="item.id"
           :pointer-events="isLocked('item', item.id) ? 'none' : undefined"
-          :transform="transform(item)"
+          :transform="transform(item) + flipOf(item)"
           data-kind="item"
           :data-id="item.id"
           :data-testid="`plan-item-${item.kind}`"
@@ -1780,8 +1843,18 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           </g>
           <!-- A shape (D278): its finish's colour and its name. -->
           <g v-else-if="isShapeKind(item.kind)">
+            <!-- Rounded corners (ED-05), or a round shape's sector or ring (ED-06). -->
+            <path
+              v-if="shapeOutline(item)"
+              :d="shapePath(shapeOutline(item)!)"
+              fill-rule="evenodd"
+              :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+              stroke="var(--ui-text-muted)"
+              stroke-width="3"
+              stroke-linejoin="round"
+            />
             <ellipse
-              v-if="item.kind === 'block-round'"
+              v-else-if="item.kind === 'block-round'"
               :rx="item.width / 2"
               :ry="item.depth / 2"
               :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
@@ -1799,13 +1872,15 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
               stroke="var(--ui-text-muted)"
               stroke-width="3"
             />
+            <!-- The name, sized to fit inside (ED-09); left out when it can't. -->
             <text
+              v-if="shapeLabel(item)"
               text-anchor="middle"
               dominant-baseline="central"
-              :font-size="Math.min(22, Math.max(10, Math.min(item.width, item.depth) / 4))"
+              :font-size="shapeLabel(item)!.size"
               fill="var(--ui-text-highlighted)"
-              :transform="`rotate(${-item.rotation})`"
-            >{{ item.name ?? ITEM_SPECS[item.kind].label }}</text>
+              :transform="`${flipOf(item)} rotate(${-item.rotation})`"
+            >{{ shapeLabel(item)!.text }}</text>
           </g>
           <circle
             v-else-if="ITEM_SPECS[item.kind].footprint === 'round'"
@@ -2283,9 +2358,9 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
               vector-effect="non-scaling-stroke"
               pointer-events="none"
             />
-            <!-- Just outside each corner: drag to turn (ISS-033, Figma has no turn handle). -->
+            <!-- Just outside each corner: drag to turn (ISS-033, ED-02; Figma has no turn handle). -->
             <rect
-              v-for="(zone, place) in rotateZones(table.extent.width, table.extent.depth)"
+              v-for="(zone, place) in handlesFor(table.extent.width, table.extent.depth).rotate"
               :key="`rotate-${place}`"
               :x="zone.x"
               :y="zone.y"
@@ -2298,35 +2373,35 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
               :data-testid="`rotate-zone-${place}`"
               :style="{ cursor: ROTATE_CURSOR }"
             />
-            <g
-              v-for="(point, handle) in handleCorners(table.extent.width, table.extent.depth)"
-              :key="handle"
-            >
-              <rect
-                :x="point.x - 6 * perPixel"
-                :y="point.y - 6 * perPixel"
-                :width="12 * perPixel"
-                :height="12 * perPixel"
-                fill="var(--ui-bg)"
-                stroke="var(--ui-primary)"
-                stroke-width="2"
-                vector-effect="non-scaling-stroke"
-                pointer-events="none"
-              />
-              <rect
-                :x="point.x - 16 * perPixel"
-                :y="point.y - 16 * perPixel"
-                :width="32 * perPixel"
-                :height="32 * perPixel"
-                fill="transparent"
-                data-kind="table"
-                :data-id="table.tableId"
-                data-handle="resize"
-                :data-corner="handle"
-                :data-testid="`resize-handle-${handle}`"
-                :style="{ cursor: resizeCursor(handle, table.rotation) }"
-              />
-            </g>
+            <!-- Corners and sides resize (ED-01); their targets stay a fixed size on screen (ED-03). -->
+            <rect
+              v-for="target in handlesFor(table.extent.width, table.extent.depth).resize"
+              :key="`resize-${target.handle}`"
+              :x="target.x"
+              :y="target.y"
+              :width="target.width"
+              :height="target.height"
+              fill="transparent"
+              data-kind="table"
+              :data-id="table.tableId"
+              data-handle="resize"
+              :data-corner="target.handle"
+              :data-testid="`resize-handle-${target.handle}`"
+              :style="{ cursor: resizeCursor(target.handle, table.rotation) }"
+            />
+            <rect
+              v-for="(point, index) in handlesFor(table.extent.width, table.extent.depth).marks"
+              :key="`mark-${index}`"
+              :x="point.x - handlesFor(table.extent.width, table.extent.depth).markSize / 2"
+              :y="point.y - handlesFor(table.extent.width, table.extent.depth).markSize / 2"
+              :width="handlesFor(table.extent.width, table.extent.depth).markSize"
+              :height="handlesFor(table.extent.width, table.extent.depth).markSize"
+              fill="var(--ui-bg)"
+              stroke="var(--ui-primary)"
+              stroke-width="1.5"
+              vector-effect="non-scaling-stroke"
+              pointer-events="none"
+            />
           </g>
         </template>
         <template
@@ -2348,8 +2423,9 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
               vector-effect="non-scaling-stroke"
               pointer-events="none"
             />
+            <!-- Just outside each corner: drag to turn (ISS-033, ED-02; Figma has no turn handle). -->
             <rect
-              v-for="(zone, place) in rotateZones(item.width, item.depth)"
+              v-for="(zone, place) in handlesFor(item.width, item.depth, !isFigureKind(item.kind)).rotate"
               :key="`rotate-${place}`"
               :x="zone.x"
               :y="zone.y"
@@ -2362,34 +2438,55 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
               :data-testid="`rotate-zone-${place}`"
               :style="{ cursor: ROTATE_CURSOR }"
             />
-            <g
-              v-for="(point, handle) in (isFigureKind(item.kind) ? [] : handleCorners(item.width, item.depth))"
-              :key="handle"
-            >
-              <rect
-                :x="point.x - 6 * perPixel"
-                :y="point.y - 6 * perPixel"
-                :width="12 * perPixel"
-                :height="12 * perPixel"
+            <!-- Corners and sides resize (ED-01); their targets stay a fixed size on screen (ED-03). -->
+            <rect
+              v-for="target in handlesFor(item.width, item.depth, !isFigureKind(item.kind)).resize"
+              :key="`resize-${target.handle}`"
+              :x="target.x"
+              :y="target.y"
+              :width="target.width"
+              :height="target.height"
+              fill="transparent"
+              data-kind="item"
+              :data-id="item.id"
+              data-handle="resize"
+              :data-corner="target.handle"
+              :data-testid="`resize-handle-${target.handle}`"
+              :style="{ cursor: resizeCursor(target.handle, item.rotation) }"
+            />
+            <rect
+              v-for="(point, index) in handlesFor(item.width, item.depth, !isFigureKind(item.kind)).marks"
+              :key="`mark-${index}`"
+              :x="point.x - handlesFor(item.width, item.depth, !isFigureKind(item.kind)).markSize / 2"
+              :y="point.y - handlesFor(item.width, item.depth, !isFigureKind(item.kind)).markSize / 2"
+              :width="handlesFor(item.width, item.depth, !isFigureKind(item.kind)).markSize"
+              :height="handlesFor(item.width, item.depth, !isFigureKind(item.kind)).markSize"
+              fill="var(--ui-bg)"
+              stroke="var(--ui-primary)"
+              stroke-width="1.5"
+              vector-effect="non-scaling-stroke"
+              pointer-events="none"
+            />
+            <!-- A shape's own dots (ED-05 radius, ED-06 arc), like Figma's, inside the frame. -->
+            <template v-if="shapeDots?.item.id === item.id">
+              <circle
+                v-for="dot in shapeDots.dots"
+                :key="dot.key"
+                :cx="dot.x"
+                :cy="dot.y"
+                :r="6 * perPixel"
                 fill="var(--ui-bg)"
                 stroke="var(--ui-primary)"
-                stroke-width="2"
+                stroke-width="1.5"
                 vector-effect="non-scaling-stroke"
-                pointer-events="none"
-              />
-              <rect
-                :x="point.x - 16 * perPixel"
-                :y="point.y - 16 * perPixel"
-                :width="32 * perPixel"
-                :height="32 * perPixel"
-                fill="transparent"
                 data-kind="item"
                 :data-id="item.id"
-                data-handle="resize"
-                :data-corner="handle"
-                :style="{ cursor: resizeCursor(handle, item.rotation) }"
+                :data-handle="dot.handle === 'radius' ? 'radius' : 'arc'"
+                :data-arc="dot.handle === 'radius' ? undefined : dot.handle"
+                :data-testid="`shape-dot-${dot.key}`"
+                class="cursor-pointer"
               />
-            </g>
+            </template>
           </g>
         </template>
       </template>
@@ -2640,7 +2737,31 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
       data-testid="copy-preview"
     />
 
-    <!-- The live angle or size beside the pointer (ISS-029, ISS-033), on top of everything. -->
+    <!-- The selection's size under it (ED-04), live while resizing. -->
+    <g
+      v-if="sizeBadge"
+      pointer-events="none"
+      data-testid="size-badge"
+    >
+      <rect
+        :x="sizeBadge.x"
+        :y="sizeBadge.y"
+        :width="sizeBadge.width"
+        :height="sizeBadge.height"
+        :rx="4 * perPixel"
+        fill="var(--ui-primary)"
+      />
+      <text
+        :x="sizeBadge.x + sizeBadge.width / 2"
+        :y="sizeBadge.y + sizeBadge.height / 2"
+        text-anchor="middle"
+        dominant-baseline="central"
+        :font-size="sizeBadge.font"
+        fill="var(--ui-bg)"
+        class="tabular-nums"
+      >{{ sizeBadge.text }}</text>
+    </g>
+    <!-- The live angle beside the pointer (ISS-033), on top of everything. -->
     <g
       v-if="liveLabel"
       pointer-events="none"

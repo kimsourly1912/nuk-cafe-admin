@@ -162,11 +162,12 @@ export type AlignEdge = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom
 
 /**
  * Align (ISS-026, Figma): how far each selected thing moves so its `edge` lines up with the same
- * edge of the whole selection. `boxes` are what each one takes up on the plan, as drawn.
+ * edge of the whole selection, or of `within` when given (ED-11: one piece to its floor, as Figma
+ * aligns one layer to its frame). `boxes` are what each one takes up on the plan, as drawn.
  */
-export function alignOffsets(boxes: readonly { target: PlanSelection, bounds: Bounds }[], edge: AlignEdge): { target: PlanSelection, delta: Point }[] {
-  if (boxes.length < 2) return []
-  const all = {
+export function alignOffsets(boxes: readonly { target: PlanSelection, bounds: Bounds }[], edge: AlignEdge, within?: Bounds): { target: PlanSelection, delta: Point }[] {
+  if (!boxes.length || (boxes.length < 2 && !within)) return []
+  const all = within ?? {
     minX: Math.min(...boxes.map(box => box.bounds.minX)),
     maxX: Math.max(...boxes.map(box => box.bounds.maxX)),
     minY: Math.min(...boxes.map(box => box.bounds.minY)),
