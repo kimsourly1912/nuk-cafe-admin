@@ -138,7 +138,7 @@ export function useLayoutEditor(branchId: string) {
   function start(layout: BranchLayout) {
     applied = layout
     version.value = layout.version
-    draft.reset({ floors: cloneFormValue(layout.floors), placements: cloneFormValue(layout.placements), scene: cloneFormValue(layout.scene) })
+    draft.reset({ floors: cloneFormValue(layout.floors), placements: cloneFormValue(layout.placements), scene: cloneFormValue(layout.scene), ...(layout.pages && { pages: cloneFormValue(layout.pages) }) })
     unsaved.markClean(draft.layout.value)
     conflict.value = null
     problem.value = null
@@ -150,8 +150,8 @@ export function useLayoutEditor(branchId: string) {
     if (!layout || layout === applied || unsaved.isDirty.value) return
     // The same drawing and scene again (a refetch after a table or a look changed): the selection
     // and the undo history stay. Only its tables are news, and those are read from the query.
-    const { floors, placements, scene } = draft.layout.value
-    if (applied && isSameFormValue(layout.floors, floors) && isSameFormValue(layout.placements, placements) && isSameFormValue(layout.scene, scene)) {
+    const { floors, placements, scene, pages } = draft.layout.value
+    if (applied && isSameFormValue(layout.floors, floors) && isSameFormValue(layout.placements, placements) && isSameFormValue(layout.scene, scene) && isSameFormValue(layout.pages ?? null, pages ?? null)) {
       applied = layout
       version.value = layout.version
       return
@@ -234,6 +234,7 @@ export function useLayoutEditor(branchId: string) {
       layout.floors = cloneFormValue(latest.floors)
       layout.placements = cloneFormValue(latest.placements)
       layout.scene = cloneFormValue(latest.scene)
+      layout.pages = latest.pages && cloneFormValue(latest.pages)
     })
     unsaved.markClean(draft.layout.value)
     conflict.value = null

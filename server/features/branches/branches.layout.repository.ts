@@ -1,11 +1,11 @@
-import { and, asc, eq, exists, inArray, sql } from 'drizzle-orm'
-import type { BuiltInLookId, FloorGeometry, ItemLook, ItemLookKind, LayoutScene, LayoutTable, TableLook } from '#shared/contracts/shop-layout'
+import { and, asc, desc, eq, exists, inArray, max, notInArray, sql } from 'drizzle-orm'
+import type { BuiltInLookId, FloorGeometry, ItemLook, ItemLookKind, LayoutPage, LayoutScene, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { Db, Statement } from '#server/utils/batch'
 import { chunk, insertAll, requireCount } from '#server/utils/batch'
 import { inTenant } from '#server/utils/query'
 import { user } from '#server/db/tables'
 import { activeBranch, activeTable, branchHasPin, exploreIsOn } from './branches.repository'
-import { branchLayoutFloors, branchLayoutItemLooks, branchLayoutPlacements, branchLayouts, branches, customFurnitureLooks, customItemLooks, diningTables } from './branches.schema'
+import { branchLayoutFloors, branchLayoutItemLooks, branchLayoutPlacements, branchLayouts, branchLayoutVersions, branches, customFurnitureLooks, customItemLooks, diningTables } from './branches.schema'
 
 // --- Row types ---
 
@@ -16,6 +16,12 @@ export interface FloorRow {
   heightCm: number
   hasRoof: boolean
   geometry: FloorGeometry
+  /** Studio's frame (ISS-035, ISS-036, ISS-021): design-only; left out, the columns' defaults. */
+  canvasXCm?: number
+  canvasYCm?: number
+  pageId?: string | null
+  hidden?: boolean
+  locked?: boolean
 }
 
 export interface PlacementRow {
@@ -29,6 +35,9 @@ export interface PlacementRow {
   /** A built-in look's key, or `customLookId`: exactly one of the two. */
   look: BuiltInLookId | null
   customLookId: string | null
+  /** Studio's 2D view only (ISS-021); left out, not hidden or locked. */
+  hidden?: boolean
+  locked?: boolean
 }
 
 /** A saved floor's pieces of one custom item look (step 3d), written from its drawing. */
@@ -41,7 +50,7 @@ export interface ItemLookUseRow {
 
 export interface LayoutRows {
   /** `undefined`: the branch has never saved a layout. */
-  layout: { version: number, updatedAt: Date, updatedByName: string | null, scene: LayoutScene | null } | undefined
+  layout: { version: number, updatedAt: Date, updatedByName: string | null, scene: LayoutScene | null, pages: LayoutPage[] | null } | undefined
   floors: FloorRow[]
   placements: PlacementRow[]
   /** The branch's active tables; the service sorts them by label. */
@@ -50,11 +59,13 @@ export interface LayoutRows {
   lookIds: string[]
   /** The cafe's chair and fixture looks (step 3d): what a piece of that kind may name. */
   itemLooks: { id: string, kind: ItemLookKind }[]
+  /** When the newest history snapshot was taken (ISS-027); null: none yet. */
+  lastSnapshotAt: Date | null
 }
 
 // --- Column lists and conditions ---
 
-const ofBranch = <T extends typeof branchLayouts | typeof branchLayoutFloors | typeof branchLayoutPlacements | typeof branchLayoutItemLooks>(table: T, tenantId: string, branchId: string) =>
+const ofBranch = <T extends typeof branchLayouts | typeof branchLayoutFloors | typeof branchLayoutPlacements | typeof branchLayoutItemLooks | typeof branchLayoutVersions>(table: T, tenantId: string, branchId: string) =>
   inTenant(table, tenantId, eq(table.branchId, branchId))
 
 const floorColumns = {
@@ -64,6 +75,11 @@ const floorColumns = {
   heightCm: branchLayoutFloors.heightCm,
   hasRoof: branchLayoutFloors.hasRoof,
   geometry: branchLayoutFloors.geometry,
+  canvasXCm: branchLayoutFloors.canvasXCm,
+  canvasYCm: branchLayoutFloors.canvasYCm,
+  pageId: branchLayoutFloors.pageId,
+  hidden: branchLayoutFloors.hidden,
+  locked: branchLayoutFloors.locked,
 }
 
 const placementColumns = {
@@ -76,6 +92,8 @@ const placementColumns = {
   depthCm: branchLayoutPlacements.depthCm,
   look: branchLayoutPlacements.look,
   customLookId: branchLayoutPlacements.customLookId,
+  hidden: branchLayoutPlacements.hidden,
+  locked: branchLayoutPlacements.locked,
 }
 
 // --- Reads ---
@@ -87,8 +105,8 @@ const placementColumns = {
  * branch_layout_placements_floor_idx and dining_tables_branch_idx.
  */
 export async function layoutRows(db: Db, tenantId: string, branchId: string): Promise<LayoutRows> {
-  const [layouts, floors, placements, tables, looks, itemLooks] = await db.batch([
-    db.select({ version: branchLayouts.version, updatedAt: branchLayouts.updatedAt, updatedByName: user.name, scene: branchLayouts.scene }).from(branchLayouts)
+  const [layouts, floors, placements, tables, looks, itemLooks, snapshots] = await db.batch([
+    db.select({ version: branchLayouts.version, updatedAt: branchLayouts.updatedAt, updatedByName: user.name, scene: branchLayouts.scene, pages: branchLayouts.pages }).from(branchLayouts)
       .leftJoin(user, eq(user.id, branchLayouts.updatedBy))
       .where(ofBranch(branchLayouts, tenantId, branchId)).limit(1),
     db.select(floorColumns).from(branchLayoutFloors)
@@ -101,8 +119,9 @@ export async function layoutRows(db: Db, tenantId: string, branchId: string): Pr
       .where(inTenant(diningTables, tenantId, eq(diningTables.branchId, branchId), activeTable)),
     db.select({ id: customFurnitureLooks.id }).from(customFurnitureLooks).where(inTenant(customFurnitureLooks, tenantId)),
     db.select({ id: customItemLooks.id, kind: customItemLooks.kind }).from(customItemLooks).where(inTenant(customItemLooks, tenantId)),
+    db.select({ at: max(branchLayoutVersions.savedAt) }).from(branchLayoutVersions).where(ofBranch(branchLayoutVersions, tenantId, branchId)),
   ])
-  return { layout: layouts[0], floors, placements, tables, lookIds: looks.map(look => look.id), itemLooks }
+  return { layout: layouts[0], floors, placements, tables, lookIds: looks.map(look => look.id), itemLooks, lastSnapshotAt: snapshots[0]?.at ?? null }
 }
 
 interface ExploreRows {
@@ -169,18 +188,18 @@ export function requireActiveTables(db: Db, tenantId: string, branchId: string, 
 
 // --- Write statements ---
 
-/** The branch's first layout, at version 1, with its scene if one came. Fails on the key when one was saved meanwhile. */
-export function insertLayoutStatement(db: Db, tenantId: string, branchId: string, by: string | null, now: Date, scene?: LayoutScene): Statement {
-  return db.insert(branchLayouts).values({ tenantId, branchId, version: 1, updatedAt: now, updatedBy: by, scene: scene ?? null })
+/** The branch's first layout, at version 1, with its scene and pages if they came. Fails on the key when one was saved meanwhile. */
+export function insertLayoutStatement(db: Db, tenantId: string, branchId: string, by: string | null, now: Date, scene?: LayoutScene, pages?: LayoutPage[]): Statement {
+  return db.insert(branchLayouts).values({ tenantId, branchId, version: 1, updatedAt: now, updatedBy: by, scene: scene ?? null, pages: pages ?? null })
 }
 
 /**
- * Moves the layout to the next version if it's still at `version`, and sets its scene if one came
- * (none: the saved one stays). Follow it with `requireOneChange`.
+ * Moves the layout to the next version if it's still at `version`, and sets its scene and pages if
+ * they came (none: the saved ones stay, an app tab from before). Follow it with `requireOneChange`.
  */
-export function touchLayoutStatement(db: Db, tenantId: string, branchId: string, version: number, by: string | null, now: Date, scene?: LayoutScene): Statement {
+export function touchLayoutStatement(db: Db, tenantId: string, branchId: string, version: number, by: string | null, now: Date, scene?: LayoutScene, pages?: LayoutPage[]): Statement {
   return db.update(branchLayouts)
-    .set({ version: sql`${branchLayouts.version} + 1`, updatedAt: now, updatedBy: by, ...(scene && { scene }) })
+    .set({ version: sql`${branchLayouts.version} + 1`, updatedAt: now, updatedBy: by, ...(scene && { scene }), ...(pages && { pages }) })
     .where(inTenant(branchLayouts, tenantId, eq(branchLayouts.branchId, branchId), eq(branchLayouts.version, version)))
 }
 
@@ -205,4 +224,35 @@ export function replaceLayoutStatements(db: Db, tenantId: string, branchId: stri
 export function deletePlacementStatement(db: Db, tenantId: string, branchId: string, tableId: string): Statement {
   return db.delete(branchLayoutPlacements)
     .where(inTenant(branchLayoutPlacements, tenantId, eq(branchLayoutPlacements.branchId, branchId), eq(branchLayoutPlacements.tableId, tableId)))
+}
+
+// --- Version history (ISS-027) ---
+
+/** How many history snapshots a branch keeps. */
+export const LAYOUT_HISTORY_KEEP = 50
+
+/** A snapshot of the layout as this save leaves it, under its new version. */
+export function insertSnapshotStatement(db: Db, tenantId: string, branchId: string, version: number, by: string | null, now: Date, snapshot: ShopLayout): Statement {
+  return db.insert(branchLayoutVersions).values({ tenantId, branchId, version, savedAt: now, savedBy: by, snapshot })
+}
+
+/** Keeps the branch's newest `LAYOUT_HISTORY_KEEP` snapshots; uses the history's key. */
+export function pruneSnapshotsStatement(db: Db, tenantId: string, branchId: string): Statement {
+  const kept = db.select({ version: branchLayoutVersions.version }).from(branchLayoutVersions)
+    .where(ofBranch(branchLayoutVersions, tenantId, branchId)).orderBy(desc(branchLayoutVersions.version)).limit(LAYOUT_HISTORY_KEEP)
+  return db.delete(branchLayoutVersions).where(and(ofBranch(branchLayoutVersions, tenantId, branchId), notInArray(branchLayoutVersions.version, kept)))
+}
+
+/** The branch's snapshots, newest first, with who saved each (`user.name`); no drawing. */
+export function listSnapshots(db: Db, tenantId: string, branchId: string) {
+  return db.select({ version: branchLayoutVersions.version, savedAt: branchLayoutVersions.savedAt, savedByName: user.name }).from(branchLayoutVersions)
+    .leftJoin(user, eq(user.id, branchLayoutVersions.savedBy))
+    .where(ofBranch(branchLayoutVersions, tenantId, branchId)).orderBy(desc(branchLayoutVersions.version)).limit(LAYOUT_HISTORY_KEEP)
+}
+
+/** One snapshot's layout, of this cafe and branch only. */
+export async function snapshotAt(db: Db, tenantId: string, branchId: string, version: number): Promise<ShopLayout | undefined> {
+  const rows = await db.select({ snapshot: branchLayoutVersions.snapshot }).from(branchLayoutVersions)
+    .where(inTenant(branchLayoutVersions, tenantId, eq(branchLayoutVersions.branchId, branchId), eq(branchLayoutVersions.version, version))).limit(1)
+  return rows[0]?.snapshot
 }
