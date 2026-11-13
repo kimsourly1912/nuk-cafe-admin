@@ -21,7 +21,7 @@ export const STUDIO_SHORTCUTS = [
   { kbds: ['delete'], label: 'Delete the selection (an outline wall or railing becomes Open)' },
   { kbds: ['meta', 'd'], label: 'Duplicate the selection' },
   { kbds: ['meta', 'c'], label: 'Copy the selection' },
-  { kbds: ['meta', 'v'], label: 'Paste it on the floor it came from, 50 cm on' },
+  { kbds: ['meta', 'v'], label: 'Paste: 50 cm on, or in the same place on another floor' },
   { kbds: ['meta', 'a'], label: 'Select every table, piece and inside wall on the floor' },
   { kbds: ['shift', 'r'], label: 'Turn the selection 90°' },
   { kbds: ['arrowright'], label: 'Move the selection 1 cm' },

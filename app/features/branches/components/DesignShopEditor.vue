@@ -767,33 +767,32 @@ async function placeLook(lookId: string, at: Point) {
  * asks which table, as a look from the library does; it never copies this table or its QR code.
  */
 /**
- * Ctrl/⌘+V (ISS-022): new copies of what Ctrl/⌘+C copied, 50 cm on, one undo step. One table alone
- * asks which table the copy is, as Duplicate look does; tables in a set are not copied (each has
- * its own QR code). Pasting on another floor is not offered yet.
+ * Ctrl/⌘+V (ISS-022): new copies of what Ctrl/⌘+C copied, one undo step, on the floor shown: 50 cm
+ * on, on the floor it came from; in the same place on another floor (owner, 2026-11-13, like
+ * Figma's paste into another frame). One table alone asks which table the copy is, as Duplicate
+ * look does; tables in a set are not copied (each has its own QR code).
  */
 function pasteCopied() {
   const clipboard = props.editor.clipboard.value
   const current = floor.value
   if (!clipboard || !current) return
-  if (clipboard.floorId !== current.id) {
-    const source = layout.value.floors.find(candidate => candidate.id === clipboard.floorId)
-    toast.add({ title: 'Not pasted', description: source ? `Show the ${source.name} floor to paste what you copied there.` : 'The floor you copied from is gone.', color: 'neutral', icon: 'i-lucide-info' })
-    return
-  }
+  const sameFloor = clipboard.floorId === current.id
   if (!clipboard.items.length && !clipboard.walls.length) {
     const [tableId] = clipboard.tableIds
-    if (clipboard.tableIds.length === 1 && tableId && placedIds.value.has(tableId)) void duplicateLook(tableId)
+    const original = layout.value.placements.find(placement => placement.tableId === tableId)
+    if (clipboard.tableIds.length === 1 && tableId && original) void duplicateLook(tableId, sameFloor ? undefined : { x: original.x, y: original.y }, current.id)
     else toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
     return
   }
-  const offset = props.editor.nextPasteOffset()
+  const offset = sameFloor ? props.editor.nextPasteOffset() : { x: 0, y: 0 }
   let copies: PlanSelection[] = []
-  draft.change(next => void (copies = pasteClipboard(next, clipboard, offset)))
+  draft.change(next => void (copies = pasteClipboard(next, clipboard, current.id, offset)))
   if (clipboard.tableIds.length) toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
   props.editor.selectMany(copies)
 }
 
-async function duplicateLook(tableId: string, to?: Point) {
+/** `floorId`: where the copy goes (a paste on another floor); the original's floor otherwise. */
+async function duplicateLook(tableId: string, to?: Point, floorId?: string) {
   const source = layout.value.placements.find(placement => placement.tableId === tableId)
   if (!source) return
   const choice = await pickModal.open({ lookName: findLook(props.looks, source.lookId).name, tables: unplaced.value }).result
@@ -804,9 +803,10 @@ async function duplicateLook(tableId: string, to?: Point) {
   if (!copyId || !original || placedIds.value.has(copyId)) return
   const extent = placementExtent(original, findLook(props.looks, original.lookId))
   const at = to ?? besideOf(original, extent.width, extent.depth)
-  const { floorId, rotation, width, depth, lookId } = original
-  draft.change(next => next.placements.push({ tableId: copyId, floorId, ...at, rotation, width, depth, lookId }))
-  props.editor.showFloor(floorId)
+  const { rotation, width, depth, lookId } = original
+  const onFloor = floorId ?? original.floorId
+  draft.change(next => next.placements.push({ tableId: copyId, floorId: onFloor, ...at, rotation, width, depth, lookId }))
+  props.editor.showFloor(onFloor)
   selection.value = { kind: 'table', id: copyId }
 }
 

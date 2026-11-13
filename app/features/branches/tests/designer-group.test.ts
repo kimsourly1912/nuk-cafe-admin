@@ -111,7 +111,7 @@ describe('copy and paste (ISS-022)', () => {
     const clipboard = copySelected(before, 'g', set)!
     const next = layout()
     removeSelected(next, set)
-    const copies = pasteClipboard(next, clipboard, { x: 50, y: 50 })
+    const copies = pasteClipboard(next, clipboard, 'g', { x: 50, y: 50 })
     expect(copies.map(copy => copy.kind)).toEqual(['item', 'wall'])
     expect(next.floors[0]!.items.find(item => item.id === copies[0]!.id)).toMatchObject({ kind: 'plant', x: 150, y: 150 })
     expect(next.floors[0]!.walls.find(wall => wall.id === copies[1]!.id)).toMatchObject({ from: { x: 650, y: 450 }, to: { x: 950, y: 450 } })
@@ -147,5 +147,16 @@ describe('align (ISS-026)', () => {
     expect(alignOffsets(boxes, 'bottom')).toEqual([{ target: boxes[0]!.target, delta: { x: 0, y: 250 } }])
     expect(alignOffsets(boxes, 'middle')).toEqual([{ target: boxes[0]!.target, delta: { x: 0, y: 125 } }, { target: boxes[1]!.target, delta: { x: 0, y: -50 } }])
     expect(alignOffsets([boxes[0]!], 'left')).toEqual([])
+  })
+})
+
+describe('paste on another floor (ISS-022)', () => {
+  it('puts the copies on the floor given, where they were', () => {
+    const next = layout()
+    next.floors.push({ ...structuredClone(next.floors[0]!), id: 'up', name: 'Upstairs', items: [], walls: [] })
+    const copies = pasteClipboard(next, copySelected(layout(), 'g', set)!, 'up', { x: 0, y: 0 })
+    expect(next.floors[1]!.items).toEqual([expect.objectContaining({ id: copies[0]!.id, kind: 'plant', x: 100, y: 100 })])
+    expect(next.floors[1]!.walls).toHaveLength(1)
+    expect(next.floors[0]!.items).toHaveLength(2)
   })
 })

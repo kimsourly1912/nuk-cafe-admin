@@ -126,9 +126,12 @@ export function copySelected(layout: ShopLayout, floorId: string, targets: reado
   return clipboard.items.length || clipboard.walls.length || clipboard.tableIds.length ? clipboard : null
 }
 
-/** Ctrl/⌘+V (ISS-022): new copies of the clipboard's pieces and walls on its floor, moved by `offset`. Tables are not pasted here. */
-export function pasteClipboard(layout: ShopLayout, clipboard: PlanClipboard, offset: Point): PlanSelection[] {
-  const floor = layout.floors.find(candidate => candidate.id === clipboard.floorId)
+/**
+ * Ctrl/⌘+V (ISS-022): new copies of the clipboard's pieces and walls on floor `floorId` (any floor:
+ * owner, 2026-11-13), moved by `offset`. Tables are not pasted here.
+ */
+export function pasteClipboard(layout: ShopLayout, clipboard: PlanClipboard, floorId: string, offset: Point): PlanSelection[] {
+  const floor = layout.floors.find(candidate => candidate.id === floorId)
   if (!floor) return []
   const copies: PlanSelection[] = []
   for (const item of clipboard.items) {
