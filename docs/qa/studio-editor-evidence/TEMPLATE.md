@@ -21,9 +21,11 @@ Record the tool, fixture, selection, viewport, zoom, and active modifiers. Recor
 |---|---|---|---|
 | 1 | Needs test | — | — |
 
-## Evidence
+## Final mockup
 
-| File or recording timestamp | What it shows |
+Link one consolidated mockup from `evidence/<check-id>/`, or two when needed for legibility. Use the original captures as working references.
+
+| Recording timestamp, if available | What it shows |
 |---|---|
 | … | … |
 

@@ -3,7 +3,13 @@
 - Date: 2026-11-13
 - Status: Needs test in Studio
 - Figma reference: existing square in the [Wireframe scratch file](https://www.figma.com/design/sOEIGbUssGCpJIkm5dSNsP/Wireframe?node-id=79-89)
-- Evidence: [53-second Figma recording](https://chatgpt.com/library?file_id=libfile_f15535c76fc08191a363778f4c4c7b33&account_id=personal) and [revised interaction mockup](https://chatgpt.com/library?file_id=libfile_0831da8eebe88191ad756cd20b96f2e2&account_id=personal)
+- Source: [53-second Figma recording](https://chatgpt.com/library?file_id=libfile_f15535c76fc08191a363778f4c4c7b33&account_id=personal)
+
+## Final mockup
+
+![Rectangle tool mockup showing hover, selection, resize targets, proportional resize, corner radius, and rotation](../evidence/RECT-01/rectangle-tool-states.png)
+
+The Resize targets panel shows the possible cursor positions together. In Studio, display only the cursor for the target under the pointer.
 
 ## Start state
 
@@ -11,15 +17,15 @@ Use a single unrotated, sharp-cornered rectangle in a 2D scratch layout. The Fig
 
 ## Steps and expected behavior
 
-| Step | Pointer target and action | Expected editor feedback | Figma evidence |
+| Step | Pointer target and action | Expected editor feedback | Figma recording |
 |---|---|---|---|
-| 1 | Hover over the unselected shape | Thin outline along the shape. The ordinary arrow remains visible. The selection handles and size badge appear after clicking. | [0:00 hover](../evidence/RECT-01/figma-01-hover.jpg) |
-| 2 | Click the shape, then move the pointer over and away from the selection | Show a bounding box with four square corner handles and a centered `16 × 16` badge below it. Dotted horizontal and vertical guides extend from the midpoints of the left and top edges. The four round radius dots show inside the box when hovering the selection and hide when the pointer moves away. The box and badge stay visible while selected. | [0:03 selected](../evidence/RECT-01/figma-02-selected.jpg), video 0:03–0:07 |
-| 3 | Hover each edge and square handle before pressing | Left and right edges use a horizontal double arrow. Top and bottom use a vertical double arrow. Each square corner uses the diagonal double arrow matching its axis. The sides are reachable directly along the outline. | [0:10.5 side](../evidence/RECT-01/figma-03-side-cursor.jpg), [0:13.5 top](../evidence/RECT-01/figma-04-top-cursor.jpg), video 0:07–0:21 |
-| 4 | Drag the bottom-left square handle with proportions constrained | The top-right corner stays anchored in the recorded drag. The width and height update together and a dotted diagonal connects the opposite corners. The clip shows `14 × 14` and reaches `10 × 10`. Radius dots hide during the active resize. | [0:22.5 corner resize](../evidence/RECT-01/figma-05-corner-resize.jpg), video 0:21–0:28 |
-| 5 | Drag the left edge with proportions constrained | The right edge stays anchored in the recorded drag. The vertical extent changes with the width, the cursor stays horizontal, and the diagonal guide and live size badge are visible. The clip shows `11 × 11` and reaches `17 × 17`. | [0:30 edge resize](../evidence/RECT-01/figma-06-edge-resize.jpg), video 0:28–0:35 |
-| 6 | Hover the upper-left inner dot, press and hold, then drag inward and back | The inner dot is a distinct radius target with radius cursor feedback. All four corners round together and the four dots move inward. A floating `Radius 3` or `Radius 6` tooltip sits near the active dot, with a visible gap and **no connector line, stem, or tail**. The box and separate size badge stay `16 × 16`. Dragging back reaches `Radius 0`. | [0:39 corner radius](../evidence/RECT-01/figma-07-radius.jpg), video 0:35–0:41 |
-| 7 | Move just outside a corner, hover, then drag. Release, deselect, and reselect | The cursor changes to curved rotation arrows before pressing. The shape, selection box, corner handles, and size badge rotate together. The size remains `16 × 16`. Reselecting restores the box at the new angle. | [0:48 rotate](../evidence/RECT-01/figma-08-rotate.jpg), video 0:41–0:53 |
+| 1 | Hover over the unselected shape | Thin outline along the shape. The ordinary arrow remains visible. The selection handles and size badge appear after clicking. | 0:00 hover |
+| 2 | Click the shape, then move the pointer over and away from the selection | Show a bounding box with four square corner handles and a centered `16 × 16` badge below it. Dotted horizontal and vertical guides extend from the midpoints of the left and top edges. The four round radius dots show inside the box when hovering the selection and hide when the pointer moves away. The box and badge stay visible while selected. | 0:03 selected, video 0:03–0:07 |
+| 3 | Hover each edge and square handle before pressing | Left and right edges use a horizontal double arrow. Top and bottom use a vertical double arrow. Each square corner uses the diagonal double arrow matching its axis. The sides are reachable directly along the outline. | 0:10.5 side, 0:13.5 top, video 0:07–0:21 |
+| 4 | Drag the bottom-left square handle with proportions constrained | The top-right corner stays anchored in the recorded drag. The width and height update together and a dotted diagonal connects the opposite corners. The clip shows `14 × 14` and reaches `10 × 10`. Radius dots hide during the active resize. | 0:22.5 corner resize, video 0:21–0:28 |
+| 5 | Drag the left edge with proportions constrained | The right edge stays anchored in the recorded drag. The vertical extent changes with the width, the cursor stays horizontal, and the diagonal guide and live size badge are visible. The clip shows `11 × 11` and reaches `17 × 17`. | 0:30 edge resize, video 0:28–0:35 |
+| 6 | Hover the upper-left inner dot, press and hold, then drag inward and back | The inner dot is a distinct radius target with radius cursor feedback. All four corners round together and the four dots move inward. A floating `Radius 3` or `Radius 6` tooltip sits near the active dot, with a visible gap and **no connector line, stem, or tail**. The box and separate size badge stay `16 × 16`. Dragging back reaches `Radius 0`. | 0:39 corner radius, video 0:35–0:41 |
+| 7 | Move just outside a corner, hover, then drag. Release, deselect, and reselect | The cursor changes to curved rotation arrows before pressing. The shape, selection box, corner handles, and size badge rotate together. The size remains `16 × 16`. Reselecting restores the box at the new angle. | 0:48 rotate, video 0:41–0:53 |
 
 ## Actual Studio behavior
 
@@ -35,7 +41,7 @@ The matching Studio run is pending for steps 1–7. This report records the Figm
 
 ## Fix direction and how to verify
 
-1. Compare the same fixture on the Studio branch before implementing changes. Capture the pointer immediately before pressing and at least one frame during each drag. Record the result and link the Studio evidence here.
+1. Compare the same fixture on the Studio branch before implementing changes. Capture the pointer immediately before pressing and at least one frame during each drag. Use those captures to document the comparison results here.
 2. Test the three neighboring targets independently at each corner. Start at the inner dot, move onto the square handle, then move just outside it. Confirm the cursor predicts the next action and only the intended property changes during the drag.
 3. Test each edge with and without the proportion constraint. Verify the constrained behavior against steps 4–5. For the free-resize Studio requirement, check that a left/right drag changes width and a top/bottom drag changes height. Repeat with a non-square rectangle to distinguish keeping the existing ratio from forcing a square.
 4. Verify that the radius tooltip floats on hover and updates live during the drag. Check that the corner radius, displayed dimensions, and inspector values agree with the canvas. Verify that rotation changes the angle and keeps the rectangle's dimensions.
