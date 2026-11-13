@@ -25,7 +25,7 @@ import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, 
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
 import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
-import { fitBounds, followCanvas, panBy, planToScreen, visibleRect, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
 import { moveWall, moveWallEnd, moveWalls } from '../designer/walls'
@@ -953,7 +953,7 @@ function onWheel(event: WheelEvent) {
   const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? (screenHeight.value || 600) : 1
   if (event.ctrlKey || event.metaKey) {
     const point = toPlan(event.clientX, event.clientY)
-    if (point) zoomAround(point, 1.01 ** -(event.deltaY * unit))
+    if (point) zoomAround(point, wheelZoomFactor(event.deltaY * unit))
     return
   }
   const dx = (event.shiftKey ? event.deltaY : event.deltaX) * unit

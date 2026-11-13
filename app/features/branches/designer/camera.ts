@@ -93,3 +93,17 @@ export function fitBounds(bounds: Bounds, size: ScreenSize, options: FitOptions)
 export function followCanvas(camera: Camera, from: Point, to: Point): Camera {
   return panBy(camera, to.x - from.x, to.y - from.y)
 }
+
+/** Figma's measured wheel zoom (ISS-001): this much per pixel of wheel, and at most this many pixels per event. */
+const WHEEL_ZOOM_PER_PX = 0.005
+const WHEEL_ZOOM_MAX_PX = 19
+
+/**
+ * The zoom factor for one Ctrl/⌘+wheel or pinch event, from its vertical delta in pixels
+ * (positive scrolls down and zooms out). A mouse notch is about 10 %; a fast spin is capped, so
+ * it never jumps.
+ */
+export function wheelZoomFactor(deltaY: number): number {
+  const delta = Math.min(WHEEL_ZOOM_MAX_PX, Math.max(-WHEEL_ZOOM_MAX_PX, deltaY))
+  return Math.exp(-delta * WHEEL_ZOOM_PER_PX)
+}

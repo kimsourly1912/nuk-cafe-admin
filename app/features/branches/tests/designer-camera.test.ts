@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitBounds, followCanvas, panBy, planToScreen, screenToPlan, visibleRect, ZOOM_LIMITS, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, panBy, planToScreen, screenToPlan, visibleRect, wheelZoomFactor, ZOOM_LIMITS, zoomAt } from '../designer/camera'
 import type { Camera } from '../designer/camera'
 
 const camera: Camera = { x: 100, y: 50, scale: 1.96 }
@@ -57,5 +57,17 @@ describe('the plan camera (ISS-028)', () => {
     expect(rect.x + rect.width / 2).toBeCloseTo(400)
     expect(rect.y + rect.height / 2).toBeCloseTo(300)
     expect(fitBounds({ minX: 0, minY: 0, maxX: 10, maxY: 10 }, size, { margin: 0, minSpan: 200 }).scale).toBeCloseTo(500 / 200)
+  })
+
+  it('Ctrl/⌘+wheel zooms in small, capped steps like Figma (ISS-001)', () => {
+    expect(wheelZoomFactor(0)).toBe(1)
+    expect(wheelZoomFactor(-19)).toBeCloseTo(Math.exp(0.095))
+    expect(wheelZoomFactor(19) * wheelZoomFactor(-19)).toBeCloseTo(1)
+    // A mouse notch (100 px) is capped at 19 px: about 10 %, not 2.7 times.
+    expect(wheelZoomFactor(100)).toBe(wheelZoomFactor(19))
+    expect(wheelZoomFactor(-1000)).toBe(wheelZoomFactor(-19))
+    expect(wheelZoomFactor(-100)).toBeGreaterThan(1.09)
+    expect(wheelZoomFactor(-100)).toBeLessThan(1.11)
+    expect(wheelZoomFactor(100)).toBeLessThan(1)
   })
 })
