@@ -1,15 +1,15 @@
 import { eq } from 'drizzle-orm'
 import * as v from 'valibot'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MAX_BRANCH_TABLES, updateBranchSettingsSchema } from '#shared/contracts/branches'
 import type { Floor, Placement, SaveLayoutInput } from '#shared/contracts/shop-layout'
 import { FIGURE_SIZES, floorSchema, LAYOUT_MAX_BODY_BYTES, LAYOUT_MAX_FLOOR_BYTES, NO_SCENE, saveLayoutSchema } from '#shared/contracts/shop-layout'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { getLayout, getPublicExploreLayout, saveLayout } from '#server/features/branches/branches.layout.service'
+import { getLayout, getLayoutSnapshot, getPublicExploreLayout, LAYOUT_SNAPSHOT_EVERY_MS, listLayoutHistory, saveLayout } from '#server/features/branches/branches.layout.service'
 import { archiveTable, createTable, deleteTable, listPublicBranches, restoreTable, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
-import { deletePlacementStatement, layoutRows, replaceLayoutStatements, requireActiveTables, touchLayoutStatement } from '#server/features/branches/branches.layout.repository'
-import { branchLayoutItemLooks, branchLayoutPlacements, branches, customFurnitureLooks, customItemLooks, diningTables } from '#server/features/branches/branches.schema'
+import { deletePlacementStatement, insertSnapshotStatement, LAYOUT_HISTORY_KEEP, layoutRows, listSnapshots, pruneSnapshotsStatement, replaceLayoutStatements, requireActiveTables, snapshotAt, touchLayoutStatement } from '#server/features/branches/branches.layout.repository'
+import { branchLayoutItemLooks, branchLayoutPlacements, branchLayoutVersions, branches, customFurnitureLooks, customItemLooks, diningTables } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
@@ -110,16 +110,18 @@ describe('Explore publication', () => {
       id: 'public-item-look', tenantId: TEST_TENANT, name: 'Internal item look', kind: 'plant',
       finishes: {}, defaultWidthCm: 40, defaultDepthCm: 40, photoAssetId: 'private-item-photo',
     })
-    const ground = floor('ground')
+    // Studio's frame, page and layer flags are design-only (ISS-021, ISS-035, ISS-036): never public.
+    const ground = floor('ground', 'Ground', { canvasX: 900, canvasY: 40, pageId: 'studio-page', hidden: true, locked: true })
     ground.items[0]!.lookId = 'public-item-look'
+    ground.items[0]!.hidden = true
     await updateBranchSettings(db, actor, branch, { version: 1, ...pin })
-    await save({ version: 0, layout: { floors: [ground], scene, placements: [{ ...placed(placedTable.id, 'ground'), lookId: 'public-table-look' }] } })
+    await save({ version: 0, layout: { floors: [ground], scene, pages: [{ id: 'studio-page', name: 'Studio page' }], placements: [{ ...placed(placedTable.id, 'ground'), lookId: 'public-table-look', locked: true }] } })
     const published = await read()
     expect(published.placements).toEqual([{ floorId: 'ground', lookId: 'public-table-look', seats: 4, x: 200, y: 200, rotation: 90, width: 80, depth: 80 }])
     expect(published.looks.map(look => look.id)).toEqual(['public-table-look'])
     expect(published.itemLooks.map(look => look.id)).toEqual(['public-item-look'])
     const body = JSON.stringify(published)
-    for (const field of [placedTable.id, 'Private', 'Internal', 'photo', 'version', 'updatedByName', 'tableId']) {
+    for (const field of [placedTable.id, 'Private', 'Internal', 'photo', 'version', 'updatedByName', 'tableId', 'canvas', 'page', 'hidden', 'locked']) {
       expect(body).not.toContain(field)
     }
     await expectApiError(() => getPublicExploreLayout(db, other, branch), 404, 'NOT_FOUND')
@@ -407,7 +409,7 @@ describe('tenants', () => {
 
   it('the repository reads and writes none of their rows with our cafe\'s id', async () => {
     const ours = await layoutRows(db, TEST_TENANT, theirBranch)
-    expect(ours).toEqual({ layout: undefined, floors: [], placements: [], tables: [], lookIds: [], itemLooks: [] })
+    expect(ours).toEqual({ layout: undefined, floors: [], placements: [], tables: [], lookIds: [], itemLooks: [], lastSnapshotAt: null })
     const found = await layoutRows(db, OTHER, theirBranch)
     expect(found.floors).toHaveLength(1)
     expect(found.placements).toHaveLength(1)
@@ -425,6 +427,99 @@ describe('tenants', () => {
     // Their table isn't an active table of ours: the guard counts none.
     await expect(db.batch(requireActiveTables(db, TEST_TENANT, theirBranch, [theirTable]) as Batch)).rejects.toThrow()
     await db.batch(requireActiveTables(db, OTHER, theirBranch, [theirTable]) as Batch)
+    // Their history (ISS-027): our cafe's id lists, reads and prunes none of it.
+    expect(await listSnapshots(db, TEST_TENANT, theirBranch)).toEqual([])
+    expect(await snapshotAt(db, TEST_TENANT, theirBranch, 1)).toBeUndefined()
+    await db.batch([pruneSnapshotsStatement(db, TEST_TENANT, theirBranch)])
+    expect(await listSnapshots(db, OTHER, theirBranch)).toHaveLength(1)
+    await expectApiError(() => listLayoutHistory(db, TEST_TENANT, theirBranch), 404, 'NOT_FOUND')
+    await expectApiError(() => getLayoutSnapshot(db, TEST_TENANT, theirBranch, 1), 404, 'NOT_FOUND')
+  })
+})
+
+describe('Studio frames, pages and layers (ISS-021, ISS-035, ISS-036)', () => {
+  it('saves a floor\'s frame, page, flags and names, and a table\'s flags, and reads them back; left out when off', async () => {
+    const t1 = (await table('T1')).id
+    const ground = floor('ground', 'Ground', { canvasX: 900, canvasY: -50, pageId: 'plans', locked: true })
+    ground.items[0] = { ...ground.items[0]!, name: 'Corner plant', hidden: true }
+    ground.walls = [{ id: 'kitchen', from: { x: 100, y: 100 }, to: { x: 100, y: 300 }, name: 'Kitchen', locked: true }]
+    const pages = [{ id: 'floors', name: 'Floors' }, { id: 'plans', name: 'Plans' }]
+    const layout = await save({ version: 0, layout: { floors: [ground, floor('up', 'Up', { hidden: true })], pages, placements: [{ ...placed(t1, 'ground'), hidden: true, locked: true }] } })
+    expect(layout.pages).toEqual(pages)
+    expect(layout.floors[0]).toEqual(ground)
+    expect(layout.floors[1]).toMatchObject({ id: 'up', hidden: true })
+    expect(layout.floors[1]).not.toHaveProperty('canvasX')
+    expect(layout.floors[1]).not.toHaveProperty('pageId')
+    expect(layout.placements[0]).toMatchObject({ hidden: true, locked: true })
+    expect(await getLayout(db, TEST_TENANT, branch)).toEqual(layout)
+    // Moving a frame changes only its offset: the drawing inside keeps its own coordinates.
+    const moved = await save({ version: 1, layout: { floors: [{ ...ground, canvasX: 1200 }, layout.floors[1]!], pages, placements: layout.placements } })
+    expect(moved.floors[0]).toEqual({ ...ground, canvasX: 1200 })
+    // A save without pages (an app tab from before) keeps the saved ones.
+    const kept = await save({ version: 2, layout: { floors: moved.floors, placements: moved.placements } })
+    expect(kept.pages).toEqual(pages)
+  })
+
+  it('keeps a frame placed at 0 as placed, and a floor never placed as left out (laid out by Studio)', async () => {
+    const layout = await save({ version: 0, layout: { floors: [floor('ground', 'Ground', { canvasX: 0, canvasY: 0 }), floor('up')], placements: [] } })
+    expect(layout.floors[0]).toMatchObject({ canvasX: 0, canvasY: 0 })
+    expect(layout.floors[1]).not.toHaveProperty('canvasX')
+  })
+
+  it('a stale save moves no frame (409)', async () => {
+    await save({ version: 0, layout: { floors: [floor('ground')], placements: [] } })
+    await save({ version: 1, layout: { floors: [floor('ground', 'Ground', { canvasX: 100 })], placements: [] } })
+    await expectApiError(() => save({ version: 1, layout: { floors: [floor('ground', 'Ground', { canvasX: 999 })], placements: [] } }), 409, 'VERSION_CONFLICT')
+    expect((await getLayout(db, TEST_TENANT, branch)).floors[0]!.canvasX).toBe(100)
+  })
+
+  it('the contract refuses a floor on a page that does not exist, and repeated pages', () => {
+    const on = (pageId: string, pages?: { id: string, name: string }[]) => v.safeParse(saveLayoutSchema, { version: 0, layout: { floors: [floor('ground', 'Ground', { pageId })], placements: [], ...(pages && { pages }) } })
+    expect(on('floors').success).toBe(true)
+    expect(on('nowhere').success).toBe(false)
+    expect(on('a', [{ id: 'a', name: 'A' }]).success).toBe(true)
+    expect(on('a', [{ id: 'a', name: 'A' }, { id: 'a', name: 'B' }]).success).toBe(false)
+    expect(v.safeParse(saveLayoutSchema, { version: 0, layout: { floors: [floor('ground', 'Ground', { hidden: false as unknown as true })], placements: [] } }).success).toBe(false)
+  })
+})
+
+describe('version history (ISS-027)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('keeps a snapshot at the first save, then at most one per LAYOUT_SNAPSHOT_EVERY_MS, and reads it back', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const start = Date.now()
+    await save({ version: 0, layout: { floors: [floor('ground')], placements: [] } })
+    await save({ version: 1, layout: { floors: [floor('ground', 'Renamed')], placements: [] } })
+    expect((await listLayoutHistory(db, TEST_TENANT, branch)).map(entry => entry.version)).toEqual([1])
+    vi.setSystemTime(start + LAYOUT_SNAPSHOT_EVERY_MS + 1)
+    await save({ version: 2, layout: { floors: [floor('ground', 'Later')], placements: [] } })
+    const history = await listLayoutHistory(db, TEST_TENANT, branch)
+    expect(history.map(entry => entry.version)).toEqual([3, 1])
+    expect(history[0]!.savedByName).not.toBeUndefined()
+    expect((await getLayoutSnapshot(db, TEST_TENANT, branch, 3)).floors[0]!.name).toBe('Later')
+    expect((await getLayoutSnapshot(db, TEST_TENANT, branch, 1)).floors[0]!.name).toBe('Ground')
+    await expectApiError(() => getLayoutSnapshot(db, TEST_TENANT, branch, 2), 404, 'NOT_FOUND')
+  })
+
+  it('keeps the newest LAYOUT_HISTORY_KEEP snapshots', async () => {
+    await save({ version: 0, layout: { floors: [floor('ground')], placements: [] } })
+    const old = new Date(Date.now() - 2 * LAYOUT_SNAPSHOT_EVERY_MS)
+    await db.delete(branchLayoutVersions)
+    await db.batch(Array.from({ length: LAYOUT_HISTORY_KEEP + 5 }, (_, at) => insertSnapshotStatement(db, TEST_TENANT, branch, at - 100, null, old, { floors: [floor('ground')], placements: [] })) as Batch)
+    await save({ version: 1, layout: { floors: [floor('ground', 'Newest')], placements: [] } })
+    const versions = (await listLayoutHistory(db, TEST_TENANT, branch)).map(entry => entry.version)
+    expect(versions).toHaveLength(LAYOUT_HISTORY_KEEP)
+    expect(versions[0]).toBe(2)
+    expect(versions.at(-1)).toBe(LAYOUT_HISTORY_KEEP + 5 - 100 - (LAYOUT_HISTORY_KEEP - 1))
+  })
+
+  it('a refused save keeps no snapshot', async () => {
+    await save({ version: 0, layout: { floors: [floor('ground')], placements: [] } })
+    await expectApiError(() => save({ version: 0, layout: { floors: [floor('ground')], placements: [] } }), 409, 'VERSION_CONFLICT')
+    expect(await listLayoutHistory(db, TEST_TENANT, branch)).toHaveLength(1)
   })
 })
 

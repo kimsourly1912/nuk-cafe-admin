@@ -173,6 +173,13 @@ export const OPENING_KINDS = ['door', 'window'] as const
 export type OpeningKind = typeof OPENING_KINDS[number]
 
 const idSchema = v.pipe(v.string(), v.regex(/^[\w-]{1,40}$/, 'Not an id'))
+/**
+ * Hidden or locked in Studio's 2D view (ISS-021, like Figma's layers): design-only, left out when
+ * off. 3D, Explore, QR codes and orders ignore them.
+ */
+const flagSchema = v.optional(v.literal(true))
+/** A layer's own name in Studio's Layers list (ISS-021); left out: named by its kind. */
+const layerNameSchema = v.optional(v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(SHAPE_NAME_MAX)))
 const cmSchema = v.pipe(v.number(), v.integer(), v.minValue(-LAYOUT_MAX_EXTENT_CM), v.maxValue(LAYOUT_MAX_EXTENT_CM))
 const sizeSchema = (min: number, max: number) => v.pipe(v.number(), v.integer(), v.minValue(min), v.maxValue(max))
 const rotationSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(359))
@@ -209,6 +216,9 @@ export const innerWallSchema = v.strictObject({
   to: pointSchema,
   kind: v.optional(v.picklist(INNER_WALL_KINDS)),
   openings: v.optional(v.pipe(v.array(openingSchema), v.maxLength(20))),
+  name: layerNameSchema,
+  hidden: flagSchema,
+  locked: flagSchema,
 })
 export type InnerWall = v.InferOutput<typeof innerWallSchema>
 
@@ -248,13 +258,17 @@ export const itemSchema = v.pipe(
      * default. Stairs and people and pets have none.
      */
     height: v.optional(sizeSchema(ITEM_HEIGHT_MIN_CM, ITEM_HEIGHT_MAX_CM)),
-    /** A shape's name (D278), shown on the plan and in 3D's card. Other pieces are named by their kind. */
-    name: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(SHAPE_NAME_MAX))),
+    /**
+     * Its name (D278 for shapes; any piece since ISS-021, like a Figma layer), shown in Layers, and
+     * on the plan and in 3D's card for a shape. Left out: named by its kind.
+     */
+    name: layerNameSchema,
+    hidden: flagSchema,
+    locked: flagSchema,
   }),
   v.check(item => item.lookId === undefined || isItemLookKind(item.kind), 'Stairs, people and pets have no custom look'),
   v.forward(v.check(item => item.height === undefined || itemHeightRange(item.kind) !== undefined, 'Stairs, people and pets keep their own height'), ['height']),
   v.forward(v.check(item => item.height === undefined || itemHeightRange(item.kind) === undefined || heightFits(item.kind, item.height), 'Out of this kind\'s height range'), ['height']),
-  v.forward(v.check(item => item.name === undefined || isShapeKind(item.kind), 'Only a shape has a name'), ['name']),
   v.check(item => !isFigureKind(item.kind) || (item.width === FIGURE_SIZES[item.kind].width && item.depth === FIGURE_SIZES[item.kind].depth), 'People and pets keep their own size'),
   v.check(item => !isFigureKind(item.kind) || Object.keys(item.finishes).length === 0, 'People and pets have no finishes'),
 )
@@ -270,6 +284,17 @@ export const floorSchema = v.pipe(
     edges: v.array(edgeSchema),
     walls: v.pipe(v.array(innerWallSchema), v.maxLength(LAYOUT_MAX_WALLS_PER_FLOOR)),
     items: v.pipe(v.array(itemSchema), v.maxLength(LAYOUT_MAX_ITEMS_PER_FLOOR)),
+    /**
+     * The floor as a frame on Studio's canvas (ISS-035): where its own (0, 0) sits, in cm. Its
+     * drawing keeps its own coordinates, so moving the frame changes only these. Left out: 0.
+     * Design-only: 3D stacks floors by their order, QR codes and orders never read it.
+     */
+    canvasX: v.optional(cmSchema),
+    canvasY: v.optional(cmSchema),
+    /** Its Studio page (ISS-036), one of the layout's `pages`. Left out: the first page. */
+    pageId: v.optional(idSchema),
+    hidden: flagSchema,
+    locked: flagSchema,
   }),
   // Valibot runs every check of a pipe, even after one failed: a check that reads both lists runs
   // only when they match, so a malformed floor is a 400, never a thrown error.
@@ -283,7 +308,7 @@ export const floorSchema = v.pipe(
   v.check(floor => jsonBytes(floor) <= LAYOUT_MAX_FLOOR_BYTES, 'This floor holds too much: move some furniture to another floor'),
 )
 export type Floor = v.InferOutput<typeof floorSchema>
-/** What a floor stores as its drawing: everything but its id, name, height and roof. */
+/** What a floor stores as its drawing: everything but its id, name, height, roof and Studio frame. */
 export type FloorGeometry = Pick<Floor, 'outline' | 'edges' | 'walls' | 'items'>
 
 /** The built-in table looks (D273); the app's catalog describes each. */
@@ -310,8 +335,21 @@ export const placementSchema = v.strictObject({
   width: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
   depth: sizeSchema(TABLE_SIZE_MIN_CM, TABLE_SIZE_MAX_CM),
   lookId: idSchema,
+  hidden: flagSchema,
+  locked: flagSchema,
 })
 export type Placement = v.InferOutput<typeof placementSchema>
+
+/** Studio's pages (ISS-036, like Figma's): groups of floors by purpose. At most this many. */
+export const LAYOUT_MAX_PAGES = 20
+export const PAGE_NAME_MAX = 30
+/** The page floors without a `pageId` are on, and the one a layout without pages shows. */
+export const DEFAULT_PAGE = { id: 'floors', name: 'Floors' } as const
+export const pageSchema = v.strictObject({
+  id: idSchema,
+  name: v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(PAGE_NAME_MAX)),
+})
+export type LayoutPage = v.InferOutput<typeof pageSchema>
 
 // --- The branch's scene (step 4a, D274) ---
 
@@ -355,14 +393,23 @@ export const layoutSchema = v.pipe(
     placements: v.pipe(v.array(placementSchema), v.maxLength(MAX_BRANCH_TABLES)),
     /** Saved with the layout, at its version (step 4a). Left out: the saved scene stays (an app tab from before 4a). */
     scene: v.optional(layoutSceneSchema),
+    /** Studio's pages (ISS-036). Left out: one page, `DEFAULT_PAGE`. */
+    pages: v.optional(v.pipe(v.array(pageSchema), v.minLength(1, 'A layout needs a page'), v.maxLength(LAYOUT_MAX_PAGES))),
   }),
   v.forward(v.check(layout => layout.scene?.entrance == null || Boolean(streetDoor(layout.floors, layout.scene.entrance)), INVALID_STREET_DOOR), ['scene', 'entrance']),
   v.check(layout => unique(layout.floors.map(floor => floor.id)), 'Floor ids repeat'),
   v.check(layout => unique(layout.placements.map(placement => placement.tableId)), 'A table is placed twice'),
   v.check(layout => layout.placements.every(placement => layout.floors.some(floor => floor.id === placement.floorId)), 'A table is on a floor that does not exist'),
   v.check(layout => unique(layout.floors.flatMap(floor => [...floor.items.map(item => item.id), ...floor.walls.map(wall => wall.id)])), 'Item ids repeat'),
+  v.check(layout => unique((layout.pages ?? []).map(page => page.id)), 'Page ids repeat'),
+  v.check(layout => layout.floors.every(floor => floor.pageId === undefined || (layout.pages ?? [DEFAULT_PAGE]).some(page => page.id === floor.pageId)), 'A floor is on a page that does not exist'),
 )
 export type ShopLayout = v.InferOutput<typeof layoutSchema>
+
+/** A floor's page (ISS-036): its own, or the first page. */
+export const floorPageId = (floor: Pick<Floor, 'pageId'>, pages: readonly LayoutPage[]) => floor.pageId ?? pages[0]?.id ?? DEFAULT_PAGE.id
+/** The layout's pages: its own, or the one default page. */
+export const layoutPages = (layout: Pick<ShopLayout, 'pages'>): LayoutPage[] => layout.pages?.length ? layout.pages : [{ ...DEFAULT_PAGE }]
 
 /**
  * `PUT …/layout`: the whole layout and the version read (0 when the branch has none yet). A stale
@@ -375,6 +422,13 @@ export const saveLayoutSchema = v.strictObject({
 })
 export type SaveLayoutInput = v.InferOutput<typeof saveLayoutSchema>
 
+/** `GET …/layout/history` (ISS-027): a version the layout can go back to. */
+export interface LayoutHistoryEntry {
+  version: number
+  savedAt: string
+  savedByName: string | null
+}
+
 /** `GET …/layout`: the saved layout and the branch's active tables, placed or not. */
 export interface BranchLayout {
   /** 0 until the first save. */
@@ -386,6 +440,8 @@ export interface BranchLayout {
   placements: Placement[]
   /** The surroundings everyone sees in 3D (step 4a); `NO_SCENE` until one is chosen. */
   scene: LayoutScene
+  /** Studio's pages (ISS-036); left out until a layout saves its own. */
+  pages?: LayoutPage[]
   /** The branch's active tables by label; the unplaced ones are the editor's Unplaced list. */
   tables: LayoutTable[]
 }

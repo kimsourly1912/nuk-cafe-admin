@@ -456,6 +456,13 @@
       "when": 1794410625037,
       "tag": "0064_branch_explore_pin",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "6",
+      "when": 1794577900478,
+      "tag": "0065_studio_frames_pages_history",
+      "breakpoints": true
     }
   ]
 }

@@ -264,12 +264,12 @@ describe('shapes (D278)', () => {
     }
   })
 
-  it('takes a name and a height in its range; other pieces take neither name nor a shape\'s height', () => {
+  it('takes a name and a height in its range; any piece takes a name (a layer\'s, ISS-021), not a shape\'s height', () => {
     const issues = (item: Partial<LayoutItem>) => (v.safeParse(itemSchema, { id: 'i', kind: 'block', x: 0, y: 0, rotation: 0, width: 300, depth: 120, finishes: {}, ...item }).issues ?? []).map(issue => issue.message)
     expect(issues({ name: 'Stage', height: 40 })).toEqual([])
     expect(issues({ height: 10 })).toContain('Out of this kind\'s height range')
     expect(issues({ name: '  ' })).toContain('Required')
-    expect(issues({ kind: 'planter', name: 'Box' })).toContain('Only a shape has a name')
+    expect(issues({ kind: 'planter', name: 'Box' })).toEqual([])
     expect(issues({ kind: 'stairs', height: 40 })).toContain('Stairs, people and pets keep their own height')
   })
 })

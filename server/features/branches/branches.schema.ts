@@ -3,7 +3,7 @@ import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text,
 import { schema as authSchema } from '#auth/schema'
 import { DINING_TABLE_STATUSES } from '#shared/contracts/branches'
 import { BUILT_IN_LOOK_IDS, ITEM_LOOK_KINDS, LOOK_CHAIRS, TABLE_BASES, TABLE_SHAPES } from '#shared/contracts/shop-layout'
-import type { Finish, FloorGeometry, LayoutScene, LookFinishes } from '#shared/contracts/shop-layout'
+import type { Finish, FloorGeometry, LayoutPage, LayoutScene, LookFinishes, ShopLayout } from '#shared/contracts/shop-layout'
 import { BRANCH_ROLES } from '#shared/contracts/staff'
 import { newId } from '#server/utils/ids'
 
@@ -136,6 +136,8 @@ export const branchLayouts = sqliteTable('branch_layouts', {
   updatedBy: text().references(() => authSchema!.user.id, { onDelete: 'set null' }),
   /** The surroundings in 3D (step 4a), checked by the shared `layoutSceneSchema`; null: none chosen yet. */
   scene: text({ mode: 'json' }).$type<LayoutScene>(),
+  /** Studio's pages (ISS-036), checked by the shared `layoutSchema`; null: the one default page. */
+  pages: text({ mode: 'json' }).$type<LayoutPage[]>(),
 }, t => [
   primaryKey({ columns: [t.tenantId, t.branchId] }),
   foreignKey({ name: 'branch_layouts_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),
@@ -156,11 +158,38 @@ export const branchLayoutFloors = sqliteTable('branch_layout_floors', {
   heightCm: integer().notNull(),
   hasRoof: integer({ mode: 'boolean' }).notNull(),
   geometry: text({ mode: 'json' }).$type<FloorGeometry>().notNull(),
+  // Studio's frame (ISS-035, ISS-036, ISS-021): design-only, never read by 3D, QR codes or orders.
+  /** Where the floor's (0, 0) sits on Studio's canvas; null: never placed (Studio lays it out beside the others). */
+  canvasXCm: integer(),
+  canvasYCm: integer(),
+  /** One of `branch_layouts.pages` (the save checks it); null: the first page. */
+  pageId: text(),
+  hidden: integer({ mode: 'boolean' }).notNull().default(false),
+  locked: integer({ mode: 'boolean' }).notNull().default(false),
 }, t => [
   primaryKey({ columns: [t.tenantId, t.branchId, t.id] }),
   foreignKey({ name: 'branch_layout_floors_layout_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branchLayouts.tenantId, branchLayouts.branchId] }).onDelete('cascade'),
   uniqueIndex('branch_layout_floors_position_idx').on(t.tenantId, t.branchId, t.position),
   check('branch_layout_floors_check', sql`${t.position} between 0 and 9 and ${t.heightCm} between 200 and 800`),
+])
+
+/**
+ * The layout's version history (ISS-027, like Figma's): the whole layout as a save left it, at most
+ * one every few minutes of editing (the save decides, in its own batch) and the last
+ * `LAYOUT_HISTORY_KEEP` kept. Restoring one loads it into the editor, which saves it as a new
+ * version through the normal, checked save: a snapshot is never written back directly.
+ */
+export const branchLayoutVersions = sqliteTable('branch_layout_versions', {
+  tenantId: tenantId(),
+  branchId: text().notNull(),
+  version: integer().notNull(),
+  savedAt: instant().notNull().default(nowMs),
+  savedBy: text().references(() => authSchema!.user.id, { onDelete: 'set null' }),
+  /** `{ floors, placements, scene, pages }` as saved, checked by the shared `layoutSchema` on save. */
+  snapshot: text({ mode: 'json' }).$type<ShopLayout>().notNull(),
+}, t => [
+  primaryKey({ columns: [t.tenantId, t.branchId, t.version] }),
+  foreignKey({ name: 'branch_layout_versions_layout_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branchLayouts.tenantId, branchLayouts.branchId] }).onDelete('cascade'),
 ])
 
 /**
@@ -214,6 +243,9 @@ export const branchLayoutPlacements = sqliteTable('branch_layout_placements', {
   /** A built-in look's key, or `customLookId`: exactly one of the two (the check below). */
   look: text({ enum: BUILT_IN_LOOK_IDS }),
   customLookId: text(),
+  /** Hidden or locked in Studio's 2D view (ISS-021): design-only. */
+  hidden: integer({ mode: 'boolean' }).notNull().default(false),
+  locked: integer({ mode: 'boolean' }).notNull().default(false),
 }, t => [
   foreignKey({ name: 'branch_layout_placements_table_fk', columns: [t.tenantId, t.branchId, t.tableId], foreignColumns: [diningTables.tenantId, diningTables.branchId, diningTables.id] }).onDelete('cascade'),
   foreignKey({ name: 'branch_layout_placements_floor_fk', columns: [t.tenantId, t.branchId, t.floorId], foreignColumns: [branchLayoutFloors.tenantId, branchLayoutFloors.branchId, branchLayoutFloors.id] }).onDelete('cascade'),

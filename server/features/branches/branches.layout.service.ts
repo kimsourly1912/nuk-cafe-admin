@@ -1,5 +1,5 @@
 import { INVALID_STREET_DOOR, isBuiltInLook, isItemLookKind, ITEM_HEIGHTS, NO_SCENE, streetDoor } from '#shared/contracts/shop-layout'
-import type { BranchLayout, Floor, LayoutScene, Placement, PublicExploreLayout, SaveLayoutInput } from '#shared/contracts/shop-layout'
+import type { BranchLayout, Floor, LayoutHistoryEntry, LayoutScene, Placement, PublicExploreLayout, SaveLayoutInput, ShopLayout } from '#shared/contracts/shop-layout'
 import type { Db, Statement } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
 import { apiError, ErrorCodes, notFound } from '#server/utils/errors'
@@ -27,28 +27,61 @@ function toLayout(rows: LayoutRows): BranchLayout {
     floors: rows.floors.map(toFloor),
     placements: rows.placements.map(toPlacement),
     scene: rows.layout?.scene ?? NO_SCENE,
+    ...(rows.layout?.pages && { pages: rows.layout.pages }),
     tables: rows.tables.sort((a, b) => byLabel.compare(a.label, b.label)),
+  }
+}
+
+/** Studio's design-only fields (ISS-021, ISS-035, ISS-036), only when set, as the contract leaves them out. */
+function frameOf(row: FloorRow): Pick<Floor, 'canvasX' | 'canvasY' | 'pageId' | 'hidden' | 'locked'> {
+  return {
+    // Null: never placed, laid out by Studio; 0 is a place like any other.
+    ...(row.canvasXCm != null && { canvasX: row.canvasXCm }),
+    ...(row.canvasYCm != null && { canvasY: row.canvasYCm }),
+    ...(row.pageId && { pageId: row.pageId }),
+    ...(row.hidden && { hidden: true as const }),
+    ...(row.locked && { locked: true as const }),
   }
 }
 
 function toFloor(row: FloorRow): Floor {
   const { outline, edges, walls, items } = row.geometry
-  return { id: row.id, name: row.name, height: row.heightCm, hasRoof: row.hasRoof, outline, edges, walls, items }
+  return { id: row.id, name: row.name, height: row.heightCm, hasRoof: row.hasRoof, outline, edges, walls, items, ...frameOf(row) }
+}
+
+/**
+ * A floor as Explore shows it to customers: the building only. Studio's frame, page and layer
+ * flags (design-only) are left out, also its pieces' and walls' flags (names stay: a shape's shows in 3D).
+ */
+function toPublicFloor(row: FloorRow): Floor {
+  const { outline, edges, walls, items } = row.geometry
+  const plain = <T extends { name?: string, hidden?: true, locked?: true }>(layer: T) => {
+    const { hidden: _hidden, locked: _locked, ...rest } = layer
+    return rest
+  }
+  return { id: row.id, name: row.name, height: row.heightCm, hasRoof: row.hasRoof, outline, edges, walls: walls.map(plain), items: items.map(plain) }
 }
 
 function toPlacement(row: PlacementRow): Placement {
-  return { tableId: row.tableId, floorId: row.floorId, x: row.xCm, y: row.yCm, rotation: row.rotation, width: row.widthCm, depth: row.depthCm, lookId: (row.look ?? row.customLookId)! }
+  return {
+    tableId: row.tableId, floorId: row.floorId, x: row.xCm, y: row.yCm, rotation: row.rotation, width: row.widthCm, depth: row.depthCm, lookId: (row.look ?? row.customLookId)!,
+    ...(row.hidden && { hidden: true as const }),
+    ...(row.locked && { locked: true as const }),
+  }
 }
 
 function floorRow(floor: Floor, position: number): FloorRow {
   const { id, name, height, hasRoof, outline, edges, walls, items } = floor
-  return { id, position, name, heightCm: height, hasRoof, geometry: { outline, edges, walls, items } }
+  return {
+    id, position, name, heightCm: height, hasRoof, geometry: { outline, edges, walls, items },
+    canvasXCm: floor.canvasX ?? null, canvasYCm: floor.canvasY ?? null, pageId: floor.pageId ?? null, hidden: floor.hidden ?? false, locked: floor.locked ?? false,
+  }
 }
 
 function placementRow(placement: Placement): PlacementRow {
   const { tableId, floorId, x, y, rotation, width, depth, lookId } = placement
   const look = isBuiltInLook(lookId) ? { look: lookId, customLookId: null } : { look: null, customLookId: lookId }
-  return { tableId, floorId, xCm: x, yCm: y, rotation, widthCm: width, depthCm: depth, ...look }
+  return { tableId, floorId, xCm: x, yCm: y, rotation, widthCm: width, depthCm: depth, ...look, hidden: placement.hidden ?? false, locked: placement.locked ?? false }
 }
 
 /** The branch's layout (archived branches too: read only); none saved yet is an empty one at version 0. */
@@ -61,13 +94,13 @@ export async function getLayout(db: Db, tenantId: string, branchId: string): Pro
 export async function getPublicExploreLayout(db: Db, tenantId: string, branchId: string): Promise<PublicExploreLayout> {
   const rows = await repo.exploreRows(db, tenantId, branchId)
   if (!rows) throw notFound('This branch')
-  const floors = rows.floors.map(toFloor)
+  const floors = rows.floors.map(toPublicFloor)
   const { preset, entrance } = rows.scene
   if (!entrance || !streetDoor(floors, entrance)) throw notFound('This branch')
   return {
     floors,
     placements: rows.placements.map((row) => {
-      const { floorId, x, y, rotation, width, depth, lookId } = toPlacement(row)
+      const { floorId, x, y, rotation, width, depth, lookId } = toPlacement(row) // never Studio's flags
       return { floorId, x, y, rotation, width, depth, lookId, seats: row.seats }
     }),
     scene: { preset, entrance, explore: true },
@@ -93,7 +126,7 @@ export async function saveLayout(db: Db, actor: Actor, branchId: string, input: 
   await loadActiveBranch(db, tenantId, branchId)
   const current = await repo.layoutRows(db, tenantId, branchId)
   if ((current.layout?.version ?? 0) !== input.version) throw layoutChanged()
-  const { floors, placements, scene: requestedScene } = input.layout
+  const { floors, placements, scene: requestedScene, pages } = input.layout
   const savedScene = current.layout?.scene ?? NO_SCENE
   const scene = requestedScene && { ...savedScene, ...requestedScene }
   const effectiveScene = scene ?? savedScene
@@ -107,12 +140,17 @@ export async function saveLayout(db: Db, actor: Actor, branchId: string, input: 
 
   const tableIds = placements.map(placement => placement.tableId)
   const now = new Date()
+  // History (ISS-027): a snapshot of what this save leaves, unless one was taken a moment ago, so
+  // autosaving every few seconds keeps checkpoints, not every keystroke.
+  const snapshot: ShopLayout = { floors, placements, scene: effectiveScene, ...((pages ?? current.layout?.pages) && { pages: pages ?? current.layout!.pages! }) }
+  const takeSnapshot = !current.lastSnapshotAt || now.getTime() - current.lastSnapshotAt.getTime() >= LAYOUT_SNAPSHOT_EVERY_MS
   const statements: Statement[] = [
     ...(input.version === 0
-      ? [repo.insertLayoutStatement(db, tenantId, branchId, actor.userId, now, scene)]
-      : [repo.touchLayoutStatement(db, tenantId, branchId, input.version, actor.userId, now, scene), requireOneChange(db)]),
+      ? [repo.insertLayoutStatement(db, tenantId, branchId, actor.userId, now, scene, pages)]
+      : [repo.touchLayoutStatement(db, tenantId, branchId, input.version, actor.userId, now, scene, pages), requireOneChange(db)]),
     ...repo.replaceLayoutStatements(db, tenantId, branchId, floors.map(floorRow), placements.map(placementRow), floors.flatMap(itemLookUses)),
     ...repo.requireActiveTables(db, tenantId, branchId, tableIds),
+    ...(takeSnapshot ? [repo.insertSnapshotStatement(db, tenantId, branchId, input.version + 1, actor.userId, now, snapshot), repo.pruneSnapshotsStatement(db, tenantId, branchId)] : []),
     audit(db, actor, 'layout.update', 'branch', branchId, { version: input.version + 1, floors: floors.length, placements: placements.length, ...sceneChange(current, scene) }),
   ]
   try {
@@ -130,6 +168,24 @@ export async function saveLayout(db: Db, actor: Actor, branchId: string, input: 
     throw deleted.length ? layoutLooksUnavailable(deleted) : layoutChanged()
   }
   return getLayout(db, tenantId, branchId)
+}
+
+/** At most one history snapshot per this long of saving (ISS-027). */
+export const LAYOUT_SNAPSHOT_EVERY_MS = 10 * 60_000
+
+/** The branch's layout history (ISS-027), newest first: versions with a snapshot, and who saved them. */
+export async function listLayoutHistory(db: Db, tenantId: string, branchId: string): Promise<LayoutHistoryEntry[]> {
+  await loadBranch(db, tenantId, branchId)
+  const rows = await repo.listSnapshots(db, tenantId, branchId)
+  return rows.map(row => ({ version: row.version, savedAt: toIso(row.savedAt), savedByName: row.savedByName ?? null }))
+}
+
+/** One history snapshot (ISS-027) of this cafe's branch; another branch's or cafe's is not found. */
+export async function getLayoutSnapshot(db: Db, tenantId: string, branchId: string, version: number): Promise<ShopLayout> {
+  await loadBranch(db, tenantId, branchId)
+  const snapshot = await repo.snapshotAt(db, tenantId, branchId, version)
+  if (!snapshot) throw notFound('This version')
+  return snapshot
 }
 
 /** The audit's note of a new scene: its preset, when the save changes it (step 4a). */

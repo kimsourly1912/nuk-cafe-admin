@@ -21,6 +21,8 @@ Second PR (owner's answers, 2026-11-13): ISS-004 snap step, 031, 011, 017, 022, 
 
 Third PR: ISS-034 (mitred wall corners, snapping to wall faces).
 
+Fourth PR (Phase 5 in one PR, owner): ISS-021 layers with hide and lock, ISS-035 floor frames, floor order, ISS-036 pages and several frames on one canvas, ISS-027 autosave and history (D279). Still waiting for the owner or the tester: ISS-002, 005 (range), 008, 016, 023, 024 (retest), 030; pages without floors hold nothing else yet.
+
 ## Phase 1: View and zoom (start here)
 
 Why first: every other check depends on a stable camera.

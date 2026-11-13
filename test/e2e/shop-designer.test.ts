@@ -108,10 +108,14 @@ function branchTables(page: Page): Promise<DiningTable[]> {
   return page.evaluate(path => fetch(path).then(response => response.json()), `${api(lab.branchId)}/tables?status=all`)
 }
 
+/**
+ * The layout saved: Studio saves itself a moment after a change (ISS-027), so Save layout may have
+ * nothing left to do; when it still can, it saves at once. Either way: the status says Saved.
+ */
 async function save(page: Page) {
-  await saveButton(page).click()
-  await page.getByText('Shop layout saved').first().waitFor()
-  await expect.poll(() => saveButton(page).isDisabled()).toBe(true)
+  if (await saveButton(page).isEnabled()) await saveButton(page).click({ timeout: 3_000 }).catch(() => undefined)
+  await expect.poll(() => saveButton(page).isDisabled(), { timeout: 15_000 }).toBe(true)
+  await page.getByRole('status').filter({ hasText: /^Saved$/ }).first().waitFor()
 }
 
 /** Screen pixels for a point in plan centimetres. */
@@ -241,6 +245,47 @@ describe('the shop designer on saved layouts', () => {
     const floorSettings = page.getByTestId('floor-settings')
     await floorSettings.getByRole('switch', { name: 'Roof over this floor' }).click()
 
+    // A new floor's frame goes beside the others on its page (ISS-036), drawn there read only; a
+    // click on one opens that floor, the plan staying still.
+    // Shift+1 fits the whole page, like Figma: every frame on it.
+    await page.keyboard.press('Shift+1')
+    const ground = plan(page).getByTestId('plan-other-frame-Ground')
+    await ground.waitFor()
+    const groundBox = (await ground.boundingBox())!
+    const planBox = (await plan(page).boundingBox())!
+    expect(groundBox.x).toBeGreaterThanOrEqual(planBox.x)
+    expect(groundBox.x + groundBox.width).toBeLessThanOrEqual(planBox.x + planBox.width)
+    await page.mouse.click(groundBox.x + groundBox.width / 2, groundBox.y + groundBox.height / 2)
+    await expect.poll(() => page.getByTestId('floor-tab-Ground').getAttribute('aria-pressed')).toBe('true')
+    await page.getByTestId('floor-tab-Loft').click()
+    await expect.poll(() => page.getByTestId('floor-tab-Loft').getAttribute('aria-pressed')).toBe('true')
+    // Pages (ISS-036): a new one shows empty; a page with no floors can be deleted.
+    await page.getByRole('button', { name: 'Add page' }).click()
+    await page.getByTestId('plan-empty-page').waitFor()
+    await page.getByTestId('page-Floors').click()
+    await expect.poll(() => page.getByTestId('floor-tab-Loft').count()).toBe(1)
+    await page.getByTestId('page-Page 2-row').hover()
+    await page.getByRole('button', { name: 'Delete page Page 2' }).click()
+    await expect.poll(() => page.getByTestId('page-Page 2').count()).toBe(0)
+    await page.getByTestId('floor-tab-Loft').click()
+
+    // The floor is a frame (ISS-035): dragged by its name, it moves; its drawing keeps its own coordinates.
+    const frameXBefore = Number(await floorSettings.getByLabel('Frame X (cm)').inputValue())
+    const label = (await plan(page).getByTestId('plan-frame-label').boundingBox())!
+    const cm = await plan(page).evaluate(svg => (svg as SVGSVGElement).getScreenCTM()!.a)
+    await page.mouse.move(label.x + 10, label.y + label.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(label.x + 10 + 120 * cm, label.y + label.height / 2, { steps: 6 })
+    await page.mouse.up()
+    await expect.poll(async () => Math.abs(Number(await floorSettings.getByLabel('Frame X (cm)').inputValue()) - frameXBefore - 120)).toBeLessThanOrEqual(1)
+    expect(frameXBefore).toBeGreaterThan(0)
+    // Floor order (owner: it matters): the new top floor goes down one and back up.
+    await floorSettings.getByText('Order: 3 of 3').waitFor()
+    await floorSettings.getByTestId('floor-down').click()
+    await floorSettings.getByText('Order: 2 of 3').waitFor()
+    await floorSettings.getByTestId('floor-up').click()
+    await floorSettings.getByText('Order: 3 of 3').waitFor()
+
     await placeTable(page, 'L2')
     await plan(page).getByTestId('plan-table-L2').waitFor()
     await plan(page).press('Escape')
@@ -279,6 +324,8 @@ describe('the shop designer on saved layouts', () => {
     const saved = await savedLayout(page)
     const loft = saved.floors[2]!
     expect(loft).toMatchObject({ name: 'Loft', hasRoof: false })
+    expect(loft.canvasX).toBeGreaterThan(120)
+    expect(loft.outline).toEqual(saved.floors[1]!.outline)
     expect(loft.edges[0]).toMatchObject({ kind: 'railing', openings: [{ kind: 'door' }] })
     expect(loft.walls).toEqual([expect.objectContaining({ from: { x: 300, y: 100 }, to: { x: 300, y: 400 } })])
     expect(saved.placements.find(placement => placement.floorId === loft.id)).toBeTruthy()
@@ -436,17 +483,17 @@ describe('the shop designer on saved layouts', () => {
     await card.getByRole('button', { name: 'Edit in 2D' }).click()
     await expect.poll(() => page.getByTestId('selected-table').textContent()).toContain('L1')
 
-    // The same table stays picked on the way back, and a change not saved yet is drawn and named.
-    expect(await page.getByTestId('building-unsaved').count()).toBe(0)
+    // The same table stays picked on the way back, and a change is drawn at once (it saves itself, ISS-027).
+    const movedFrom = await positionOf(page, 'L1')
     await plan(page).press('ArrowUp')
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: movedFrom.x, y: movedFrom.y - 1 })
     await page.getByRole('button', { name: '3D', exact: true }).first().click()
     await drawn(page)
-    await page.getByTestId('building-unsaved').waitFor()
     await expect.poll(() => page.getByTestId('table-card').textContent()).toContain('L1')
-    expect(await saveButton(page).isEnabled()).toBe(true)
-    // Undo from the keyboard works in 3D too (D277).
+    // Undo from the keyboard works in 3D too (D277), and saves again.
     await page.keyboard.press('ControlOrMeta+z')
-    await expect.poll(() => saveButton(page).isDisabled()).toBe(true)
+    await save(page)
+    expect((await savedLayout(page)).placements.find(placement => placement.floorId && placement.x === movedFrom.x && placement.y === movedFrom.y)).toBeTruthy()
   })
 
   it('on a phone, the lists and QR work before WebGL starts and after graphics are lost inside a floor', { timeout: 120_000 }, async () => {
@@ -672,7 +719,7 @@ describe('the shop designer on saved layouts', () => {
     await plan(page).getByTestId('plan-table-L1').click()
     const panel = page.getByRole('complementary', { name: 'Properties' })
     const before = await positionOf(page, 'L1')
-    const x = panel.getByLabel('X (cm)')
+    const x = panel.getByLabel('X (cm)', { exact: true })
     const angle = panel.getByLabel('Rotation (°)')
     const turnedBefore = await angle.inputValue()
 
@@ -734,7 +781,7 @@ describe('the shop designer on saved layouts', () => {
     expect((await positionOf(page, 'L1')).y).toBe(before.y)
     await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
     // Properties' fields (ISS-020, Figma): math, Shift+arrow 10, out of range kept with a message, letters ignored.
-    const xField = page.getByRole('complementary', { name: 'Properties' }).getByLabel('X (cm)')
+    const xField = page.getByRole('complementary', { name: 'Properties' }).getByLabel('X (cm)', { exact: true })
     const typedFrom = await positionOf(page, 'L1')
     await xField.fill(`${typedFrom.x}+20`)
     await xField.press('Enter')
@@ -828,6 +875,8 @@ describe('the shop designer on saved layouts', () => {
     const commands = page.getByTestId('studio-commands')
     await commands.waitFor()
     await page.keyboard.type('draw wall')
+    // The list filters as it's typed: Enter picks the top match once it is there.
+    await expect.poll(() => commands.getByRole('option').first().textContent()).toContain('Draw wall')
     await page.keyboard.press('Enter')
     await expect.poll(() => plan(page).getAttribute('data-mode')).toBe('wall')
     await commands.waitFor({ state: 'detached' })
@@ -862,20 +911,20 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Place at center' }).click()
     const panel = page.getByRole('complementary', { name: 'Properties' })
     for (const [label, value] of [['X (cm)', wallX - 15], ['Y (cm)', wallY]] as const) {
-      await panel.getByLabel(label).fill(String(value))
-      await panel.getByLabel(label).press('Enter')
+      await panel.getByLabel(label, { exact: true }).fill(String(value))
+      await panel.getByLabel(label, { exact: true }).press('Enter')
     }
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     await page.keyboard.press('Escape')
-    await expect.poll(() => panel.getByLabel('X (cm)').count()).toBe(0)
+    await expect.poll(() => panel.getByLabel('X (cm)', { exact: true }).count()).toBe(0)
     await clickPlan(page, { x: wallX - 15, y: wallY })
-    await expect.poll(() => panel.getByLabel('X (cm)').inputValue()).toBe(String(wallX - 15))
+    await expect.poll(() => panel.getByLabel('X (cm)', { exact: true }).inputValue()).toBe(String(wallX - 15))
     expect(await plan(page).getByTestId('plan-edge-selected').count()).toBe(0)
 
     // Dragged near the wall, the plant snaps flush against its inner face (ISS-034): its right edge
     // (25 cm from its centre) on the wall, no gap.
     await dragPlan(page, { x: wallX - 15, y: wallY }, { x: wallX - 29, y: wallY + 40 })
-    await expect.poll(() => panel.getByLabel('X (cm)').inputValue()).toBe(String(wallX - 25))
+    await expect.poll(() => panel.getByLabel('X (cm)', { exact: true }).inputValue()).toBe(String(wallX - 25))
     // The outline's walls are drawn as mitred bands, one shape per wall edge (clean corners).
     expect(await plan(page).locator('[data-testid^="plan-outline-band-"]').count()).toBeGreaterThan(0)
     await page.getByRole('button', { name: 'Undo' }).click()
@@ -1008,8 +1057,8 @@ describe('the shop designer on saved layouts', () => {
     const tableBefore = await positionOf(page, 'L1')
     // Put the plant clear of L1, 150 cm to its right.
     for (const [label, value] of [['X (cm)', tableBefore.x + 150], ['Y (cm)', tableBefore.y]] as const) {
-      await properties.getByLabel(label).fill(String(value))
-      await properties.getByLabel(label).press('Enter')
+      await properties.getByLabel(label, { exact: true }).fill(String(value))
+      await properties.getByLabel(label, { exact: true }).press('Enter')
     }
     await expect.poll(plantAt).toEqual({ x: tableBefore.x + 150, y: tableBefore.y })
     const plantBefore = await plantAt()
@@ -1122,6 +1171,36 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Undo' }).click()
     await page.getByRole('button', { name: 'Undo' }).click()
     await expect.poll(() => plants.count()).toBe(count)
+
+    // Layers (ISS-021, Figma): pointing at a row outlines it on the plan; the eye hides it from the
+    // plan; the lock stops picks on the plan while Layers still selects it; a double-click renames;
+    // Shift+click selects the range.
+    await page.keyboard.press('Escape')
+    await showPanel(page, 'Floors')
+    const plantId = (await original.getAttribute('id'))!.replace('plan-piece-item-', '')
+    const plantRow = page.getByTestId(`layer-item-${plantId}-row`)
+    await plantRow.hover()
+    await plan(page).getByTestId('plan-hover').waitFor()
+    await plantRow.getByTestId('layer-eye').click()
+    await expect.poll(() => original.count()).toBe(0)
+    await plantRow.getByTestId('layer-eye').click()
+    await expect.poll(() => original.count()).toBe(1)
+    const l1Row = page.getByTestId('layer-table-L1-row')
+    await l1Row.hover()
+    await l1Row.getByTestId('layer-lock').click()
+    await expect.poll(() => l1.getAttribute('pointer-events')).toBe('none')
+    await page.getByTestId('layer-table-L1').click()
+    await page.getByTestId('selected-table').getByText('L1', { exact: true }).waitFor()
+    await l1Row.getByTestId('layer-lock').click()
+    await expect.poll(() => l1.getAttribute('pointer-events')).toBeNull()
+    await page.getByTestId(`layer-item-${plantId}`).dblclick()
+    const nameField = plantRow.getByRole('textbox')
+    await nameField.fill('Fern')
+    await nameField.press('Enter')
+    await expect.poll(() => plantRow.textContent()).toContain('Fern')
+    await page.getByTestId('layer-table-L1').click()
+    await page.getByTestId(`layer-item-${plantId}`).click({ modifiers: ['Shift'] })
+    await expect.poll(() => group.textContent()).toMatch(/\d+ selected/)
   })
 
   it('works on a phone: tables in a bottom sheet, no sideways scrolling', async () => {
@@ -1306,7 +1385,12 @@ describe('the shop designer on saved layouts', () => {
     // A mouse on a wide screen gets no quick bar over the plan: Properties and the menu instead.
     await panel.getByLabel('Width (cm)').waitFor()
     expect(await page.getByTestId('quick-actions').count()).toBe(0)
-    expect(await l1.getAttribute('transform')).toContain('rotate(0)')
+    // Earlier tests' turns are kept now that the layout saves itself (ISS-027): start from 0°.
+    if (!(await l1.getAttribute('transform'))?.includes('rotate(0)')) {
+      await panel.getByLabel('Rotation (°)').fill('0')
+      await panel.getByLabel('Rotation (°)').press('Enter')
+    }
+    await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(0)')
     const width = () => panel.getByLabel('Width (cm)').inputValue()
     const before = Number(await width())
 
@@ -1702,9 +1786,7 @@ describe('the shop designer on saved layouts', () => {
     await page.getByTestId('scene-button').click()
     const panel = page.getByRole('complementary', { name: 'Scene' })
     await panel.getByRole('radio', { name: /Neighborhood lane/ }).click()
-    // A change to the layout, shown at once and saved with it.
-    await page.getByTestId('building-unsaved').waitFor()
-    expect(await saveButton(page).isDisabled()).toBe(false)
+    // A change to the layout, shown at once and saved with it (it saves itself, ISS-027).
     await page.getByRole('button', { name: 'Fit scene' }).click()
     await shot(page, '3d-scene-panel')
     // The street never gets between a person and their tables.
@@ -1817,8 +1899,7 @@ describe('the shop designer on saved layouts', () => {
     await toggle.click()
     await shot(page, 'explore-settings-phone')
     await dialog.getByRole('button', { name: 'Done' }).click()
-    await expect.poll(() => saveButton(page).isEnabled()).toBe(true)
-    expect((await fetch(publicPath())).status).toBe(404)
+    // Saved a moment later by itself (ISS-027): Explore shows it then.
     await save(page)
 
     const published = await fetch(publicPath())
@@ -1832,5 +1913,25 @@ describe('the shop designer on saved layouts', () => {
     await dialog.getByRole('button', { name: 'Done' }).click()
     await save(page)
     expect((await fetch(publicPath())).status).toBe(404)
+  })
+
+  it('version history (ISS-027): lists kept versions; Restore is one undo step and saves itself', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').waitFor()
+    const before = await savedLayout(page)
+    await page.getByRole('button', { name: 'Version history' }).click()
+    const list = page.getByTestId('layout-history')
+    await list.waitFor()
+    const restore = list.getByRole('button', { name: /^Restore version/ }).and(page.locator(':not([disabled])')).first()
+    await restore.click()
+    await page.getByText(/Version \d+ restored/).first().waitFor()
+    await save(page)
+    // Undo brings back what was there, and that saves too.
+    await page.keyboard.press('ControlOrMeta+z')
+    await save(page)
+    const after = await savedLayout(page)
+    expect(after.floors.map(floor => floor.id)).toEqual(before.floors.map(floor => floor.id))
+    expect(after.placements).toEqual(before.placements)
   })
 })
