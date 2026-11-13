@@ -26,7 +26,7 @@ import { edgeLength, floorPageId, innerWallKind, layoutPages, innerWallLength, i
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
 import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeCursor, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
-import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, majorGridOpacity, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
 import { moveWall, moveWallEnd, moveWalls } from '../designer/walls'
@@ -126,6 +126,7 @@ const perPixel = computed(() => 1 / scale.value)
 const MEASURED_MIN_PX = 100
 /** The fine grid fades out when its lines get close on screen (ISS-031). */
 const minorOpacity = computed(() => minorGridOpacity(scale.value))
+const majorOpacity = computed(() => majorGridOpacity(scale.value))
 const measured = computed(() => screenWidth.value >= MEASURED_MIN_PX && screenHeight.value >= MEASURED_MIN_PX)
 
 // The canvas moved on the page (the sidebar hid, showed or was resized): every plan point stays
@@ -1451,6 +1452,7 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
           :d="`M${GRID_MAJOR_CM} 0H0V${GRID_MAJOR_CM}`"
           fill="none"
           stroke="var(--ui-border-accented)"
+          :stroke-opacity="majorOpacity"
           stroke-width="1"
           vector-effect="non-scaling-stroke"
         />

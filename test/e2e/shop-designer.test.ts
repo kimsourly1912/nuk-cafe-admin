@@ -836,7 +836,7 @@ describe('the shop designer on saved layouts', () => {
     // Ctrl+0 is 100 % too (ISS-006), without the browser's page zoom.
     await page.keyboard.press('Control+0')
     await expect.poll(() => zoom.textContent()).toBe('100%')
-    // A typed percentage in the zoom menu (ISS-003): clamped to 800 %, letters are ignored.
+    // A typed percentage in the zoom menu (ISS-003): clamped to 25,600 % (ISS-005), letters are ignored.
     // Each time from a closed menu: a number closes it (wait until it is gone, it animates out),
     // letters leave it open.
     const zoomField = page.getByTestId('zoom-input')
@@ -849,10 +849,10 @@ describe('the shop designer on saved layouts', () => {
     await typeZoom('150', true)
     await expect.poll(() => zoom.textContent()).toBe('150%')
     await typeZoom('99999', true)
-    await expect.poll(() => zoom.textContent()).toBe('800%')
+    await expect.poll(() => zoom.textContent()).toBe('25600%')
     await typeZoom('abc', false)
-    await expect.poll(() => zoomField.inputValue()).toBe('800')
-    expect(await zoom.textContent()).toBe('800%')
+    await expect.poll(() => zoomField.inputValue()).toBe('25600')
+    expect(await zoom.textContent()).toBe('25600%')
     await page.keyboard.press('Escape')
     await zoomField.waitFor({ state: 'detached' })
     await page.keyboard.press('Shift+1')
