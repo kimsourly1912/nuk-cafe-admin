@@ -257,13 +257,24 @@ describe('the shop designer on saved layouts', () => {
     expect(await panel.getByRole('button', { name: 'Window' }).isDisabled()).toBe(true)
     await shot(page, 'edge-railing-gate')
 
-    // Draw wall (9A): two clicks make a wall; Escape ends the chain.
+    // Draw wall (9A): two clicks make a wall; Enter ends the chain.
     await drawWith(page, 'Draw wall')
     await page.getByTestId('tool-bar').getByText('Draw wall').waitFor()
     await clickPlan(page, { x: 300, y: 100 })
     await clickPlan(page, { x: 300, y: 400 })
+    await page.keyboard.press('Enter')
+    // Any angle by default; a click on the chain's first point closes the loop and ends it (ISS-018).
+    for (const point of [{ x: 500, y: 100 }, { x: 700, y: 175 }, { x: 550, y: 350 }, { x: 500, y: 100 }]) await clickPlan(page, point)
+    await expect.poll(() => plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(4)
+    await clickPlan(page, { x: 800, y: 400 })
+    await clickPlan(page, { x: 800, y: 400 })
+    expect(await plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(4)
+    await page.keyboard.press('Control+z')
+    await page.keyboard.press('Control+z')
+    await page.keyboard.press('Control+z')
+    // Escape ends the chain and leaves the tool.
     await page.keyboard.press('Escape')
-    await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
+    await page.getByTestId('tool-bar').waitFor({ state: 'detached' })
     await expect.poll(() => plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(1)
     await save(page)
 
@@ -841,7 +852,6 @@ describe('the shop designer on saved layouts', () => {
     await clickPlan(page, { x: right + 25, y: top + 100 })
     await clickPlan(page, { x: right + 225, y: top + 100 })
     await page.keyboard.press('Escape')
-    await page.keyboard.press('Escape')
     await expect.poll(mode).toBe('select')
     await clickPlan(page, { x: right + 125, y: top + 100 })
     const properties = page.getByRole('complementary', { name: 'Properties' })
@@ -1383,8 +1393,9 @@ describe('the shop designer on saved layouts', () => {
     await drawWith(page, 'Draw wall')
     await clickPlan(page, { x: right + 80, y: top })
     await clickPlan(page, { x: right + 80, y: top + 200 })
+    // Escape ends the chain and leaves Draw wall (ISS-018).
     await page.keyboard.press('Escape')
-    await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
+    await page.getByTestId('tool-bar').waitFor({ state: 'detached' })
     await expect.poll(walls).toBe(before + 1)
     await clickPlan(page, { x: right + 80, y: top + 100 })
     await page.keyboard.press('Delete')

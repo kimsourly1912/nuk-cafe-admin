@@ -4,7 +4,7 @@ import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook, keepsCircle } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { besideOf, chairPoses, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, constrainAngle, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import { fitDistance } from '../designer/scene/units'
@@ -322,5 +322,16 @@ describe('round pieces (ISS-017)', () => {
     expect(keepsCircle('block-round')).toBe(false)
     expect(keepsCircle('plant')).toBe(true)
     expect(keepsCircle('block')).toBe(false)
+  })
+})
+
+describe('Shift while drawing walls and corners (ISS-018)', () => {
+  const from = { x: 0, y: 0 }
+  it('goes to the nearest 45° direction, on the grid', () => {
+    expect(constrainAngle(from, { x: 300, y: 50 })).toEqual({ x: 300, y: 0 })
+    expect(constrainAngle(from, { x: -40, y: -275 })).toEqual({ x: 0, y: -275 })
+    expect(constrainAngle(from, { x: 200, y: 150 })).toEqual({ x: 175, y: 175 })
+    expect(constrainAngle(from, { x: -200, y: 175 })).toEqual({ x: -200, y: 200 })
+    expect(constrainAngle(from, { x: -300, y: 25 })).toEqual({ x: -300, y: 0 })
   })
 })

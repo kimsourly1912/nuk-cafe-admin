@@ -2682,15 +2682,15 @@ const pendingLabel = computed(() => {
             </template>
             <template v-else-if="mode === 'shape'">
               <span>Drag to draw a {{ roundShape ? 'round block' : 'block' }} for anything the library doesn't have: a stage, a planter box, a platform.</span>
-              <span>Name it, set its height and finish in Properties. S draws rectangles, O circles; Shift keeps the sides equal.</span>
+              <span>Name it, set its height and finish in Properties. S draws rectangles, O ellipses; Shift keeps the sides equal, Alt draws from the middle.</span>
             </template>
             <template v-else-if="mode === 'room'">
               <span>Drag a rectangle: the floor, or a room added to it.</span>
               <span>Hold Alt while you let go to cut it out instead. Ctrl or ⌘ for 5 cm steps.</span>
             </template>
             <template v-else>
-              <span>Click where the wall starts, then where it ends.</span>
-              <span>Walls carry on from the last end; Escape or a double-click stops.</span>
+              <span>Click where the wall starts, then where it ends: any angle, Shift for 45° steps.</span>
+              <span>Walls carry on from the last end; click the first point to close the loop. Enter or a double-click stops; Escape stops and leaves.</span>
             </template>
           </div>
 

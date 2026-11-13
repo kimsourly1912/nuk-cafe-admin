@@ -45,6 +45,6 @@ export const STUDIO_DRAG_KEYS = [
   { kbds: ['alt'], label: 'Shape: draw from the middle' },
   { kbds: ['meta'], label: 'Drag or draw: 5 cm steps instead of 25 cm, no snapping to other pieces' },
   { kbds: ['alt'], label: 'Drag: leave a copy behind' },
-  { kbds: ['alt'], label: 'Draw: any angle' },
+  { kbds: ['shift'], label: 'Draw a wall or a floor corner: 45° steps (any angle without it)' },
   { kbds: ['alt'], label: 'Point at a piece: the gaps from the selection (or to the walls)' },
 ] as const

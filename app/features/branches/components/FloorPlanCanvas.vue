@@ -23,7 +23,7 @@ import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
-import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
@@ -234,8 +234,22 @@ const drawn = shallowRef<Point[]>([])
 const hover = shallowRef<Point | null>(null)
 /** The corner picked in Draw outline: arrow keys move it, Delete removes it. */
 const corner = ref<number | null>(null)
-/** Where the inside wall being drawn starts. */
+/** Where the inside wall being drawn starts, and where its chain began (a click there closes it). */
 const wallStart = shallowRef<Point | null>(null)
+const chainStart = shallowRef<Point | null>(null)
+
+function endWallChain() {
+  wallStart.value = null
+  chainStart.value = null
+}
+
+/** Within 12 px of the chain's first point, after at least one wall, the point is that point. */
+function snapToChainStart(point: Point): Point {
+  const first = chainStart.value
+  const start = wallStart.value
+  if (props.mode !== 'wall' || !first || !start || (start.x === first.x && start.y === first.y)) return point
+  return Math.hypot(point.x - first.x, point.y - first.y) <= perPixel.value * 12 ? first : point
+}
 /** What a click would pick, under the pointer in the select tool (D278). */
 const hovered = shallowRef<PlanSelection | null>(null)
 
@@ -244,7 +258,7 @@ watch(() => [props.mode, props.floorId], () => {
   drawn.value = []
   hover.value = null
   corner.value = null
-  wallStart.value = null
+  endWallChain()
 })
 
 const edges = computed(() => shape.value.edges.map((edge, index) => {
@@ -493,12 +507,11 @@ function viewCenter(): Point {
 /** Ctrl or ⌘ held: 5 cm steps instead of the 25 cm grid while dragging or drawing (D278). */
 const fineSnap = (event: { ctrlKey: boolean, metaKey: boolean }) => event.ctrlKey || event.metaKey
 
-/** Snapped to the grid; with `from`, straight across or down from it unless `free`. */
-function drawPoint(plan: Point, from: Point | undefined, free: boolean, fine: boolean): Point {
+/** Snapped to the grid; any angle from `from`, or 45° steps when `constrain` (Shift, like Figma: ISS-018). */
+function drawPoint(plan: Point, from: Point | undefined, constrain: boolean, fine: boolean): Point {
   const step = fine ? FINE_GRID_CM : GRID_CM
   const point = { x: snap(plan.x, step), y: snap(plan.y, step) }
-  if (!from || free) return point
-  return Math.abs(point.x - from.x) >= Math.abs(point.y - from.y) ? { x: point.x, y: from.y } : { x: from.x, y: point.y }
+  return from && constrain ? constrainAngle(from, point, step) : point
 }
 
 type Gesture
@@ -512,7 +525,7 @@ type Gesture
     | { type: 'side', index: number, startPlan: Point, startClient: Point, moved: boolean }
     | { type: 'group', startPlan: Point, startClient: Point, moved: boolean, toggle?: PlanSelection }
     | { type: 'marquee', startPlan: Point, startClient: Point, moved: boolean, additive: boolean }
-    | { type: 'pan', startClient: Point, startCamera: Camera, moved: boolean, plan: Point | null, event: { altKey: boolean, fine: boolean }, navigateOnly?: boolean }
+    | { type: 'pan', startClient: Point, startCamera: Camera, moved: boolean, plan: Point | null, event: { shiftKey: boolean, fine: boolean }, navigateOnly?: boolean }
     | { type: 'pinch', distance: number, startCamera: Camera, middle: Point }
 
 const pointers = new Map<number, Point>()
@@ -601,7 +614,7 @@ function onPointerDown(event: PointerEvent) {
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
     hovered.value = null
     panning.value = true
-    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan: null, event: { altKey: false, fine: false }, navigateOnly: true }
+    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan: null, event: { shiftKey: false, fine: false }, navigateOnly: true }
     return
   }
   svg.value?.setPointerCapture(event.pointerId)
@@ -622,7 +635,7 @@ function onPointerDown(event: PointerEvent) {
   const target = (event.target as Element).closest<SVGElement>('[data-kind]')
   const plan = toPlan(event.clientX, event.clientY)
   const startPan = () => {
-    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan, event: { altKey: event.altKey, fine: fineSnap(event) } }
+    gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan, event: { shiftKey: event.shiftKey, fine: fineSnap(event) } }
   }
   if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
@@ -739,7 +752,7 @@ function followPointer(event: PointerMove) {
     if (drawing.value || props.mode === 'wall') {
       const plan = toPlan(event.clientX, event.clientY)
       const from = drawing.value ? drawn.value.at(-1) : wallStart.value ?? undefined
-      hover.value = plan ? drawPoint(plan, from, event.altKey, fineSnap(event)) : null
+      hover.value = plan ? snapToChainStart(drawPoint(plan, from, event.shiftKey, fineSnap(event))) : null
     }
     return
   }
@@ -823,7 +836,7 @@ function followPointer(event: PointerMove) {
     const wall = floor.value.walls.find(candidate => candidate.id === id)
     if (!wall) return
     const other = end === 'from' ? wall.to : wall.from
-    liveWalls.value = moveWallEnd(floor.value.walls, id, end, drawPoint(plan, other, event.altKey, fineSnap(event)))
+    liveWalls.value = moveWallEnd(floor.value.walls, id, end, drawPoint(plan, other, event.shiftKey, fineSnap(event)))
     return
   }
   if (gesture.type === 'wall') {
@@ -907,7 +920,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   if (!finished || cancelled) return
   if (finished.type === 'pan' && !finished.moved && !finished.navigateOnly) return tap(finished.plan, finished.event)
   if (finished.type === 'marquee') {
-    if (!finished.moved || !box) return tap(finished.startPlan, { altKey: event.altKey, fine: fineSnap(event) })
+    if (!finished.moved || !box) return tap(finished.startPlan, { shiftKey: event.shiftKey, fine: fineSnap(event) })
     const touched = pieceBoxes.value.filter(piece => piece.from && piece.to ? segmentTouches(box, piece.from, piece.to) : overlaps(box, piece.bounds))
     emit('selectMany', touched.map(piece => piece.target), finished.additive)
     return
@@ -960,7 +973,7 @@ function cancelGesture(): boolean {
 }
 
 /** A tap on empty plan: clears the selection, or adds a corner or a wall end while drawing. */
-function tap(plan: Point | null, keys: { altKey: boolean, fine: boolean }) {
+function tap(plan: Point | null, keys: { shiftKey: boolean, fine: boolean }) {
   if (props.mode === 'hand') return
   if (props.placing) {
     if (plan) emit('place', plan)
@@ -968,25 +981,26 @@ function tap(plan: Point | null, keys: { altKey: boolean, fine: boolean }) {
   }
   if (drawing.value && plan) {
     const first = drawn.value[0]
-    const point = drawPoint(plan, drawn.value.at(-1), keys.altKey, keys.fine)
+    const point = drawPoint(plan, drawn.value.at(-1), keys.shiftKey, keys.fine)
     if (first && drawn.value.length >= 3 && Math.hypot(point.x - first.x, point.y - first.y) <= Math.max(CLOSE_DISTANCE_CM, perPixel.value * 12)) return closeDrawing()
     const last = drawn.value.at(-1)
     if (!last || last.x !== point.x || last.y !== point.y) drawn.value = [...drawn.value, point]
     return
   }
   if (props.mode === 'wall' && plan) {
-    const point = drawPoint(plan, wallStart.value ?? undefined, keys.altKey, keys.fine)
+    const point = snapToChainStart(drawPoint(plan, wallStart.value ?? undefined, keys.shiftKey, keys.fine))
     const start = wallStart.value
     if (!start) {
       wallStart.value = point
+      chainStart.value = point
       return
     }
     // The same point twice ends the chain.
-    if (start.x === point.x && start.y === point.y) {
-      wallStart.value = null
-      return
-    }
+    if (start.x === point.x && start.y === point.y) return endWallChain()
     emit('addWall', { from: start, to: point })
+    // Back on the chain's first point (ISS-018, Figma): the loop is closed and the chain ends.
+    const first = chainStart.value
+    if (first && first.x === point.x && first.y === point.y) return endWallChain()
     wallStart.value = point
     return
   }
@@ -1011,10 +1025,7 @@ function closeDrawing() {
  */
 function onDoubleClick(event: MouseEvent) {
   if (drawing.value) return closeDrawing()
-  if (props.mode === 'wall') {
-    wallStart.value = null
-    return
-  }
+  if (props.mode === 'wall') return endWallChain()
   const target = (event.target as Element).closest<SVGElement>('[data-kind]')
   const plan = toPlan(event.clientX, event.clientY)
   if (props.mode === 'outline' && target?.dataset.kind === 'edge' && plan) {
@@ -1108,9 +1119,14 @@ function keydown(event: KeyboardEvent): boolean {
     return false
   }
   if (props.mode === 'wall') {
-    if (event.key !== 'Escape' || !wallStart.value) return false
-    wallStart.value = null
-    return done()
+    if (!wallStart.value) return false
+    // Enter ends the chain; Escape ends it and, by Studio, leaves the tool too (ISS-018).
+    if (event.key === 'Enter') {
+      endWallChain()
+      return done()
+    }
+    if (event.key === 'Escape') endWallChain()
+    return false
   }
   const selection = props.selection
   if (!selection) return false

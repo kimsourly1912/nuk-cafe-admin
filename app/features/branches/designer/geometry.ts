@@ -391,3 +391,16 @@ export function drawBounds(options: DrawBoundsOptions): Bounds {
   if (fromCenter) return { minX: start.x - Math.abs(dx), minY: start.y - Math.abs(dy), maxX: start.x + Math.abs(dx), maxY: start.y + Math.abs(dy) }
   return { minX: Math.min(start.x, start.x + dx), minY: Math.min(start.y, start.y + dy), maxX: Math.max(start.x, start.x + dx), maxY: Math.max(start.y, start.y + dy) }
 }
+
+/**
+ * Shift while drawing a wall or a corner (ISS-018, ISS-019, Figma): the point moves to the nearest
+ * 45° direction from `from`, staying on the grid (a diagonal goes as far across as down).
+ */
+export function constrainAngle(from: Point, point: Point, step: number = GRID_CM): Point {
+  const dx = point.x - from.x
+  const dy = point.y - from.y
+  const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4))
+  if (octant % 2 === 0) return Math.abs(octant) % 4 === 0 ? { x: point.x, y: from.y } : { x: from.x, y: point.y }
+  const reach = snap((Math.abs(dx) + Math.abs(dy)) / 2, step)
+  return { x: from.x + Math.sign(dx) * reach, y: from.y + Math.sign(dy) * reach }
+}
