@@ -4,7 +4,7 @@
  * order search (on the queue), Sold out (the page that switches items off, 6.3c, D105), Manage for
  * managers and owners (Dining tables and Reports, D198; Pause or Resume online orders, D199;
  * each by the session's permissions at the branch, D240, and the server checks again), the color mode and the user menu (the chime on or off, another branch, another cafe (D144), change password,
- * install app (D203), sign out).
+ * install app (D203), Switch person (account security Q4), sign out).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { PublicBranch } from '#shared/contracts/branches'
@@ -78,7 +78,11 @@ const menu = computed<DropdownMenuItem[][]>(() => [
     { label: 'Account security', icon: 'i-lucide-shield-check', to: tenantPath('/counter/account-security') },
     { label: muted.value ? 'Turn on the new-order sound' : 'Mute the new-order sound', icon: muted.value ? 'i-lucide-bell' : 'i-lucide-bell-off', onSelect: () => { muted.value = !muted.value } },
   ],
-  [{ label: 'Sign out', icon: 'i-lucide-log-out', onSelect: () => signOut() }],
+  [
+    // A shared tablet (account security step 5, Q4): the next person signs in and lands back here.
+    { label: 'Switch person', icon: 'i-lucide-users', onSelect: () => void signOut({ switchPerson: true }) },
+    { label: 'Sign out', icon: 'i-lucide-log-out', onSelect: () => void signOut() },
+  ],
 ])
 </script>
 

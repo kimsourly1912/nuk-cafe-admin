@@ -1,6 +1,6 @@
 # Account security: two-step sign-in, session length, re-confirming dangerous actions
 
-Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 done (D246, PR #234); step 3b done (D247, PR #235); step 4 built (D248, in review); 5 not started. No mockup rounds (step 1 waived; D245 made that the default). Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
+Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 done (D246, PR #234); step 3b done (D247, PR #235); step 4 built (D248, in review); step 5 built (2026-11-13, no new decision: Q4). No mockup rounds (step 1 waived; D245 made that the default). Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
 
 ## 1. Where we are (checked in the code, 2026-10-30)
 
@@ -76,9 +76,10 @@ Built as below. The account page also shows **Two-step sign-in: On/Off** for eve
 
 - Staff list: last sign-in (from Better Auth's sessions) and two-step status. Only this cafe's staff (two-cafe isolation test). No new action: disabling someone already signs them out everywhere.
 
-### Step 5: Switch person on the counter
+### Step 5: Switch person on the counter (built, 2026-11-13)
 
 - Counter user menu → **Switch person**: signs out and shows the counter sign-in at once, keeping the branch in `?redirect=`. No idle auto-lock (the queue must stay visible).
+- Built: `useCounterSession().signOut({ switchPerson: true })`; the sign-in's `counterRedirectTarget` already keeps the redirect inside this cafe's counter, and the branch page's own checks (D240) refuse someone who doesn't work there. e2e: `counter.test.ts` "switching person at the counter" (fails with the redirect left out).
 
 ### Later (not planned in detail)
 

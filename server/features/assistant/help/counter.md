@@ -16,6 +16,7 @@ Branch staff, managers and admins use the **counter app** at `/counter` (its own
 - Three columns, **To pay**, **Preparing**, **Ready** (tabs with counts on a phone). Each card shows the number, pickup or table, the customer's first name, the items, the total and how long ago it was placed. "Pay by" turns amber in the last 5 minutes.
 - New orders are marked **New** for a minute with a chime. Mute the chime in the user menu.
 - Someone who works at more than one cafe finds **Another cafe** in the user menu: it opens **Your cafes**, where each cafe's counter (and admin, for an owner) opens fresh.
+- **Switch person** in the user menu hands a shared tablet to the next person: it signs you out and shows the counter's sign-in; once they sign in, the counter opens on the same branch page (if they work there). Nothing locks on its own, so the queue stays on screen; sign out or switch person before you leave the tablet.
 - Search by order number or name.
 - Click a card to open the order and its one next action.
 - The browser tab shows how many orders wait for payment, for example **(2) Queue**, so you see them while another tab is open.

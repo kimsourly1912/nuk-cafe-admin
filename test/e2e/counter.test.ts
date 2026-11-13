@@ -592,6 +592,26 @@ describe('signing out of the counter', () => {
   })
 })
 
+describe('switching person at the counter (account security step 5)', () => {
+  it('signs out to the sign-in, empty, and the next person lands back on the same branch', async () => {
+    const { page, problems } = await cashierAtCounter()
+    await page.getByRole('button', { name: /, account: Sophea Keo/ }).click()
+    await page.getByRole('menuitem', { name: 'Switch person' }).click()
+    await page.waitForURL(u => u.pathname === '/c/nuk/counter/sign-in')
+    expect(new URL(page.url()).searchParams.get('redirect')).toBe(`/c/nuk/counter/${seed.openBranchId}`)
+    // The cashier is signed out: nothing of theirs is kept for the next person.
+    expect(await page.getByLabel('Email').inputValue()).toBe('')
+    expect((await (await page.request.get(url('/api/c/nuk/counter/me'))).status())).toBe(401)
+
+    await page.getByLabel('Email').fill(seed.customers.manager.email)
+    await page.getByLabel('Password', { exact: true }).fill(seed.customers.manager.password)
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}`)
+    await page.getByRole('button', { name: /, account: Mony Chan/ }).waitFor()
+    expect(problems).toEqual([])
+  })
+})
+
 describe('sold out at the counter (D105)', () => {
   const coconut = async () => {
     const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
