@@ -125,7 +125,7 @@ const selectedPiece = computed(() => {
   const what = isFigureKind(item.kind) ? 'Decoration' : item.kind === 'stairs' ? 'Structure' : look ? spec.label : 'Furniture'
   const size = isFigureKind(item.kind)
     ? null
-    : spec.footprint === 'round'
+    : spec.footprint === 'round' && item.width === item.depth
       ? `Ø ${item.width} cm`
       : `${item.width} × ${item.depth}${isItemLookKind(item.kind) ? ` × ${pieceHeight(item)}` : ''} cm`
   return {

@@ -14,7 +14,7 @@ import { edgeLength, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKi
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
-import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
+import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
 import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, placementExtent, snap } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
@@ -487,9 +487,9 @@ function placeShape(bounds: Bounds) {
     return
   }
   const id = newLayoutId('item')
+  // A round block may be an ellipse, as drawn (ISS-017); Shift draws a circle.
   const kind = roundShape.value ? 'block-round' : 'block'
-  const size = kind === 'block-round' ? { width, depth: width } : { width, depth }
-  changeFloor(target => target.items.push({ id, kind, x: Math.round((bounds.minX + bounds.maxX) / 2), y: Math.round((bounds.minY + bounds.maxY) / 2), rotation: 0, ...size, finishes: {} }))
+  changeFloor(target => target.items.push({ id, kind, x: Math.round((bounds.minX + bounds.maxX) / 2), y: Math.round((bounds.minY + bounds.maxY) / 2), rotation: 0, width, depth, finishes: {} }))
   finishTool()
   selection.value = { kind: 'item', id }
 }
@@ -1948,7 +1948,7 @@ const pendingLabel = computed(() => {
             :min="10"
             :max="2000"
             :step="5"
-            @update:model-value="value => setNumber(value, selectedItem!.width, width => updateItem(selectedItem!.id, { width, ...(ITEM_SPECS[selectedItem!.kind].footprint === 'round' ? { depth: width } : {}) }))"
+            @update:model-value="value => setNumber(value, selectedItem!.width, width => updateItem(selectedItem!.id, { width, ...(keepsCircle(selectedItem!.kind) ? { depth: width } : {}) }))"
           />
         </UFormField>
         <UFormField label="Depth (cm)">
@@ -1957,7 +1957,7 @@ const pendingLabel = computed(() => {
             :min="10"
             :max="2000"
             :step="5"
-            :disabled="ITEM_SPECS[selectedItem.kind].footprint === 'round'"
+            :disabled="keepsCircle(selectedItem.kind)"
             @update:model-value="value => setNumber(value, selectedItem!.depth, depth => updateItem(selectedItem!.id, { depth }))"
           />
         </UFormField>

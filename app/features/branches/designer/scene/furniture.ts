@@ -187,9 +187,13 @@ export function buildItem(context: BuildContext, item: ItemBuild): Group {
     case 'block':
       group.add(part(box(context, item.width, height, item.depth, 1.5), finish('body'), { x: 0, y: height / 2, z: 0 }))
       break
-    case 'block-round':
-      group.add(part(cylinder(context, item.width / 2, item.width / 2, height, 40), finish('body'), { x: 0, y: height / 2, z: 0 }))
+    case 'block-round': {
+      // A circle or an ellipse (ISS-017): the cylinder stretched to the depth.
+      const body = part(cylinder(context, item.width / 2, item.width / 2, height, 40), finish('body'), { x: 0, y: height / 2, z: 0 })
+      body.scale.z = item.depth / item.width
+      group.add(body)
       break
+    }
   }
   group.userData.kind = item.kind
   return group

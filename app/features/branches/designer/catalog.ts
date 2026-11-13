@@ -163,6 +163,14 @@ export const BUILT_IN_LOOKS: TableLook[] = [
 /** The look a table starts with when it's placed from Unplaced tables. */
 export const NEW_TABLE_LOOK = 'round-cafe'
 
+/**
+ * Whether a piece stays a circle: its width and depth change together. A round block is the one
+ * round piece that may be an ellipse, like Figma's ellipse tool (ISS-017).
+ */
+export function keepsCircle(kind: ItemKind): boolean {
+  return ITEM_SPECS[kind].footprint === 'round' && kind !== 'block-round'
+}
+
 export function findLook(looks: readonly TableLook[], id: string): TableLook {
   return looks.find(look => look.id === id) ?? BUILT_IN_LOOKS[0]!
 }

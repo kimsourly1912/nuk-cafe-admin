@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
-import { BUILT_IN_LOOKS, findLook } from '../designer/catalog'
+import { BUILT_IN_LOOKS, findLook, keepsCircle } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
 import { besideOf, chairPoses, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
@@ -314,5 +314,13 @@ describe('drawing a Shape or Room rectangle (ISS-017)', () => {
   it('Alt draws from the middle; with Shift a square around it', () => {
     expect(drawBounds({ start, end: { x: 150, y: 125 }, fromCenter: true })).toEqual({ minX: 50, minY: 75, maxX: 150, maxY: 125 })
     expect(drawBounds({ start, end: { x: 150, y: 125 }, fromCenter: true, keepRatio: true })).toEqual({ minX: 50, minY: 50, maxX: 150, maxY: 150 })
+  })
+})
+
+describe('round pieces (ISS-017)', () => {
+  it('a round block may be an ellipse; other round pieces stay circles; square ones are free', () => {
+    expect(keepsCircle('block-round')).toBe(false)
+    expect(keepsCircle('plant')).toBe(true)
+    expect(keepsCircle('block')).toBe(false)
   })
 })

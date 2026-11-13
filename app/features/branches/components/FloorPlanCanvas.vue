@@ -22,7 +22,7 @@
 import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
-import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
+import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
 import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
@@ -532,7 +532,7 @@ function sizeRules(selection: PlanSelection): { round: boolean, min: number, max
     return { round: !!placement && findLook(props.looks, placement.lookId).shape === 'round', min: TABLE_SIZE_MIN_CM, max: TABLE_SIZE_MAX_CM }
   }
   const item = floor.value.items.find(candidate => candidate.id === selection.id)
-  return { round: !!item && ITEM_SPECS[item.kind].footprint === 'round', min: ITEM_SIZE_MIN_CM, max: ITEM_SIZE_MAX_CM }
+  return { round: !!item && keepsCircle(item.kind), min: ITEM_SIZE_MIN_CM, max: ITEM_SIZE_MAX_CM }
 }
 
 // --- Space or the middle button pans from any tool (D278) ---
@@ -764,10 +764,10 @@ function followPointer(event: PointerMove) {
   if (gesture.type === 'room') {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
     const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
-    // Like Figma (ISS-017): Shift keeps both sides equal while held (a circle always does); Alt
+    // Like Figma (ISS-017): Shift keeps both sides equal while held (a round block too); Alt
     // draws a shape from its middle. In Room, Alt cuts instead (its own meaning, D278).
     const shapeTool = props.mode === 'shape'
-    const bounds = drawBounds({ start: gesture.start, end, keepRatio: event.shiftKey || (shapeTool && props.roundShape), fromCenter: shapeTool && event.altKey })
+    const bounds = drawBounds({ start: gesture.start, end, keepRatio: event.shiftKey, fromCenter: shapeTool && event.altKey })
     roomPreview.value = { bounds, cut: props.mode === 'room' && event.altKey }
     return
   }
@@ -1486,9 +1486,10 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         </g>
         <!-- A shape (D278): its finish's colour and its name. -->
         <g v-else-if="isShapeKind(item.kind)">
-          <circle
+          <ellipse
             v-if="item.kind === 'block-round'"
-            :r="item.width / 2"
+            :rx="item.width / 2"
+            :ry="item.depth / 2"
             :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
             stroke="var(--ui-text-muted)"
             stroke-width="3"
