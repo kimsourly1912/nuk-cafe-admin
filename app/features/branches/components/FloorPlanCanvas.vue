@@ -23,7 +23,7 @@ import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
-import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
@@ -764,14 +764,11 @@ function followPointer(event: PointerMove) {
   if (gesture.type === 'room') {
     const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
     const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
-    const { start } = gesture
-    // A circle (or Shift, like Figma) keeps both sides equal.
-    if (props.mode === 'shape' && (props.roundShape || event.shiftKey)) {
-      const side = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y))
-      end.x = start.x + Math.sign(end.x - start.x || 1) * side
-      end.y = start.y + Math.sign(end.y - start.y || 1) * side
-    }
-    roomPreview.value = { bounds: { minX: Math.min(start.x, end.x), minY: Math.min(start.y, end.y), maxX: Math.max(start.x, end.x), maxY: Math.max(start.y, end.y) }, cut: props.mode === 'room' && event.altKey }
+    // Like Figma (ISS-017): Shift keeps both sides equal while held (a circle always does); Alt
+    // draws a shape from its middle. In Room, Alt cuts instead (its own meaning, D278).
+    const shapeTool = props.mode === 'shape'
+    const bounds = drawBounds({ start: gesture.start, end, keepRatio: event.shiftKey || (shapeTool && props.roundShape), fromCenter: shapeTool && event.altKey })
+    roomPreview.value = { bounds, cut: props.mode === 'room' && event.altKey }
     return
   }
   if (gesture.type === 'rotate') {

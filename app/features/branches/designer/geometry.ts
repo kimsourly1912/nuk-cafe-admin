@@ -367,3 +367,27 @@ export function findOpening(edges: readonly Edge[], kind: Opening['kind'], longe
 export function newLayoutId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`
 }
+
+export interface DrawBoundsOptions {
+  /** Where the drag started and where the pointer is, both already on the grid. */
+  start: Point
+  end: Point
+  /** Shift (ISS-017, Figma): a square. */
+  keepRatio?: boolean
+  /** Alt (ISS-017, Figma): the start is the middle, not a corner. */
+  fromCenter?: boolean
+}
+
+/** The rectangle a Shape or Room drag draws, with Figma's Shift and Alt. */
+export function drawBounds(options: DrawBoundsOptions): Bounds {
+  const { start, end, keepRatio, fromCenter } = options
+  let dx = end.x - start.x
+  let dy = end.y - start.y
+  if (keepRatio) {
+    const side = Math.max(Math.abs(dx), Math.abs(dy))
+    dx = Math.sign(dx || 1) * side
+    dy = Math.sign(dy || 1) * side
+  }
+  if (fromCenter) return { minX: start.x - Math.abs(dx), minY: start.y - Math.abs(dy), maxX: start.x + Math.abs(dx), maxY: start.y + Math.abs(dy) }
+  return { minX: Math.min(start.x, start.x + dx), minY: Math.min(start.y, start.y + dy), maxX: Math.max(start.x, start.x + dx), maxY: Math.max(start.y, start.y + dy) }
+}

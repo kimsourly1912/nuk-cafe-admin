@@ -4,7 +4,7 @@ import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { besideOf, chairPoses, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import { fitDistance } from '../designer/scene/units'
@@ -296,5 +296,23 @@ describe('rotating from a corner (ISS-033)', () => {
     const current = rotatePoint({ x: 50, y: -50 }, 20)
     expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current, origin: 0 })).toBe(20)
     expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current, origin: 0, step: 15 })).toBe(15)
+  })
+})
+
+describe('drawing a Shape or Room rectangle (ISS-017)', () => {
+  const start = { x: 100, y: 100 }
+  it('draws from corner to corner, in any direction', () => {
+    expect(drawBounds({ start, end: { x: 300, y: 150 } })).toEqual({ minX: 100, minY: 100, maxX: 300, maxY: 150 })
+    expect(drawBounds({ start, end: { x: 0, y: 50 } })).toEqual({ minX: 0, minY: 50, maxX: 100, maxY: 100 })
+  })
+
+  it('Shift makes a square on the longer side, toward the pointer', () => {
+    expect(drawBounds({ start, end: { x: 300, y: 150 }, keepRatio: true })).toEqual({ minX: 100, minY: 100, maxX: 300, maxY: 300 })
+    expect(drawBounds({ start, end: { x: 50, y: -100 }, keepRatio: true })).toEqual({ minX: -100, minY: -100, maxX: 100, maxY: 100 })
+  })
+
+  it('Alt draws from the middle; with Shift a square around it', () => {
+    expect(drawBounds({ start, end: { x: 150, y: 125 }, fromCenter: true })).toEqual({ minX: 50, minY: 75, maxX: 150, maxY: 125 })
+    expect(drawBounds({ start, end: { x: 150, y: 125 }, fromCenter: true, keepRatio: true })).toEqual({ minX: 50, minY: 50, maxX: 150, maxY: 150 })
   })
 })
