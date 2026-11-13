@@ -49,6 +49,32 @@ export function rotatePoint(point: Point, degrees: number): Point {
   return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos }
 }
 
+/** The angle of a point around a centre, in degrees clockwise from straight up. */
+function bearing(center: Point, point: Point): number {
+  return (Math.atan2(point.y - center.y, point.x - center.x) * 180) / Math.PI + 90
+}
+
+export interface RotateDragOptions {
+  center: Point
+  /** Where the drag started and where the pointer is now, in plan centimetres. */
+  start: Point
+  current: Point
+  /** The piece's rotation when the drag started. */
+  origin: number
+  /** Snap the result to this many degrees (Shift, ISS-013); none turns freely. */
+  step?: number
+}
+
+/**
+ * A rotate drag from anywhere around a piece (ISS-033: just outside a corner, like Figma): the
+ * piece turns by as much as the pointer turned around its centre.
+ */
+export function rotationFromDrag(options: RotateDragOptions): number {
+  const { center, start, current, origin, step } = options
+  const turned = origin + bearing(center, current) - bearing(center, start)
+  return normalizeRotation(step ? Math.round(turned / step) * step : turned)
+}
+
 export interface Pose {
   x: number
   y: number

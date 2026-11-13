@@ -1147,6 +1147,25 @@ describe('the shop designer on saved layouts', () => {
     await page.getByRole('button', { name: 'Redo' }).click()
     await expect.poll(width).toBe(String(before + 40))
 
+    // No turn handle above the table (ISS-033): a drag just outside a corner turns it, with the angle beside the pointer.
+    expect(await plan(page).getByTestId('rotate-handle').count()).toBe(0)
+    const table = (await l1.boundingBox())!
+    const center = { x: table.x + table.width / 2, y: table.y + table.height / 2 }
+    const zone = (await plan(page).getByTestId('rotate-zone-1').boundingBox())!
+    const from = { x: zone.x + zone.width / 2, y: zone.y + zone.height / 2 }
+    // A quarter turn clockwise around the centre (y points down).
+    const to = { x: center.x - (from.y - center.y), y: center.y + (from.x - center.x) }
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move((from.x + to.x) / 2 + (to.x - center.x) / 2, (from.y + to.y) / 2 + (to.y - center.y) / 2, { steps: 4 })
+    await page.mouse.move(to.x, to.y, { steps: 4 })
+    await expect.poll(() => plan(page).getByTestId('live-label').textContent()).toBe('90°')
+    await page.mouse.up()
+    await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(90)')
+    expect(await plan(page).getByTestId('live-label').count()).toBe(0)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(0)')
+
     await fromMenu(l1, 'Rotate 90°')
     await expect.poll(() => l1.getAttribute('transform')).toContain('rotate(90)')
 

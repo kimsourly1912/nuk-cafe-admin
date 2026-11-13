@@ -23,7 +23,7 @@ import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish } from '../designer/catalog'
-import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotatePoint, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
@@ -160,6 +160,9 @@ function zoomTo(percent: number) {
 
 const viewMiddle = () => ({ x: view.value.x + view.value.width / 2, y: view.value.y + view.value.height / 2 })
 watch(() => props.floorId, fit, { immediate: true })
+
+/** The live number beside the pointer while turning, resizing or drawing (ISS-029, ISS-033), like Figma's. */
+const liveLabel = shallowRef<{ at: Point, text: string } | null>(null)
 
 /** A gesture's live result, drawn instead of the stored position until the gesture ends. */
 const preview = ref<{ selection: PlanSelection, x: number, y: number, rotation: number, width?: number, depth?: number } | null>(null)
@@ -361,14 +364,14 @@ const measurements = computed((): Gap[] => {
 /** Tables and furniture take part in the select tool only; the other tools draw over them. */
 const piecesActive = computed(() => props.mode === 'select')
 
-/** A selected table's or piece's outline on the plan, its turn handle included (the selection's drawing). */
+/** A selected table's or piece's outline on the plan (the selection's drawing). */
 const selectionFrames = computed(() => {
   const selection = props.selection
   if (props.mode !== 'select' || !selection || multi.value) return null
   const table = selection.kind === 'table' ? placed.value.find(candidate => candidate.tableId === selection.id) : undefined
-  if (table) return { pose: table, width: table.extent.width, depth: table.extent.depth, handle: 56 }
+  if (table) return { pose: table, width: table.extent.width, depth: table.extent.depth }
   const item = selection.kind === 'item' ? items.value.find(candidate => candidate.id === selection.id) : undefined
-  return item ? { pose: item, width: item.width, depth: item.depth, handle: 50 } : null
+  return item ? { pose: item, width: item.width, depth: item.depth } : null
 })
 
 /** The hovered piece's outline, or the hovered wall's or edge's line; none for the selection itself. */
@@ -391,7 +394,7 @@ const hoverOutline = computed(() => {
   return edge ? { kind: 'line' as const, from: edge.from, to: edge.to } : null
 })
 
-/** The plan points a selection covers: a piece's frame and turn handle, a wall's or an edge's ends. */
+/** The plan points a selection covers: a piece's frame, a wall's or an edge's ends. */
 const selectionPoints = computed((): Point[] | null => {
   const selection = props.selection
   if (props.mode !== 'select' || !selection) return null
@@ -401,9 +404,8 @@ const selectionPoints = computed((): Point[] | null => {
   }
   const frame = selectionFrames.value
   if (frame) {
-    const { pose, width, depth, handle } = frame
-    const turnHandle = rotatePoint({ x: 0, y: -depth / 2 - handle - 8 }, pose.rotation)
-    return [...rectCorners(pose, width, depth, pose.rotation), { x: pose.x + turnHandle.x, y: pose.y + turnHandle.y }]
+    const { pose, width, depth } = frame
+    return rectCorners(pose, width, depth, pose.rotation)
   }
   const reach = WALL_THICKNESS_CM
   const ends = (from: Point, to: Point) => [from, to].flatMap(point => [{ x: point.x - reach, y: point.y - reach }, { x: point.x + reach, y: point.y + reach }])
@@ -440,6 +442,23 @@ function toScreen(point: Point): Point {
  */
 const handleCorners = (width: number, depth: number) => (Math.min(width, depth) / perPixel.value >= 56 ? rectCorners({ x: 0, y: 0 }, width, depth, 0) : [])
 
+/** Rotate zones' size and how far they sit out from the corner, in screen pixels (ISS-033): past the resize handle's 16 px reach. */
+const ROTATE_ZONE_PX = 20
+const ROTATE_ZONE_OFFSET_PX = 12
+/**
+ * The square just outside each corner of a frame, in its own (unturned) directions, where a drag
+ * turns the piece (Figma's rotate area). Behind the resize handles, so a corner still resizes.
+ */
+function rotateZones(width: number, depth: number) {
+  const size = ROTATE_ZONE_PX * perPixel.value
+  const gap = ROTATE_ZONE_OFFSET_PX * perPixel.value
+  return rectCorners({ x: 0, y: 0 }, width, depth, 0).map(corner => ({
+    x: corner.x > 0 ? corner.x + gap : corner.x - gap - size,
+    y: corner.y > 0 ? corner.y + gap : corner.y - gap - size,
+    size,
+  }))
+}
+
 /** Screen → plan centimetres; null when the pointer is outside the plan. */
 function toPlan(clientX: number, clientY: number, inside = false): Point | null {
   const element = svg.value
@@ -471,7 +490,7 @@ function drawPoint(plan: Point, from: Point | undefined, free: boolean, fine: bo
 
 type Gesture
   = | { type: 'drag', selection: PlanSelection, startPlan: Point, origin: { x: number, y: number, rotation: number }, startClient: Point, moved: boolean }
-    | { type: 'rotate', selection: PlanSelection, center: Point, rotation: number }
+    | { type: 'rotate', selection: PlanSelection, center: Point, start: Point, origin: number, rotation: number }
     | { type: 'resize', selection: PlanSelection, corner: number, startPlan: Point, origin: Sized, round: boolean, min: number, max: number }
     | { type: 'corner', index: number, startPlan: Point, origin: Point, startClient: Point, moved: boolean }
     | { type: 'wall-end', id: string, end: 'from' | 'to', startClient: Point, moved: boolean }
@@ -662,7 +681,7 @@ function onPointerDown(event: PointerEvent) {
   const origin = stored(selection)
   if (!origin) return
   if (target.dataset.handle === 'rotate') {
-    gesture = { type: 'rotate', selection, center: { x: origin.x, y: origin.y }, rotation: origin.rotation }
+    gesture = { type: 'rotate', selection, center: { x: origin.x, y: origin.y }, start: plan, origin: origin.rotation, rotation: origin.rotation }
     return
   }
   if (target.dataset.handle === 'resize') {
@@ -717,10 +736,10 @@ function onPointerMove(event: PointerEvent) {
     return
   }
   if (gesture.type === 'rotate') {
-    const angle = (Math.atan2(plan.y - gesture.center.y, plan.x - gesture.center.x) * 180) / Math.PI + 90
-    const rotation = normalizeRotation(event.shiftKey ? angle : Math.round(angle / 15) * 15)
+    const rotation = rotationFromDrag({ center: gesture.center, start: gesture.start, current: plan, origin: gesture.origin, step: event.shiftKey ? undefined : 15 })
     gesture.rotation = rotation
     preview.value = { selection: gesture.selection, x: gesture.center.x, y: gesture.center.y, rotation }
+    liveLabel.value = { at: plan, text: `${rotation}°` }
     return
   }
   if (gesture.type === 'resize') {
@@ -833,6 +852,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
     return
   }
   gesture = null
+  liveLabel.value = null
   const live = preview.value
   const liveOutline = liveShape.value
   const movedWalls = liveWalls.value
@@ -1889,25 +1909,19 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             vector-effect="non-scaling-stroke"
             pointer-events="none"
           />
-          <line
-            x1="0"
-            x2="0"
-            :y1="-table.extent.depth / 2"
-            :y2="-table.extent.depth / 2 - 44"
-            stroke="var(--ui-primary)"
-            stroke-width="3"
-            pointer-events="none"
-          />
-          <circle
-            :cy="-table.extent.depth / 2 - 56"
-            r="14"
-            fill="var(--ui-bg)"
-            stroke="var(--ui-primary)"
-            stroke-width="4"
+          <!-- Just outside each corner: drag to turn (ISS-033, Figma has no turn handle). -->
+          <rect
+            v-for="(zone, place) in rotateZones(table.extent.width, table.extent.depth)"
+            :key="`rotate-${place}`"
+            :x="zone.x"
+            :y="zone.y"
+            :width="zone.size"
+            :height="zone.size"
+            fill="transparent"
             data-kind="table"
             :data-id="table.tableId"
             data-handle="rotate"
-            data-testid="rotate-handle"
+            :data-testid="`rotate-zone-${place}`"
             class="cursor-alias"
           />
           <g
@@ -1960,15 +1974,18 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
             vector-effect="non-scaling-stroke"
             pointer-events="none"
           />
-          <circle
-            :cy="-item.depth / 2 - 50"
-            r="14"
-            fill="var(--ui-bg)"
-            stroke="var(--ui-primary)"
-            stroke-width="4"
+          <rect
+            v-for="(zone, place) in rotateZones(item.width, item.depth)"
+            :key="`rotate-${place}`"
+            :x="zone.x"
+            :y="zone.y"
+            :width="zone.size"
+            :height="zone.size"
+            fill="transparent"
             data-kind="item"
             :data-id="item.id"
             data-handle="rotate"
+            :data-testid="`rotate-zone-${place}`"
             class="cursor-alias"
           />
           <g
@@ -2235,6 +2252,31 @@ const chipSize = (text: string) => ({ width: (text.length * 7 + 16) * perPixel.v
         fill="var(--ui-bg-elevated)"
         stroke-width="3"
       />
+    </g>
+
+    <!-- The live angle or size beside the pointer (ISS-029, ISS-033), on top of everything. -->
+    <g
+      v-if="liveLabel"
+      pointer-events="none"
+      data-testid="live-label"
+    >
+      <rect
+        :x="liveLabel.at.x + 16 * perPixel"
+        :y="liveLabel.at.y + 16 * perPixel"
+        :width="chipSize(liveLabel.text).width"
+        :height="chipSize('').height"
+        :rx="4 * perPixel"
+        fill="var(--ui-text-highlighted)"
+      />
+      <text
+        :x="liveLabel.at.x + 16 * perPixel + chipSize(liveLabel.text).width / 2"
+        :y="liveLabel.at.y + 16 * perPixel + chipSize('').height / 2"
+        text-anchor="middle"
+        dominant-baseline="central"
+        :font-size="chipSize('').font"
+        fill="var(--ui-bg)"
+        class="tabular-nums"
+      >{{ liveLabel.text }}</text>
     </g>
   </svg>
   <span

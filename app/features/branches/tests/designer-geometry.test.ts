@@ -4,7 +4,7 @@ import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { besideOf, chairPoses, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import { fitDistance } from '../designer/scene/units'
@@ -268,5 +268,20 @@ describe('building fit', () => {
     expect(Math.asin(radius / distance)).toBeLessThan(horizontal)
     expect(distance).toBeGreaterThan(fitDistance(radius, 32, 1))
     expect(fitDistance(radius, 32, 2)).toBe(fitDistance(radius, 32, 1))
+  })
+})
+
+describe('rotating from a corner (ISS-033)', () => {
+  const center = { x: 0, y: 0 }
+  it('turns by as much as the pointer turned around the centre', () => {
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current: { x: 50, y: 50 }, origin: 0 })).toBe(90)
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current: { x: -50, y: -50 }, origin: 30 })).toBe(300)
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current: { x: 50, y: -50 }, origin: 45 })).toBe(45)
+  })
+
+  it('snaps to the step when asked, and turns freely otherwise', () => {
+    const current = rotatePoint({ x: 50, y: -50 }, 20)
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current, origin: 0 })).toBe(20)
+    expect(rotationFromDrag({ center, start: { x: 50, y: -50 }, current, origin: 0, step: 15 })).toBe(15)
   })
 })
