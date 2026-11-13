@@ -17,6 +17,8 @@ Goal: the Studio floor-plan editor behaves like Figma (D278). This plan orders a
 
 Built in one PR on `claude/bold-hypatia-sx8nkl` (owner: collect the small and medium steps), waiting for retest: ISS-028, 001, 006, 003, 031, 032, 033, 009, 010, 029, 011, 012, 013, 015, 014, 017, 018, 019, 022, 025, 007, 026. Not reproduced: ISS-024. Deferred: ISS-020 (owner's Shift step), ISS-023 (details). Each issue file has a "Work" note.
 
+Second PR (owner's answers, 2026-11-13): ISS-004 snap step, 031, 011, 017, 022, 026, 025 (command search), 020. Still waiting for the owner or the tester: ISS-002, 005 (range), 008, 016, 023, 024 (retest), 027, 030. Large: ISS-034, Phase 5.
+
 ## Phase 1: View and zoom (start here)
 
 Why first: every other check depends on a stable camera.

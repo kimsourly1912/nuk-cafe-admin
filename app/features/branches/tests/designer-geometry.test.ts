@@ -225,9 +225,9 @@ describe('corner handles and Duplicate (2B)', () => {
   const limits = { round: false, min: 40, max: 600 }
   const corner = (piece: Sized, index: number) => rectCorners(piece, piece.width, piece.depth, piece.rotation)[index]!
 
-  it('grows from the dragged corner in 5 cm steps while the opposite corner stays put', () => {
-    const grown = resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 33, y: 12 } })
-    expect(grown).toMatchObject({ width: 155, depth: 90, rotation: 0 })
+  it('grows from the dragged corner in whole centimetres while the opposite corner stays put', () => {
+    const grown = resizeFromCorner(table, { ...limits, corner: 2, delta: { x: 33.4, y: 12 } })
+    expect(grown).toMatchObject({ width: 153, depth: 92, rotation: 0 })
     // The centre is whole centimetres, so the fixed corner may move by half a centimetre.
     expect(Math.abs(corner(grown, 0).x - corner(table, 0).x)).toBeLessThanOrEqual(0.5)
     expect(Math.abs(corner(grown, 0).y - corner(table, 0).y)).toBeLessThanOrEqual(0.5)
@@ -327,11 +327,12 @@ describe('round pieces (ISS-017)', () => {
 
 describe('Shift while drawing walls and corners (ISS-018)', () => {
   const from = { x: 0, y: 0 }
-  it('goes to the nearest 45° direction, on the grid', () => {
+  it('goes to the nearest 45° direction, on whole centimetres (or a given step)', () => {
     expect(constrainAngle(from, { x: 300, y: 50 })).toEqual({ x: 300, y: 0 })
     expect(constrainAngle(from, { x: -40, y: -275 })).toEqual({ x: 0, y: -275 })
     expect(constrainAngle(from, { x: 200, y: 150 })).toEqual({ x: 175, y: 175 })
-    expect(constrainAngle(from, { x: -200, y: 175 })).toEqual({ x: -200, y: 200 })
+    expect(constrainAngle(from, { x: -200, y: 175 })).toEqual({ x: -188, y: 188 })
+    expect(constrainAngle(from, { x: -200, y: 175 }, 25)).toEqual({ x: -200, y: 200 })
     expect(constrainAngle(from, { x: -300, y: 25 })).toEqual({ x: -300, y: 0 })
   })
 })

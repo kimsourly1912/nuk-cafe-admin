@@ -8,6 +8,14 @@ import { edgeLength, signedArea } from '#shared/contracts/shop-layout'
 
 export const GRID_CM = 25
 export const FINE_GRID_CM = 5
+/**
+ * Where moves, drawing and resizing land (owner, 2026-11-13: like Figma's pixel grid, ISS-004): a
+ * whole centimetre, which is one screen pixel at 100 %. Smart guides do the lining up.
+ */
+export const SNAP_CM = 1
+/** The arrow keys' nudge, and with Shift (Figma's 1 and 10). */
+export const NUDGE_CM = 1
+export const BIG_NUDGE_CM = 10
 export const WALL_THICKNESS_CM = 20
 /** A floor's slab, under its surface: the ground floor stands this much above the street. */
 export const SLAB_THICKNESS_CM = 20
@@ -168,7 +176,7 @@ export interface ResizeOptions {
 
 /**
  * A corner handle dragged on the plan (D273, frame 2B): the opposite corner stays where it is, so
- * the centre moves by half the change. Sizes snap to 5 cm (the panel's step) within the limits; the
+ * the centre moves by half the change. Sizes are whole centimetres within the limits; the
  * centre is rounded to whole centimetres, as the layout stores it.
  */
 export function resizeFromCorner(start: Sized, options: ResizeOptions): Sized {
@@ -180,7 +188,7 @@ export function resizeFromCorner(start: Sized, options: ResizeOptions): Sized {
   const local = rotatePoint(delta, -start.rotation)
   const reach = fromCenter ? 2 : 1
   const along = { x: sx * local.x * reach, y: sy * local.y * reach }
-  const fit = (value: number) => Math.min(max, Math.max(min, snap(value, FINE_GRID_CM)))
+  const fit = (value: number) => Math.min(max, Math.max(min, snap(value, SNAP_CM)))
   let width = fit(start.width + along.x)
   let depth = fit(start.depth + along.y)
   if (options.round) width = depth = fit(start.width + (Math.abs(along.x) >= Math.abs(along.y) ? along.x : along.y))
@@ -396,7 +404,7 @@ export function drawBounds(options: DrawBoundsOptions): Bounds {
  * Shift while drawing a wall or a corner (ISS-018, ISS-019, Figma): the point moves to the nearest
  * 45° direction from `from`, staying on the grid (a diagonal goes as far across as down).
  */
-export function constrainAngle(from: Point, point: Point, step: number = GRID_CM): Point {
+export function constrainAngle(from: Point, point: Point, step: number = SNAP_CM): Point {
   const dx = point.x - from.x
   const dy = point.y - from.y
   const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4))

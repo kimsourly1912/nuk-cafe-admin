@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ShopLayout } from '#shared/contracts/shop-layout'
-import { alignOffsets, copySelected, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, copySelected, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
 import type { PlanSelection } from '../designer/plan'
 
@@ -111,7 +111,7 @@ describe('copy and paste (ISS-022)', () => {
     const clipboard = copySelected(before, 'g', set)!
     const next = layout()
     removeSelected(next, set)
-    const copies = pasteClipboard(next, clipboard, { x: 50, y: 50 })
+    const copies = pasteClipboard(next, clipboard, 'g', { x: 50, y: 50 })
     expect(copies.map(copy => copy.kind)).toEqual(['item', 'wall'])
     expect(next.floors[0]!.items.find(item => item.id === copies[0]!.id)).toMatchObject({ kind: 'plant', x: 150, y: 150 })
     expect(next.floors[0]!.walls.find(wall => wall.id === copies[1]!.id)).toMatchObject({ from: { x: 650, y: 450 }, to: { x: 950, y: 450 } })
@@ -147,5 +147,26 @@ describe('align (ISS-026)', () => {
     expect(alignOffsets(boxes, 'bottom')).toEqual([{ target: boxes[0]!.target, delta: { x: 0, y: 250 } }])
     expect(alignOffsets(boxes, 'middle')).toEqual([{ target: boxes[0]!.target, delta: { x: 0, y: 125 } }, { target: boxes[1]!.target, delta: { x: 0, y: -50 } }])
     expect(alignOffsets([boxes[0]!], 'left')).toEqual([])
+  })
+})
+
+describe('paste on another floor (ISS-022)', () => {
+  it('puts the copies on the floor given, where they were', () => {
+    const next = layout()
+    next.floors.push({ ...structuredClone(next.floors[0]!), id: 'up', name: 'Upstairs', items: [], walls: [] })
+    const copies = pasteClipboard(next, copySelected(layout(), 'g', set)!, 'up', { x: 0, y: 0 })
+    expect(next.floors[1]!.items).toEqual([expect.objectContaining({ id: copies[0]!.id, kind: 'plant', x: 100, y: 100 })])
+    expect(next.floors[1]!.walls).toHaveLength(1)
+    expect(next.floors[0]!.items).toHaveLength(2)
+  })
+})
+
+describe('distribute (owner, 2026-11-13)', () => {
+  const box = (id: string, minX: number, width: number) => ({ target: { kind: 'item' as const, id }, bounds: { minX, minY: 0, maxX: minX + width, maxY: 50 } })
+  it('gives three or more equal gaps, the outer two staying put', () => {
+    // 0–100, 120–170, 400–500: 300 cm of room minus 50 cm in the middle, so 125 cm each side.
+    expect(distributeOffsets([box('c', 400, 100), box('a', 0, 100), box('b', 120, 50)], 'x')).toEqual([{ target: { kind: 'item', id: 'b' }, delta: { x: 105, y: 0 } }])
+    expect(distributeOffsets([box('a', 0, 100), box('b', 225, 50), box('c', 400, 100)], 'x')).toEqual([])
+    expect(distributeOffsets([box('a', 0, 100), box('b', 300, 50)], 'x')).toEqual([])
   })
 })

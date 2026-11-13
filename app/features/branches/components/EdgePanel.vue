@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StudioNumberField from './StudioNumberField.vue'
 /**
  * An outline edge, selected (D273, frame 3B): what it is (Wall, Railing or Open), its length, and
  * the doors and windows on it. A door on a railing is a gate; windows need a wall. Each change is
@@ -90,11 +91,12 @@ function setNumber(value: number | null | undefined, apply: (value: number) => F
       label="Length (cm)"
       help="Moves the edge's end corner; the corners next to it keep their right angles."
     >
-      <UInputNumber
+      <StudioNumberField
         :model-value="length"
+        label="Length"
+        unit="cm"
         :min="10"
         :max="10000"
-        :step="5"
         @update:model-value="value => setNumber(value, next => setEdgeLength(shape, index, next))"
       />
     </UFormField>
@@ -153,20 +155,22 @@ function setNumber(value: number | null | undefined, apply: (value: number) => F
       </div>
       <div class="grid grid-cols-2 gap-3">
         <UFormField label="Width (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="opening.width"
+            label="Width"
+            unit="cm"
             :min="OPENING_MIN_WIDTH"
             :max="length"
-            :step="5"
             @update:model-value="value => setNumber(value, width => updateOpening(shape, index, opening.id, { width }))"
           />
         </UFormField>
         <UFormField label="From the corner (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="opening.offset"
+            label="From the corner"
+            unit="cm"
             :min="0"
             :max="Math.max(0, length - opening.width)"
-            :step="5"
             @update:model-value="value => setNumber(value, offset => updateOpening(shape, index, opening.id, { offset }))"
           />
         </UFormField>

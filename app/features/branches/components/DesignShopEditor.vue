@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import StudioNumberField from './StudioNumberField.vue'
 /**
  * Design shop (D273, frames 1–3, 6A–6C, 9A–9C): a branch's saved layout with its real tables. The
  * library (Unplaced tables, table looks, furniture), the floor plan with its floors, Draw outline
@@ -8,7 +9,7 @@
  * Properties, so the editor works without dragging on touch, with a keyboard and in the e2e tests.
  */
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
-import type { ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
+import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
 import { edgeLength, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, TableLook } from '#shared/contracts/shop-layout'
@@ -16,12 +17,12 @@ import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
 import type { AlignEdge } from '../designer/group'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
-import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, placementExtent, snap } from '../designer/geometry'
+import { besideOf, newLayoutId, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
-import { alignOffsets, cycleSelection, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
 import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
@@ -32,6 +33,7 @@ import ExploreLayoutSettings from './ExploreLayoutSettings.vue'
 import ItemLookFormModal from './ItemLookFormModal.vue'
 import type { ItemLookSource } from './ItemLookFormModal.vue'
 import FloorPlanCanvas from './FloorPlanCanvas.vue'
+import StudioCommands from './StudioCommands.vue'
 import LayoutStarterPicker from './LayoutStarterPicker.vue'
 import LookFormModal from './LookFormModal.vue'
 import PickTableModal from './PickTableModal.vue'
@@ -527,12 +529,20 @@ function turnGroup() {
   const floorId = floor.value?.id
   const box = canvas.value?.selectedBounds
   if (!floorId || !box) return
-  const center = { x: snap((box.minX + box.maxX) / 2, FINE_GRID_CM), y: snap((box.minY + box.maxY) / 2, FINE_GRID_CM) }
+  const center = { x: snap((box.minX + box.maxX) / 2, SNAP_CM), y: snap((box.minY + box.maxY) / 2, SNAP_CM) }
   draft.change(next => turnSelected(next, floorId, group.value, center))
 }
 
 /** Align (ISS-026, Figma): each selected one lines up with the set's edge, as drawn; one undo step. */
 function alignGroup(edge: AlignEdge) {
+  moveEach(boxes => alignOffsets(boxes, edge))
+}
+/** Distribute (owner, 2026-11-13): equal gaps across or down; the outer two stay. */
+function distributeGroup(axis: 'x' | 'y') {
+  moveEach(boxes => distributeOffsets(boxes, axis))
+}
+/** Moves each selected one by its own offset, from their boxes as drawn; one undo step. */
+function moveEach(offsets: (boxes: { target: PlanSelection, bounds: Bounds }[]) => { target: PlanSelection, delta: Point }[]) {
   const plan = canvas.value
   const floorId = floor.value?.id
   if (!plan || !floorId) return
@@ -540,12 +550,16 @@ function alignGroup(edge: AlignEdge) {
     const bounds = plan.boxOf(target)
     return bounds ? [{ target, bounds }] : []
   })
-  const moves = alignOffsets(boxes, edge)
+  const moves = offsets(boxes)
   if (!moves.length) return
   draft.change((next) => {
     for (const { target, delta } of moves) shiftSelected(next, floorId, [target], delta)
   })
 }
+const DISTRIBUTE_BUTTONS: { axis: 'x' | 'y', label: string, icon: string }[] = [
+  { axis: 'x', label: 'Distribute across', icon: 'i-lucide-align-horizontal-space-between' },
+  { axis: 'y', label: 'Distribute down', icon: 'i-lucide-align-vertical-space-between' },
+]
 const ALIGN_BUTTONS: { edge: AlignEdge, label: string, icon: string }[] = [
   { edge: 'left', label: 'Align left', icon: 'i-lucide-align-start-vertical' },
   { edge: 'center', label: 'Align centres', icon: 'i-lucide-align-center-vertical' },
@@ -703,6 +717,7 @@ function listLabels(labels: readonly string[]): string {
 let toolStart: { floorId: string, shape: FloorShape, walls: InnerWall[] } | null = null
 
 function startTool(next: PlanMode) {
+  if (next === 'room') roomCut.value = false
   pending.value = null
   if (mode.value === next) return finishTool()
   if (next === 'select' || next === 'hand') {
@@ -766,33 +781,32 @@ async function placeLook(lookId: string, at: Point) {
  * asks which table, as a look from the library does; it never copies this table or its QR code.
  */
 /**
- * Ctrl/⌘+V (ISS-022): new copies of what Ctrl/⌘+C copied, 50 cm on, one undo step. One table alone
- * asks which table the copy is, as Duplicate look does; tables in a set are not copied (each has
- * its own QR code). Pasting on another floor is not offered yet.
+ * Ctrl/⌘+V (ISS-022): new copies of what Ctrl/⌘+C copied, one undo step, on the floor shown: 50 cm
+ * on, on the floor it came from; in the same place on another floor (owner, 2026-11-13, like
+ * Figma's paste into another frame). One table alone asks which table the copy is, as Duplicate
+ * look does; tables in a set are not copied (each has its own QR code).
  */
 function pasteCopied() {
   const clipboard = props.editor.clipboard.value
   const current = floor.value
   if (!clipboard || !current) return
-  if (clipboard.floorId !== current.id) {
-    const source = layout.value.floors.find(candidate => candidate.id === clipboard.floorId)
-    toast.add({ title: 'Not pasted', description: source ? `Show the ${source.name} floor to paste what you copied there.` : 'The floor you copied from is gone.', color: 'neutral', icon: 'i-lucide-info' })
-    return
-  }
+  const sameFloor = clipboard.floorId === current.id
   if (!clipboard.items.length && !clipboard.walls.length) {
     const [tableId] = clipboard.tableIds
-    if (clipboard.tableIds.length === 1 && tableId && placedIds.value.has(tableId)) void duplicateLook(tableId)
+    const original = layout.value.placements.find(placement => placement.tableId === tableId)
+    if (clipboard.tableIds.length === 1 && tableId && original) void duplicateLook(tableId, sameFloor ? undefined : { x: original.x, y: original.y }, current.id)
     else toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
     return
   }
-  const offset = props.editor.nextPasteOffset()
+  const offset = sameFloor ? props.editor.nextPasteOffset() : { x: 0, y: 0 }
   let copies: PlanSelection[] = []
-  draft.change(next => void (copies = pasteClipboard(next, clipboard, offset)))
+  draft.change(next => void (copies = pasteClipboard(next, clipboard, current.id, offset)))
   if (clipboard.tableIds.length) toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
   props.editor.selectMany(copies)
 }
 
-async function duplicateLook(tableId: string, to?: Point) {
+/** `floorId`: where the copy goes (a paste on another floor); the original's floor otherwise. */
+async function duplicateLook(tableId: string, to?: Point, floorId?: string) {
   const source = layout.value.placements.find(placement => placement.tableId === tableId)
   if (!source) return
   const choice = await pickModal.open({ lookName: findLook(props.looks, source.lookId).name, tables: unplaced.value }).result
@@ -803,9 +817,10 @@ async function duplicateLook(tableId: string, to?: Point) {
   if (!copyId || !original || placedIds.value.has(copyId)) return
   const extent = placementExtent(original, findLook(props.looks, original.lookId))
   const at = to ?? besideOf(original, extent.width, extent.depth)
-  const { floorId, rotation, width, depth, lookId } = original
-  draft.change(next => next.placements.push({ tableId: copyId, floorId, ...at, rotation, width, depth, lookId }))
-  props.editor.showFloor(floorId)
+  const { rotation, width, depth, lookId } = original
+  const onFloor = floorId ?? original.floorId
+  draft.change(next => next.placements.push({ tableId: copyId, floorId: onFloor, ...at, rotation, width, depth, lookId }))
+  props.editor.showFloor(onFloor)
   selection.value = { kind: 'table', id: copyId }
 }
 
@@ -970,8 +985,7 @@ function onLibraryMove(event: PointerEvent) {
   if (!libraryDrag.dragging && Math.hypot(event.clientX - libraryDrag.start.x, event.clientY - libraryDrag.start.y) < 6) return
   libraryDrag.dragging = true
   const at = canvas.value?.toPlan(event.clientX, event.clientY, true)
-  const fine = event.ctrlKey || event.metaKey ? FINE_GRID_CM : GRID_CM
-  ghost.value = at ? ghostOf(libraryDrag.piece, { x: snap(at.x, fine), y: snap(at.y, fine) }) : null
+  ghost.value = at ? ghostOf(libraryDrag.piece, { x: snap(at.x, SNAP_CM), y: snap(at.y, SNAP_CM) }) : null
 }
 
 function clearLibraryDrag() {
@@ -1007,6 +1021,51 @@ onBeforeUnmount(clearLibraryDrag)
 
 const shortcutsHelp = overlay.create(ShortcutsHelp)
 /** Studio's keys and drag keys, one list (`STUDIO_SHORTCUTS`): by `?` or the plan's right-click menu. */
+/** Ctrl/⌘+/: Studio's actions to search (StudioCommands). */
+const commandsOpen = ref(false)
+const commandGroups = computed<CommandPaletteGroup[]>(() => {
+  const plan = canvas.value
+  const selected = props.editor.selected.value.length > 0
+  const tool = (label: string, next: PlanMode, icon: string, kbd: string, round?: boolean) => ({
+    label,
+    icon,
+    kbds: [kbd],
+    onSelect: () => {
+      if (round !== undefined) roundShape.value = round
+      startTool(next)
+    },
+  })
+  return [
+    { id: 'tools', label: 'Tools', items: [
+      tool('Select', 'select', 'i-lucide-mouse-pointer-2', 'v'),
+      tool('Hand', 'hand', 'i-lucide-hand', 'h'),
+      tool('Room', 'room', 'i-lucide-square-plus', 'r'),
+      tool('Shape: rectangle', 'shape', 'i-lucide-square', 's', false),
+      tool('Shape: ellipse', 'shape', 'i-lucide-circle', 'o', true),
+      tool('Edit points', 'outline', 'i-lucide-pen-tool', 'p'),
+      tool('Draw wall', 'wall', 'i-lucide-brick-wall', 'w'),
+    ] },
+    { id: 'edit', label: 'Edit', items: [
+      { label: 'Undo', icon: 'i-lucide-undo-2', kbds: ['meta', 'z'], disabled: !draft.canUndo.value, onSelect: () => draft.undo() },
+      { label: 'Redo', icon: 'i-lucide-redo-2', kbds: ['meta', 'shift', 'z'], disabled: !draft.canRedo.value, onSelect: () => draft.redo() },
+      { label: 'Select all', icon: 'i-lucide-box-select', kbds: ['meta', 'a'], onSelect: () => (mode.value === 'select' ? selectAll() : undefined) },
+      { label: 'Copy', icon: 'i-lucide-copy', kbds: ['meta', 'c'], disabled: !selected, onSelect: () => void props.editor.copy() },
+      { label: 'Paste', icon: 'i-lucide-clipboard-paste', kbds: ['meta', 'v'], disabled: !props.editor.clipboard.value, onSelect: pasteCopied },
+      { label: 'Duplicate', icon: 'i-lucide-copy-plus', kbds: ['meta', 'd'], disabled: !selected, onSelect: duplicateSelection },
+      { label: 'Delete', icon: 'i-lucide-trash-2', kbds: ['delete'], disabled: !selected, onSelect: () => (multi.value ? removeGroup() : selection.value && remove(selection.value)) },
+    ] },
+    { id: 'view', label: 'View', items: [
+      { label: 'Zoom to fit', icon: 'i-lucide-scan', kbds: ['shift', '1'], onSelect: () => plan?.fit() },
+      { label: 'Zoom to selection', icon: 'i-lucide-scan-search', kbds: ['shift', '2'], onSelect: () => plan?.zoomToSelection() },
+      { label: 'Zoom to 100%', icon: 'i-lucide-search', kbds: ['meta', '0'], onSelect: () => plan?.zoomTo(100) },
+      { label: 'Zoom in', icon: 'i-lucide-zoom-in', kbds: ['meta', '+'], onSelect: () => plan?.zoom(1) },
+      { label: 'Zoom out', icon: 'i-lucide-zoom-out', kbds: ['meta', '-'], onSelect: () => plan?.zoom(-1) },
+    ] },
+    { id: 'help', label: 'Help', items: [
+      { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
+    ] },
+  ]
+})
 const showShortcuts = () => void shortcutsHelp.open({ shortcuts: [...STUDIO_SHORTCUTS, ...STUDIO_DRAG_KEYS] })
 
 /**
@@ -1060,6 +1119,8 @@ function onStudioKey(event: KeyboardEvent) {
     const key = event.key.toLowerCase()
     if (key === 'd' && !event.shiftKey) return run(duplicateSelection)
     // Copy and paste (ISS-022): in memory, on the floor copied from.
+    // Command search (owner, 2026-11-13: like Figma's Ctrl/⌘+/).
+    if (key === '/') return run(() => (commandsOpen.value = true))
     if (key === 'c' && !event.shiftKey && mode.value === 'select' && props.editor.selected.value.length) return run(() => props.editor.copy())
     if (key === 'v' && !event.shiftKey && mode.value === 'select' && props.editor.clipboard.value) return run(pasteCopied)
     if (key === 'a' && !event.shiftKey && mode.value === 'select') return run(selectAll)
@@ -1185,6 +1246,7 @@ const contextItems = computed((): ContextMenuItem[][] => {
     { label: 'Draw wall', icon: 'i-lucide-brick-wall', kbds: ['w'], onSelect: () => startTool('wall') },
   ], [
     // The shortcut list from a menu too (ISS-025), not only by its key.
+    { label: 'Search actions', icon: 'i-lucide-search', kbds: ['meta', '/'], onSelect: () => (commandsOpen.value = true) },
     { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   ]]
 })
@@ -1250,15 +1312,6 @@ function setRotation(value: number | null | undefined) {
   if (next !== current.rotation) rotate(target, next)
 }
 
-/** Escape puts back what the field showed and leaves it, so nothing changes. */
-function revertField(event: KeyboardEvent, value: number) {
-  const input = event.target
-  if (!(input instanceof HTMLInputElement)) return
-  input.value = String(value)
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-  input.blur()
-}
-
 const swatch = (finish: Finish) => FINISH_SWATCHES[finish]
 
 function chooseStarter(starter: Starter) {
@@ -1277,6 +1330,8 @@ const planTools = [
 const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall' || mode.value === 'room' || mode.value === 'shape')
 /** The Shape tool draws a round block (O) rather than a block (S) (D278). */
 const roundShape = ref(false)
+/** Room adds by default; the tool bar's Cut cuts the rectangle out (owner: Alt draws from the middle, like Figma). */
+const roomCut = ref(false)
 const pendingLabel = computed(() => {
   const piece = pending.value
   if (!piece) return ''
@@ -1686,7 +1741,7 @@ const pendingLabel = computed(() => {
   </DefineLibrary>
 
   <!-- What's selected (md and up beside the plan; below, in a slide-over). -->
-  <!-- Position and turn (D277): typed, no steppers or wheel; Enter or leaving commits, Escape reverts. -->
+  <!-- Position and turn (D277): typed (math too, ISS-020), arrows 1 or 10, a drag on the handle scrubs; Enter or leaving commits, Escape reverts. -->
   <DefineTransform v-slot="{ x, y, rotation }">
     <div
       class="flex flex-col gap-3"
@@ -1695,44 +1750,38 @@ const pendingLabel = computed(() => {
     >
       <div class="grid grid-cols-2 gap-2">
         <UFormField label="X (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="x"
+            label="X"
+            unit="cm"
             :min="-LAYOUT_MAX_EXTENT_CM"
             :max="LAYOUT_MAX_EXTENT_CM"
-            :increment="false"
-            :decrement="false"
-            disable-wheel-change
             class="w-full"
             @update:model-value="value => setPosition('x', value)"
-            @keydown.esc.stop.prevent="revertField($event, x)"
           />
         </UFormField>
         <UFormField label="Y (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="y"
+            label="Y"
+            unit="cm"
             :min="-LAYOUT_MAX_EXTENT_CM"
             :max="LAYOUT_MAX_EXTENT_CM"
-            :increment="false"
-            :decrement="false"
-            disable-wheel-change
             class="w-full"
             @update:model-value="value => setPosition('y', value)"
-            @keydown.esc.stop.prevent="revertField($event, y)"
           />
         </UFormField>
       </div>
       <UFormField label="Rotation (°)">
         <div class="flex gap-2">
-          <UInputNumber
+          <StudioNumberField
             :model-value="rotation"
+            label="Rotation"
+            unit="°"
             :min="-360"
             :max="720"
-            :increment="false"
-            :decrement="false"
-            disable-wheel-change
             class="min-w-0 flex-1"
             @update:model-value="setRotation"
-            @keydown.esc.stop.prevent="revertField($event, rotation)"
           />
           <UTooltip text="Turn 90° left">
             <UButton
@@ -1808,6 +1857,21 @@ const pendingLabel = computed(() => {
             :aria-label="button.label"
             :data-testid="`align-${button.edge}`"
             @click="alignGroup(button.edge)"
+          />
+        </UTooltip>
+        <UTooltip
+          v-for="button in DISTRIBUTE_BUTTONS"
+          :key="button.axis"
+          :text="group.length < 3 ? `${button.label} (three or more)` : button.label"
+        >
+          <UButton
+            :icon="button.icon"
+            color="neutral"
+            variant="ghost"
+            :aria-label="button.label"
+            :disabled="group.length < 3"
+            :data-testid="`distribute-${button.axis}`"
+            @click="distributeGroup(button.axis)"
           />
         </UTooltip>
       </div>
@@ -1932,20 +1996,22 @@ const pendingLabel = computed(() => {
       />
       <div class="grid grid-cols-2 gap-2">
         <UFormField label="Width (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="selectedPlacement.width"
+            label="Width"
+            unit="cm"
             :min="40"
             :max="600"
-            :step="5"
             @update:model-value="value => setNumber(value, selectedPlacement!.width, width => updateTable(selectedPlacement!.tableId, { width, ...(selectedLook!.shape === 'round' ? { depth: width } : {}) }))"
           />
         </UFormField>
         <UFormField label="Depth (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="selectedPlacement.depth"
+            label="Depth"
+            unit="cm"
             :min="40"
             :max="600"
-            :step="5"
             :disabled="selectedLook.shape === 'round'"
             @update:model-value="value => setNumber(value, selectedPlacement!.depth, depth => updateTable(selectedPlacement!.tableId, { depth }))"
           />
@@ -2047,20 +2113,22 @@ const pendingLabel = computed(() => {
         class="grid grid-cols-2 gap-2"
       >
         <UFormField label="Width (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="selectedItem.width"
+            label="Width"
+            unit="cm"
             :min="10"
             :max="2000"
-            :step="5"
             @update:model-value="value => setNumber(value, selectedItem!.width, width => updateItem(selectedItem!.id, { width, ...(keepsCircle(selectedItem!.kind) ? { depth: width } : {}) }))"
           />
         </UFormField>
         <UFormField label="Depth (cm)">
-          <UInputNumber
+          <StudioNumberField
             :model-value="selectedItem.depth"
+            label="Depth"
+            unit="cm"
             :min="10"
             :max="2000"
-            :step="5"
             :disabled="keepsCircle(selectedItem.kind)"
             @update:model-value="value => setNumber(value, selectedItem!.depth, depth => updateItem(selectedItem!.id, { depth }))"
           />
@@ -2085,11 +2153,12 @@ const pendingLabel = computed(() => {
           :help="`${itemHeightRange(selectedItem.kind)!.min} to ${itemHeightRange(selectedItem.kind)!.max} cm`"
           class="col-span-2"
         >
-          <UInputNumber
+          <StudioNumberField
             :model-value="pieceHeight(selectedItem)"
+            label="Height"
+            unit="cm"
             :min="itemHeightRange(selectedItem.kind)!.min"
             :max="itemHeightRange(selectedItem.kind)!.max"
-            :step="5"
             @update:model-value="value => setNumber(value, pieceHeight(selectedItem!), height => updateItem(selectedItem!.id, { height }))"
           />
         </UFormField>
@@ -2215,11 +2284,12 @@ const pendingLabel = computed(() => {
           label="Floor height (cm)"
           help="The wall height in 3D."
         >
-          <UInputNumber
+          <StudioNumberField
             :model-value="floor.height"
+            label="Floor height"
+            unit="cm"
             :min="200"
             :max="800"
-            :step="10"
             class="w-full"
             @update:model-value="setHeight"
           />
@@ -2485,6 +2555,7 @@ const pendingLabel = computed(() => {
                 :show-below="showBelow"
                 :mode="mode"
                 :round-shape="roundShape"
+                :room-cut="roomCut"
                 :group="group"
                 :placing="!!pending"
                 @place="placePending"
@@ -2699,7 +2770,7 @@ const pendingLabel = computed(() => {
                       aria-label="Shape"
                     >
                       <UButton
-                        v-for="option in [{ round: false, label: 'Rectangle', icon: 'i-lucide-square' }, { round: true, label: 'Circle', icon: 'i-lucide-circle' }]"
+                        v-for="option in [{ round: false, label: 'Rectangle', icon: 'i-lucide-square' }, { round: true, label: 'Ellipse', icon: 'i-lucide-circle' }]"
                         :key="option.label"
                         :icon="option.icon"
                         :label="option.label"
@@ -2707,6 +2778,23 @@ const pendingLabel = computed(() => {
                         :variant="roundShape === option.round ? 'soft' : 'ghost'"
                         :aria-pressed="roundShape === option.round"
                         @click="roundShape = option.round"
+                      />
+                    </UFieldGroup>
+                    <UFieldGroup
+                      v-if="mode === 'room'"
+                      size="sm"
+                      role="group"
+                      aria-label="Room"
+                    >
+                      <UButton
+                        v-for="option in [{ cut: false, label: 'Add', icon: 'i-lucide-square-plus' }, { cut: true, label: 'Cut', icon: 'i-lucide-square-minus' }]"
+                        :key="option.label"
+                        :icon="option.icon"
+                        :label="option.label"
+                        :color="roomCut === option.cut ? 'primary' : 'neutral'"
+                        :variant="roomCut === option.cut ? 'soft' : 'ghost'"
+                        :aria-pressed="roomCut === option.cut"
+                        @click="roomCut = option.cut"
                       />
                     </UFieldGroup>
                     <USwitch
@@ -2790,7 +2878,7 @@ const pendingLabel = computed(() => {
             </template>
             <template v-else-if="mode === 'room'">
               <span>Drag a rectangle: the floor, or a room added to it.</span>
-              <span>Hold Alt while you let go to cut it out instead. Ctrl or ⌘ for 5 cm steps.</span>
+              <span>Choose Cut above to cut it out instead. Shift draws a square, Alt from the middle.</span>
             </template>
             <template v-else>
               <span>Click where the wall starts, then where it ends: any angle, Shift for 45° steps.</span>
@@ -2867,5 +2955,10 @@ const pendingLabel = computed(() => {
       </h2>
       <ReuseDetails />
     </aside>
+
+    <StudioCommands
+      v-model:open="commandsOpen"
+      :groups="commandGroups"
+    />
   </div>
 </template>
