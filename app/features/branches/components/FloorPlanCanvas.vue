@@ -4,9 +4,9 @@
  *
  * - **select:** tap or click selects a table, furniture, an inside wall or an outline edge (pieces
  *   win over the edge behind them; the pointer's target gets a hover outline); a drag past a few
- *   pixels moves the selected piece, snapped to the 25 cm grid (5 cm with Ctrl/⌘, straight across
+ *   pixels moves the selected piece, on whole centimetres (ISS-004) with smart guides (off with Ctrl/⌘), straight across
  *   or down with Shift); a drag just outside a corner turns it freely (15° steps with Shift, like
- *   Figma); a corner handle resizes it in 5 cm steps with the opposite corner staying put (2B).
+ *   Figma); a corner handle resizes it in whole centimetres with the opposite corner staying put (2B).
  * - **outline** (frame 3A): with no outline yet, clicks add corners and clicking the first corner,
  *   a double-click or Enter closes the shape; otherwise corners drag freely (ISS-019: Shift on a
  *   straight or 45° line, Alt keeping the corners beside it at right angles; was: right angles unless
@@ -24,7 +24,7 @@ import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { InnerWall, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, innerWallKind, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
-import { BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, FINE_GRID_CM, GRID_CM, normalizeRotation, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
+import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeFromCorner, rotationFromDrag, snap, WALL_THICKNESS_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
@@ -502,15 +502,15 @@ function toPlan(clientX: number, clientY: number, inside = false): Point | null 
 
 /** The middle of what's on screen, on the grid: where Place on map puts a piece. */
 function viewCenter(): Point {
-  return { x: snap(view.value.x + view.value.width / 2), y: snap(view.value.y + view.value.height / 2) }
+  return { x: snap(view.value.x + view.value.width / 2, SNAP_CM), y: snap(view.value.y + view.value.height / 2, SNAP_CM) }
 }
 
-/** Ctrl or ⌘ held: 5 cm steps instead of the 25 cm grid while dragging or drawing (D278). */
+/** Ctrl or ⌘ held while dragging: no smart guides (D278; moves are on whole centimetres either way, ISS-004). */
 const fineSnap = (event: { ctrlKey: boolean, metaKey: boolean }) => event.ctrlKey || event.metaKey
 
-/** Snapped to the grid; any angle from `from`, or 45° steps when `constrain` (Shift, like Figma: ISS-018). */
-function drawPoint(plan: Point, from: Point | undefined, constrain: boolean, fine: boolean): Point {
-  const step = fine ? FINE_GRID_CM : GRID_CM
+/** On whole centimetres (SNAP_CM); any angle from `from`, or 45° steps when `constrain` (Shift, like Figma: ISS-018). */
+function drawPoint(plan: Point, from: Point | undefined, constrain: boolean): Point {
+  const step = SNAP_CM
   const point = { x: snap(plan.x, step), y: snap(plan.y, step) }
   return from && constrain ? constrainAngle(from, point, step) : point
 }
@@ -639,7 +639,7 @@ function onPointerDown(event: PointerEvent) {
     gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan, event: { shiftKey: event.shiftKey, fine: fineSnap(event) } }
   }
   if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
-    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const step = SNAP_CM
     gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) } }
     return
   }
@@ -753,7 +753,7 @@ function followPointer(event: PointerMove) {
     if (drawing.value || props.mode === 'wall') {
       const plan = toPlan(event.clientX, event.clientY)
       const from = drawing.value ? drawn.value.at(-1) : wallStart.value ?? undefined
-      hover.value = plan ? snapToChainStart(drawPoint(plan, from, event.shiftKey, fineSnap(event))) : null
+      hover.value = plan ? snapToChainStart(drawPoint(plan, from, event.shiftKey)) : null
     }
     return
   }
@@ -776,7 +776,7 @@ function followPointer(event: PointerMove) {
   const plan = toPlan(event.clientX, event.clientY)
   if (!plan) return
   if (gesture.type === 'room') {
-    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const step = SNAP_CM
     const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
     // Like Figma (ISS-017): Shift keeps both sides equal while held (a round block too); Alt
     // draws a shape from its middle. In Room, Alt cuts instead (its own meaning, D278).
@@ -807,7 +807,7 @@ function followPointer(event: PointerMove) {
     return
   }
   if (gesture.type === 'group') {
-    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const step = SNAP_CM
     const delta = { x: snap(plan.x - gesture.startPlan.x, step), y: snap(plan.y - gesture.startPlan.y, step) }
     if (event.shiftKey) {
       if (Math.abs(delta.x) >= Math.abs(delta.y)) delta.y = 0
@@ -825,7 +825,7 @@ function followPointer(event: PointerMove) {
     return
   }
   if (gesture.type === 'side') {
-    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const step = SNAP_CM
     const base = { outline: floor.value.outline, edges: floor.value.edges }
     const normal = outwardNormal(base.outline, gesture.index)
     const distance = snap((plan.x - gesture.startPlan.x) * normal.x + (plan.y - gesture.startPlan.y) * normal.y, step)
@@ -837,11 +837,11 @@ function followPointer(event: PointerMove) {
     const wall = floor.value.walls.find(candidate => candidate.id === id)
     if (!wall) return
     const other = end === 'from' ? wall.to : wall.from
-    liveWalls.value = moveWallEnd(floor.value.walls, id, end, drawPoint(plan, other, event.shiftKey, fineSnap(event)))
+    liveWalls.value = moveWallEnd(floor.value.walls, id, end, drawPoint(plan, other, event.shiftKey))
     return
   }
   if (gesture.type === 'wall') {
-    const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+    const step = SNAP_CM
     const delta = { x: snap(plan.x - gesture.startPlan.x, step), y: snap(plan.y - gesture.startPlan.y, step) }
     if (event.shiftKey) {
       if (Math.abs(delta.x) >= Math.abs(delta.y)) delta.y = 0
@@ -850,7 +850,7 @@ function followPointer(event: PointerMove) {
     liveWalls.value = moveWall(floor.value.walls, gesture.id, delta)
     return
   }
-  const step = fineSnap(event) ? FINE_GRID_CM : GRID_CM
+  const step = SNAP_CM
   const to = { x: snap(gesture.origin.x + plan.x - gesture.startPlan.x, step), y: snap(gesture.origin.y + plan.y - gesture.startPlan.y, step) }
   // Shift keeps a piece's move straight across or down, like Figma (D278).
   if (gesture.type === 'drag' && event.shiftKey) {
@@ -985,14 +985,14 @@ function tap(plan: Point | null, keys: { shiftKey: boolean, fine: boolean }) {
   }
   if (drawing.value && plan) {
     const first = drawn.value[0]
-    const point = drawPoint(plan, drawn.value.at(-1), keys.shiftKey, keys.fine)
+    const point = drawPoint(plan, drawn.value.at(-1), keys.shiftKey)
     if (first && drawn.value.length >= 3 && Math.hypot(point.x - first.x, point.y - first.y) <= Math.max(CLOSE_DISTANCE_CM, perPixel.value * 12)) return closeDrawing()
     const last = drawn.value.at(-1)
     if (!last || last.x !== point.x || last.y !== point.y) drawn.value = [...drawn.value, point]
     return
   }
   if (props.mode === 'wall' && plan) {
-    const point = snapToChainStart(drawPoint(plan, wallStart.value ?? undefined, keys.shiftKey, keys.fine))
+    const point = snapToChainStart(drawPoint(plan, wallStart.value ?? undefined, keys.shiftKey))
     const start = wallStart.value
     if (!start) {
       wallStart.value = point
@@ -1076,7 +1076,7 @@ const ARROWS: Record<string, Point> = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x
  * The plan's own keys, called by Studio for every key pressed outside a field (D278), so they work
  * without focusing the plan first. Returns whether the key was used; Studio handles the rest (Esc
  * leaving a tool, the tool keys).
- * - Arrows move the selection or the picked corner 5 cm, 25 cm with Shift (Figma's small and big
+ * - Arrows move the selection or the picked corner 1 cm, 10 cm with Shift (Figma's small and big
  *   nudge); Shift+R turns the selection 90°; Delete or Backspace removes it.
  * - Escape cancels in steps: a drag, turn, resize or box still held (ISS-012), a placement, the
  *   last corner drawn, the wall being drawn, the picked corner, then the selection.
@@ -1093,7 +1093,7 @@ function keydown(event: KeyboardEvent): boolean {
     return done()
   }
   if (props.mode === 'hand') return false
-  const step = event.shiftKey ? GRID_CM : FINE_GRID_CM
+  const step = event.shiftKey ? BIG_NUDGE_CM : NUDGE_CM
   const arrow = ARROWS[event.key]
   if (drawing.value) {
     if (event.key === 'Enter') {
@@ -1185,7 +1185,7 @@ const ariaLabel = computed(() => {
   if (props.mode === 'shape') return `Shape, ${floor.value.name} floor. Drag to draw a ${props.roundShape ? 'round block' : 'block'} for anything the library doesn't have.`
   if (props.mode === 'room') return `Room, ${floor.value.name} floor. Drag a rectangle to add a room to the floor; hold Alt to cut it out.`
   if (props.mode === 'wall') return `Draw wall, ${floor.value.name} floor. Click where the wall starts and where it ends; Escape stops.`
-  return `Floor plan, ${floor.value.name}. Arrow keys move the selected piece 5 cm (Shift: 25 cm), Shift+R turns it, Delete removes it, Escape clears the selection. Question mark lists every shortcut.`
+  return `Floor plan, ${floor.value.name}. Arrow keys move the selected piece 1 cm (Shift: 10 cm), Shift+R turns it, Delete removes it, Escape clears the selection. Question mark lists every shortcut.`
 })
 
 const transform = (object: { x: number, y: number, rotation: number }) => `translate(${object.x} ${object.y}) rotate(${object.rotation})`

@@ -1,6 +1,6 @@
 import type { Edge, EdgeKind, Floor, Opening, OpeningKind, Point } from '#shared/contracts/shop-layout'
 import { edgeLength, signedArea } from '#shared/contracts/shop-layout'
-import { outwardNormal, snap } from './geometry'
+import { outwardNormal, snap, SNAP_CM } from './geometry'
 
 /**
  * Editing a floor's outline (D273, frames 3A, 3B): corners, the kind of each edge, and the doors
@@ -63,7 +63,7 @@ export function insertCorner(shape: FloorShape, index: number, at?: Point): Floo
   const to = shape.outline[(index + 1) % count]!
   const span = Math.hypot(to.x - from.x, to.y - from.y)
   const share = at && span ? clamp(((at.x - from.x) * (to.x - from.x) + (at.y - from.y) * (to.y - from.y)) / (span * span), 0, 1) : 0.5
-  const middle = { x: snap(from.x + (to.x - from.x) * share), y: snap(from.y + (to.y - from.y) * share) }
+  const middle = { x: snap(from.x + (to.x - from.x) * share, SNAP_CM), y: snap(from.y + (to.y - from.y) * share, SNAP_CM) }
   // On a corner already: nothing to add.
   if ((middle.x === from.x && middle.y === from.y) || (middle.x === to.x && middle.y === to.y)) return shape
   const outline = [...shape.outline.slice(0, index + 1), middle, ...shape.outline.slice(index + 1)].map(point => ({ ...point }))

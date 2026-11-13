@@ -206,11 +206,11 @@ describe('Edit points (D278)', () => {
     expect(valid(shape)).toEqual([])
   })
 
-  it('adds a corner where a side is double-clicked, snapped; none on an existing corner', () => {
-    const shape = insertCorner(square(), 0, { x: 110, y: 12 })
-    expect(shape.outline).toEqual([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 400 }, { x: 0, y: 400 }])
+  it('adds a corner where a side is double-clicked, on the whole centimetre; none on an existing corner', () => {
+    const shape = insertCorner(square(), 0, { x: 110.4, y: 12 })
+    expect(shape.outline).toEqual([{ x: 0, y: 0 }, { x: 110, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 400 }, { x: 0, y: 400 }])
     expect(shape.edges).toHaveLength(5)
-    expect(insertCorner(square(), 0, { x: 3, y: 0 })).toEqual(square())
+    expect(insertCorner(square(), 0, { x: 0.3, y: 0 })).toEqual(square())
     expect(insertCorner(square(), 0).outline[1]).toEqual({ x: 200, y: 0 })
   })
 })

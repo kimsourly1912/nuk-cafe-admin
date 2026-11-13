@@ -189,14 +189,12 @@ describe('the shop designer on saved layouts', () => {
       return { x: point.x, y: point.y }
     })
     await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2)
-    // Ctrl/⌘ snaps to 5 cm while dragging (D278; Shift did before).
-    await page.keyboard.down('Control')
+    // A drop lands on the whole centimetre under the pointer (ISS-004, Figma's pixel grid).
     await page.mouse.down()
     await page.mouse.move(target.x, target.y, { steps: 5 })
-    await expect.poll(() => plan(page).getByTestId('plan-ghost').getAttribute('transform')).toBe('translate(115 305)')
+    await expect.poll(() => plan(page).getByTestId('plan-ghost').getAttribute('transform')).toBe('translate(113 303)')
     await page.mouse.up()
-    await page.keyboard.up('Control')
-    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: 115, y: 305 })
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: 113, y: 303 })
     await page.getByRole('button', { name: 'Undo' }).click()
     await card.waitFor()
     await page.getByRole('group', { name: 'Position and rotation' }).waitFor({ state: 'hidden' })
@@ -402,15 +400,16 @@ describe('the shop designer on saved layouts', () => {
 
     // A corner picked, then the arrow key: only that corner moves, like Figma's point nudge (ISS-019).
     await plan(page).getByTestId('plan-corner-1').click()
+    // Shift+arrow is 10 cm (ISS-004), twice.
     await page.keyboard.press('Shift+ArrowRight')
-    await expect.poll(() => plan(page).getByTestId('plan-edge-length-0').textContent()).toBe('625 cm')
-    await expect.poll(() => plan(page).getByTestId('plan-edge-length-1').textContent()).not.toBe('400 cm')
+    await page.keyboard.press('Shift+ArrowRight')
+    await expect.poll(() => plan(page).getByTestId('plan-edge-length-0').textContent()).toBe('620 cm')
     await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
 
     await placeTable(page, 'A1')
     await save(page)
     const layout = await savedLayout(page, lab.annexBranchId)
-    expect(layout.floors[0]!.outline).toEqual([{ x: 0, y: 0 }, { x: 625, y: 0 }, { x: 600, y: 400 }, { x: 0, y: 400 }])
+    expect(layout.floors[0]!.outline).toEqual([{ x: 0, y: 0 }, { x: 620, y: 0 }, { x: 600, y: 400 }, { x: 0, y: 400 }])
     expect(layout.floors[0]!.edges.every(edge => edge.kind === 'wall')).toBe(true)
   })
 
@@ -717,14 +716,14 @@ describe('the shop designer on saved layouts', () => {
     await l1.hover()
     await plan(page).getByTestId('plan-hover').waitFor()
 
-    // Keys act on the selection after a click elsewhere (a panel button has the focus): 5 cm, Shift 25 cm.
+    // Keys act on the selection after a click elsewhere (a panel button has the focus): 1 cm, Shift 10 cm (Figma's, ISS-004).
     await l1.click()
     const start = await positionOf(page, 'L1')
     await showPanel(page, 'Floors')
     await page.keyboard.press('ArrowRight')
-    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: start.x + 5, y: start.y })
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: start.x + 1, y: start.y })
     await page.keyboard.press('Shift+ArrowDown')
-    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: start.x + 5, y: start.y + 25 })
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: start.x + 1, y: start.y + 10 })
     await page.keyboard.press('Shift+R')
     await expect.poll(() => l1.getAttribute('transform')).toMatch(/rotate\((90|180|270|0)\)/)
 
@@ -974,8 +973,8 @@ describe('the shop designer on saved layouts', () => {
     await plant.click({ modifiers: ['Shift'] })
     await expect.poll(() => group.textContent()).toContain('2 selected')
     await page.keyboard.press('Shift+ArrowRight')
-    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: tableBefore.x + 25, y: tableBefore.y })
-    expect(await plantAt()).toEqual({ x: plantBefore.x + 25, y: plantBefore.y })
+    await expect.poll(() => positionOf(page, 'L1')).toEqual({ x: tableBefore.x + 10, y: tableBefore.y })
+    expect(await plantAt()).toEqual({ x: plantBefore.x + 10, y: plantBefore.y })
     await page.getByRole('button', { name: 'Undo' }).click()
     await expect.poll(() => positionOf(page, 'L1')).toEqual(tableBefore)
     expect(await plantAt()).toEqual(plantBefore)

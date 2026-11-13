@@ -16,7 +16,7 @@ import type { LayoutEditor } from '../composables/useLayoutEditor'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
 import type { AlignEdge } from '../designer/group'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
-import { besideOf, FINE_GRID_CM, GRID_CM, newLayoutId, normalizeRotation, placementExtent, snap } from '../designer/geometry'
+import { besideOf, newLayoutId, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
@@ -527,7 +527,7 @@ function turnGroup() {
   const floorId = floor.value?.id
   const box = canvas.value?.selectedBounds
   if (!floorId || !box) return
-  const center = { x: snap((box.minX + box.maxX) / 2, FINE_GRID_CM), y: snap((box.minY + box.maxY) / 2, FINE_GRID_CM) }
+  const center = { x: snap((box.minX + box.maxX) / 2, SNAP_CM), y: snap((box.minY + box.maxY) / 2, SNAP_CM) }
   draft.change(next => turnSelected(next, floorId, group.value, center))
 }
 
@@ -970,8 +970,7 @@ function onLibraryMove(event: PointerEvent) {
   if (!libraryDrag.dragging && Math.hypot(event.clientX - libraryDrag.start.x, event.clientY - libraryDrag.start.y) < 6) return
   libraryDrag.dragging = true
   const at = canvas.value?.toPlan(event.clientX, event.clientY, true)
-  const fine = event.ctrlKey || event.metaKey ? FINE_GRID_CM : GRID_CM
-  ghost.value = at ? ghostOf(libraryDrag.piece, { x: snap(at.x, fine), y: snap(at.y, fine) }) : null
+  ghost.value = at ? ghostOf(libraryDrag.piece, { x: snap(at.x, SNAP_CM), y: snap(at.y, SNAP_CM) }) : null
 }
 
 function clearLibraryDrag() {
@@ -2790,7 +2789,7 @@ const pendingLabel = computed(() => {
             </template>
             <template v-else-if="mode === 'room'">
               <span>Drag a rectangle: the floor, or a room added to it.</span>
-              <span>Hold Alt while you let go to cut it out instead. Ctrl or ⌘ for 5 cm steps.</span>
+              <span>Hold Alt while you let go to cut it out instead.</span>
             </template>
             <template v-else>
               <span>Click where the wall starts, then where it ends: any angle, Shift for 45° steps.</span>
