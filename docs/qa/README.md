@@ -10,6 +10,7 @@ How we find, record, fix and retest bugs and improvements. Testers can be a pers
 | [_templates/ISSUE.md](_templates/ISSUE.md) | One finding (bug, gap or improvement). |
 | [_templates/CHECK.md](_templates/CHECK.md) | One tool or interaction, step by step, Pass or Fail. |
 | [_templates/RETEST.md](_templates/RETEST.md) | The result of a retest. |
+| [_templates/INBOX.md](_templates/INBOX.md) | Raw notes while the owner reports findings one by one (mode A). |
 | [_templates/AGENT-PROMPT.md](_templates/AGENT-PROMPT.md) | Prompt to paste into GPT or Claude to start a browser test session. |
 
 ## Start a new QA area
@@ -20,6 +21,7 @@ docs/qa/<area>/
   issues/ISS-xxx.md  from _templates/ISSUE.md
   checks/<ID>.md     from _templates/CHECK.md
   evidence/<ID>/     screenshots and GIFs
+  INBOX.md           raw owner reports, emptied at "done" (mode A)
   SMOKE.md           about 10 checks to re-run before a release (from Verified items)
 ```
 

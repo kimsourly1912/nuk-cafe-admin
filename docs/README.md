@@ -24,7 +24,7 @@ Use the returned line numbers and stop at the next heading at the same level. Fo
 | Database/payment | Data-model domain, architecture versions/batches/idempotency, security permissions | [Operations](server/operations.md) migrations/configuration, [KHQR](plans/khqr.md), domain plan |
 | Deploy/operations | Operations environments/configuration/deploys/backups/monitoring | [Release check](plans/release-check.md), progress environment notes and open questions |
 | New feature | [Feature standard](feature-standard.md), applicable standards and domain plan | [Blueprint](plans/system-blueprint.md) journeys; the feature standard's UI design rule (no mockup round by default, D245) |
-| QA | [QA folder](qa/README.md): [standard](qa/STANDARD.md), [retest queue](qa/RETEST-QUEUE.md), templates | [Retest queue](qa/RETEST-QUEUE.md); [shop designer plan](plans/shop-designer.md), D278 |
+| QA | [QA folder](qa/README.md): [standard](qa/STANDARD.md) (read section 0 first), [retest queue](qa/RETEST-QUEUE.md), [verified log](qa/VERIFIED.md), templates | [Retest queue](qa/RETEST-QUEUE.md); [shop designer plan](plans/shop-designer.md), D278 |
 | Tests | [Development](guides/development.md) commands/checks/tests | [Progress](progress.md) "How to verify" for affected harness/flake; reference edge-case tables |
 | Shared helper | [Reference index](reference/README.md) Pages/API table or [catalog](guides/project-map.md#shared-building-blocks-root-auto-imported) | Only the helper's owning section in ui-helpers/app-behavior/etc. |
 

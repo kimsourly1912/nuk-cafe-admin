@@ -6,7 +6,7 @@ Status of these rules: sections 1 to 4 and 6 to 12 were used in practice (Studio
 
 ## 0. Read order
 
-1. This file.
+1. This file. Start the session with `QA mode A, area <area>` or `QA mode B, area <area>` (section 3a).
 2. The area README (`docs/qa/<area>/README.md`) if it exists: goal, reference, status table.
 3. The issue or check file you were given.
 4. `AGENTS.md` (project rules), only for fixers, and only the sections the task needs.
@@ -47,6 +47,28 @@ The repo file is the only source of truth. Do not keep a second tracker (a sheet
 8. The tester retests with `RETEST.md` and new evidence. Pass becomes `Verified`. Fail becomes `Reopened`.
 
 Do one check at a time. Write its file before you start the next one.
+
+## 3a. Two ways to collect findings (same flow after intake)
+
+Start the session with one line so the agent knows the mode: `QA mode A, area <area>` or `QA mode B, area <area>`.
+
+| | Mode A: owner reports | Mode B: paired browser session |
+|---|---|---|
+| Who finds it | The owner, one report at a time | The owner and an agent, testing together |
+| Evidence | The owner's screenshots and words | The agent captures, plus the owner's |
+| Reference value | `unverified` unless the owner states it | Checked in the reference during the session |
+| Reproduced by the agent | No, not yet | Yes, or `Not tested: tool cannot <action>` |
+
+**Mode A.** The agent does not write issue files while the owner is still reporting. It appends each report to `docs/qa/<area>/INBOX.md` (from [_templates/INBOX.md](_templates/INBOX.md)): the owner's own words, the time, and any image saved under `evidence/inbox/`. The agent does not invent expected values, steps or causes. When the owner says "done", the agent:
+
+1. Merges duplicates and checks each report against existing issues.
+2. Writes one issue file per finding (`ISSUE.md`). A report without clear steps is `Needs details`, with the questions listed. A report with steps is `Open`.
+3. Sets `Found:` to `owner by eye` and keeps unverified reference values marked `unverified`.
+4. Updates the area README table, then clears the inbox (git history keeps it).
+
+**Mode B.** Follow the flow in section 3. Set `Found:` to `paired session, agent reproduced` (or `... not reproduced` for steps the agent could not do).
+
+Either way, the result is the same files: issue file, evidence, README table row. The fixer does not need to know which mode produced it, only the `Found:` line, which tells how far to trust the steps.
 
 ## 4. Status
 

@@ -32,6 +32,7 @@ Classify the change **before editing** and read applicable sections below. Combi
 | New feature/new screens | [Feature standard](docs/feature-standard.md), domain plan, applicable routes above. No mockup round by default (D245): design from the UI standard and page patterns, the owner reviews on staging; offer mockups only for a new page pattern or a large workflow change |
 | Resume work | [Current-state navigation](docs/current-state.md), then relevant progress phase, open question and plan |
 | Investigate/change old pattern | Search [decision index](docs/decision-index.md), read matching decision and follow-ups before changing it |
+| QA, bug reports, retests | [QA standard](docs/qa/STANDARD.md) section 0, then the area README and the issue file you were given. Fixers also read the issue's "How to verify" |
 | Documentation only | [Documentation index](docs/README.md) and affected sections; check links, imports, preservation and scope |
 
 ## Verification and completion
