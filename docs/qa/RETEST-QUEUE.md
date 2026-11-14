@@ -97,3 +97,11 @@ Owner decisions D1–D6 (2026-11-14) in the [plan](plans/studio-builder.md). Rea
 | ISS-040 | Grid | At 2 %, 100 %, 400 % and the maximum: finer lines appear as you zoom in (1 cm at the maximum, about 5 lines across), lines sharp in light and dark. |
 | ISS-041 step 2 | Street not rebuilt | Neighborhood lane on: move a chair in 2D, switch to 3D: the street does not flicker or rebuild; drag an outer corner: it does. |
 
+## D. Doors, windows and pieces built as wanted (D283, branch `ccr-e78bff39-u70ma7`)
+
+| What | Steps and expected result |
+|---|---|
+| Door shape | Select a wall with a door: set Height 240, Opens Out, Hinge End. The plan's swing line moves to the other end and the other side; 3D's door is taller with the handle at the free end. Door leaf off: no swing on the plan, no leaf in 3D; in Explore the street door, if it is that one, has no door to push. |
+| Window shape | Set Sill 30 and Height 200: the 3D window runs from 30 to 230 cm (cut at the wall's top). |
+| Above the floor | Select a shelf, Above the floor 150: in 3D it hangs 1.5 m up; in Explore you walk under it. Stairs and people have no such field. |
+

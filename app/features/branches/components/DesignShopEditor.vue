@@ -11,7 +11,7 @@ import StudioNumberField from './StudioNumberField.vue'
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, floorPageId, isSimpleOutline, SHAPE_ARC, wallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
+import { edgeLength, FLOOR_HEIGHT_MAX_CM, floorPageId, isSimpleOutline, SHAPE_ARC, wallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, Wall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import { losesStreetDoor } from '../composables/useLayoutDraft'
@@ -427,7 +427,7 @@ function setShapeName(itemId: string, value: string) {
   })
 }
 
-function updateItem(itemId: string, change: Partial<{ x: number, y: number, rotation: number, width: number, depth: number, height: number, finishes: Partial<Record<string, Finish>> }> & ShapeEdit) {
+function updateItem(itemId: string, change: Partial<{ x: number, y: number, z: number, rotation: number, width: number, depth: number, height: number, finishes: Partial<Record<string, Finish>> }> & ShapeEdit) {
   draft.change((next) => {
     const item = next.floors.flatMap(candidate => candidate.items).find(candidate => candidate.id === itemId)
     if (!item) return
@@ -442,6 +442,8 @@ function updateItem(itemId: string, change: Partial<{ x: number, y: number, rota
     if (item.arcInner === undefined) delete item.arcInner
     if (item.flipX === undefined) delete item.flipX
     if (item.flipY === undefined) delete item.flipY
+    // On the floor is left out, as the contract saves it (D282).
+    if (!item.z) delete item.z
   })
 }
 
@@ -2657,6 +2659,22 @@ const pendingLabel = computed(() => {
             :min="itemHeightRange(selectedItem.kind)!.min"
             :max="itemHeightRange(selectedItem.kind)!.max"
             @update:model-value="value => setNumber(value, pieceHeight(selectedItem!), height => updateItem(selectedItem!.id, { height }))"
+          />
+        </UFormField>
+        <!-- Off the floor (D282, plan Phase 4): a shelf on a wall, a sign; 0 stands on the floor. -->
+        <UFormField
+          v-if="selectedItem.kind !== 'stairs' && !isFigureKind(selectedItem.kind)"
+          label="Above the floor (cm)"
+          :help="`0 to ${floor?.height ?? FLOOR_HEIGHT_MAX_CM} cm`"
+          class="col-span-2"
+        >
+          <StudioNumberField
+            :model-value="selectedItem.z ?? 0"
+            label="Above the floor"
+            unit="cm"
+            :min="0"
+            :max="floor?.height ?? FLOOR_HEIGHT_MAX_CM"
+            @update:model-value="value => setNumber(value, selectedItem!.z ?? 0, z => updateItem(selectedItem!.id, { z }))"
           />
         </UFormField>
         <!-- A rectangle shape's corner radius (ED-05); also by the dots inside its corners. -->

@@ -1,6 +1,6 @@
 # Studio flexible builder plan
 
-Status: Phases 0, 1 and 2 (grid) built on 2026-11-14 (D281, D282); Phases 3–5 next. Owner decisions D1–D7 below were all decided on 2026-11-14. When accepted, record the architecture change in [decisions](../decisions.md) (it amends D273's floor model) and refresh the index. Bugs and gaps found with this plan: [Studio builder QA](../qa/studio-builder/README.md) (ISS-037 to ISS-046).
+Status: Phases 0, 1, 2 (grid) and 3 built on 2026-11-14 (D281–D283), and `z` from Phase 4; next: free colours, custom door shapes, polygon shape, saved groups, per-floor 3D rebuild. Owner decisions D1–D7 below were all decided on 2026-11-14. When accepted, record the architecture change in [decisions](../decisions.md) (it amends D273's floor model) and refresh the index. Bugs and gaps found with this plan: [Studio builder QA](../qa/studio-builder/README.md) (ISS-037 to ISS-046).
 
 ## Goal
 

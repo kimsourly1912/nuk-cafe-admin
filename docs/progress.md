@@ -3,6 +3,13 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio builder: doors, windows and pieces built as wanted (D283, 2026-11-14)
+
+Branch `ccr-e78bff39-u70ma7` (after PR #317). Plan Phase 3 and Phase 4's `z` (owner D3).
+
+- **Status:** **Fixed, needs retest**: [RETEST-QUEUE.md](qa/RETEST-QUEUE.md) section D. ISS-041 step 3 left out on purpose (see the issue). Next PR: free colours (D2) and custom door shapes, which change the looks contract; polygon shape; saved groups.
+- **Evidence:** `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` (199 files, 3049 tests; each new contract rule removed makes a test fail); e2e `shop-designer`, `shop-layout-api`, `explore`, `explore-branches` 46 of 46 (a gate opening out at its end, saved). No manual browser check.
+
 ### Studio builder: contract v2, grid and 3D rebuild (D282, 2026-11-14)
 
 Branch `ccr-e78bff39-u70ma7`, one PR with one commit per step: grid (ISS-040, plan Phase 2 grid part), street rebuild (ISS-041 step 2), contract v2 (ISS-045, ISS-046, plan Phase 1) in five commits. Owner decisions D1–D6 recorded in the plan; the owner chose the full contract v2 over a smaller variant Claude offered.

@@ -1,4 +1,4 @@
-import type { Floor, Opening, OpeningKind, Point, Slab, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
+import type { DoorHinge, DoorSwing, Floor, Opening, OpeningKind, Point, Slab, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
 import { signedArea, wallKind, wallLength } from '#shared/contracts/shop-layout'
 import { newLayoutId, pointAlongWall, pointInPolygon, WALL_THICKNESS_CM, wallBand, wallNormal, wallStrip, wallThickness } from './geometry'
 import type { WallSegment } from './geometry'
@@ -158,6 +158,45 @@ export function updateWallOpening(walls: readonly Wall[], id: string, openingId:
     const ordered = [opening, ...openings.filter(candidate => candidate !== opening)]
     return tidy(wall, { openings: fitOpenings(ordered, length) })
   })
+}
+
+/** How a door or window is built (owner D3): its height, a window's sill, a door's swing, hinge and leaf. `null` puts the default back. */
+export interface OpeningShape {
+  height?: number | null
+  sill?: number | null
+  swing?: DoorSwing
+  hinge?: DoorHinge
+  /** False: an open doorway, no leaf. */
+  leaf?: boolean
+}
+
+/**
+ * Changes how one opening is built, keeping only what says something (D282): defaults are left
+ * out (`swing: 'in'`, `hinge: 'start'`, a leaf), as the contract saves them; a sill or a leaf only
+ * where the kind has one.
+ */
+export function setOpeningShape(walls: readonly Wall[], id: string, openingId: string, change: OpeningShape): Wall[] {
+  return replace(walls, id, wall => tidy(wall, {
+    openings: (wall.openings ?? []).map((opening) => {
+      if (opening.id !== openingId) return opening
+      const { height: _height, sill: _sill, swing: _swing, hinge: _hinge, leaf: _leaf, ...base } = opening
+      const pick = <K extends keyof OpeningShape>(key: K, current: OpeningShape[K]) => (change[key] === undefined ? current : change[key])
+      const height = pick('height', opening.height)
+      const sill = pick('sill', opening.sill)
+      const swing = pick('swing', opening.swing)
+      const hinge = pick('hinge', opening.hinge)
+      const leaf = pick('leaf', opening.leaf)
+      const door = opening.kind === 'door'
+      return {
+        ...base,
+        ...(height != null && { height: Math.round(height) }),
+        ...(!door && sill != null && { sill: Math.round(sill) }),
+        ...(door && swing === 'out' && { swing: 'out' as const }),
+        ...(door && hinge === 'end' && { hinge: 'end' as const }),
+        ...(door && leaf === false && { leaf: false as const }),
+      }
+    }),
+  }))
 }
 
 export function removeWallOpening(walls: readonly Wall[], id: string, openingId: string): Wall[] {
@@ -364,7 +403,7 @@ export interface WallDrawing {
   /** How far its band reaches past each end (a mitred corner's), for the 3D wall. */
   reach: { start: number, end: number }
   windows: { id: string, from: Point, to: Point }[]
-  /** A door swings away from the wall's side (into the room), one width long. */
+  /** A door's leaf, one width long, from its hinge: into the room (away from the wall's side) unless it opens out. */
   doors: { id: string, hinge: Point, swing: Point }[]
 }
 
@@ -424,9 +463,12 @@ export function drawWalls(walls: readonly Wall[]): WallDrawing[] {
       reach,
       // On the band's middle line, where the glass stands.
       windows: openings.filter(opening => opening.kind === 'window').map(opening => ({ id: opening.id, from: onBand(pointAlongWall(wall, opening.offset)), to: onBand(pointAlongWall(wall, opening.offset + opening.width)) })),
-      doors: openings.filter(opening => opening.kind === 'door').map((opening) => {
-        const hinge = pointAlongWall(wall, opening.offset)
-        return { id: opening.id, hinge, swing: { x: hinge.x + normal.x * swingSign * opening.width, y: hinge.y + normal.y * swingSign * opening.width } }
+      // Hung at the doorway's start or end, opening into the room or out of it (D282); an open
+      // doorway (`leaf: false`) has no leaf to draw.
+      doors: openings.filter(opening => opening.kind === 'door' && opening.leaf !== false).map((opening) => {
+        const hinge = pointAlongWall(wall, opening.hinge === 'end' ? opening.offset + opening.width : opening.offset)
+        const sign = opening.swing === 'out' ? -swingSign : swingSign
+        return { id: opening.id, hinge, swing: { x: hinge.x + normal.x * sign * opening.width, y: hinge.y + normal.y * sign * opening.width } }
       }),
     }
   })

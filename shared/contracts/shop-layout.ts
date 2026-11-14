@@ -203,13 +203,36 @@ const finishSchema = v.picklist(FINISHES)
 export const pointSchema = v.strictObject({ x: cmSchema, y: cmSchema })
 export type Point = v.InferOutput<typeof pointSchema>
 
-export const openingSchema = v.strictObject({
-  id: idSchema,
-  kind: v.picklist(OPENING_KINDS),
-  /** From the edge's start corner to the opening's start, along the edge. */
-  offset: sizeSchema(0, LAYOUT_MAX_EXTENT_CM),
-  width: sizeSchema(40, 1_000),
-})
+/** A door's leaf opens into the room (`in`, away from its wall's side) or out of it. */
+export const DOOR_SWINGS = ['in', 'out'] as const
+export type DoorSwing = typeof DOOR_SWINGS[number]
+/** The end of the doorway a door's leaf hangs from, along the wall: its start or its end. */
+export const DOOR_HINGES = ['start', 'end'] as const
+export type DoorHinge = typeof DOOR_HINGES[number]
+export const OPENING_HEIGHT_MIN_CM = 50
+export const WINDOW_SILL_MAX_CM = 700
+
+/**
+ * A door or window on a wall (D282). Left out, the shape is today's (owner D3, plan Phase 3):
+ * `height` (a door's, or a window's from its sill) 210 cm or 130 cm, a window's `sill` 90 cm; a
+ * door's leaf hangs at the doorway's `start` and opens `in`; `leaf: false` is an open doorway.
+ */
+export const openingSchema = v.pipe(
+  v.strictObject({
+    id: idSchema,
+    kind: v.picklist(OPENING_KINDS),
+    /** From the wall's start to the opening's start, along the wall. */
+    offset: sizeSchema(0, LAYOUT_MAX_EXTENT_CM),
+    width: sizeSchema(40, 1_000),
+    height: v.optional(sizeSchema(OPENING_HEIGHT_MIN_CM, FLOOR_HEIGHT_MAX_CM)),
+    sill: v.optional(sizeSchema(0, WINDOW_SILL_MAX_CM)),
+    swing: v.optional(v.picklist(DOOR_SWINGS)),
+    hinge: v.optional(v.picklist(DOOR_HINGES)),
+    leaf: v.optional(v.literal(false)),
+  }),
+  v.check(opening => opening.kind === 'window' || opening.sill === undefined, 'Only a window has a sill'),
+  v.check(opening => opening.kind === 'door' || (opening.swing === undefined && opening.hinge === undefined && opening.leaf === undefined), 'Only a door has a leaf'),
+)
 export type Opening = v.InferOutput<typeof openingSchema>
 
 export const OUTLINE_CROSSES = 'The outline crosses itself'
@@ -290,6 +313,11 @@ export const itemSchema = v.pipe(
      */
     height: v.optional(sizeSchema(ITEM_HEIGHT_MIN_CM, ITEM_HEIGHT_MAX_CM)),
     /**
+     * How far above its floor it stands (D282, plan Phase 4): a shelf on a wall, a sign, a lamp
+     * over a counter. Left out: on the floor. Stairs and people and pets stand on it.
+     */
+    z: v.optional(sizeSchema(1, FLOOR_HEIGHT_MAX_CM)),
+    /**
      * Its name (D278 for shapes; any piece since ISS-021, like a Figma layer), shown in Layers, and
      * on the plan and in 3D's card for a shape. Left out: named by its kind.
      */
@@ -317,6 +345,7 @@ export const itemSchema = v.pipe(
   v.forward(v.check(item => item.height === undefined || itemHeightRange(item.kind) === undefined || heightFits(item.kind, item.height), 'Out of this kind\'s height range'), ['height']),
   v.check(item => !isFigureKind(item.kind) || (item.width === FIGURE_SIZES[item.kind].width && item.depth === FIGURE_SIZES[item.kind].depth), 'People and pets keep their own size'),
   v.check(item => !isFigureKind(item.kind) || Object.keys(item.finishes).length === 0, 'People and pets have no finishes'),
+  v.check(item => item.z === undefined || (item.kind !== 'stairs' && !isFigureKind(item.kind)), 'Stairs and people stand on the floor'),
 )
 export type LayoutItem = v.InferOutput<typeof itemSchema>
 

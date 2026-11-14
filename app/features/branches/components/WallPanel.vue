@@ -6,10 +6,10 @@ import StudioNumberField from './StudioNumberField.vue'
  * owner D3), and its doors and windows. Each change is one undo step, emitted as the floor's new
  * list of walls.
  */
-import type { OpeningKind, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
-import { WALL_HEIGHT_MIN_CM, WALL_THICKNESS_MAX_CM, WALL_THICKNESS_MIN_CM, wallKind, wallLength } from '#shared/contracts/shop-layout'
-import { newLayoutId, wallHeight, wallThickness } from '../designer/geometry'
-import { addWallOpening, OPENING_MIN_WIDTH, removeWallOpening, setWallKind, setWallLength, setWallStructure, updateWallOpening, wallOpeningFits } from '../designer/walls'
+import type { DoorHinge, DoorSwing, Opening, OpeningKind, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
+import { OPENING_HEIGHT_MIN_CM, WALL_HEIGHT_MIN_CM, WALL_THICKNESS_MAX_CM, WALL_THICKNESS_MIN_CM, WINDOW_SILL_MAX_CM, wallKind, wallLength } from '#shared/contracts/shop-layout'
+import { newLayoutId, openingSpan, wallHeight, wallThickness } from '../designer/geometry'
+import { addWallOpening, OPENING_MIN_WIDTH, removeWallOpening, setOpeningShape, setWallKind, setWallLength, setWallStructure, updateWallOpening, wallOpeningFits } from '../designer/walls'
 
 const props = defineProps<{
   walls: readonly Wall[]
@@ -37,6 +37,13 @@ const SIDES: { value: WallSide | 'centre', label: string }[] = [
   { value: 'right', label: 'Right' },
 ]
 const side = computed(() => props.wall.side ?? 'centre')
+/** How a door or window is built (owner D3): its height (a window's from its sill), within the wall's. */
+const openingHeight = (opening: Opening) => {
+  const span = openingSpan(opening, height.value)
+  return span.top - span.bottom
+}
+const SWINGS: { value: DoorSwing, label: string }[] = [{ value: 'in', label: 'In' }, { value: 'out', label: 'Out' }]
+const HINGES: { value: DoorHinge, label: string }[] = [{ value: 'start', label: 'Start' }, { value: 'end', label: 'End' }]
 /** A door in a railing is a gate; in a half wall or glass it is a gap to walk through. */
 const doorLabel = computed(() => (kind.value === 'railing' ? 'Gate' : kind.value === 'wall' ? 'Door' : 'Opening'))
 const openingName = (opening: OpeningKind) => (opening === 'window' ? 'Window' : doorLabel.value)
@@ -244,7 +251,78 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
             @update:model-value="value => setNumber(value, opening.offset, offset => updateWallOpening(walls, wall.id, opening.id, { offset }))"
           />
         </UFormField>
+        <UFormField label="Height (cm)">
+          <StudioNumberField
+            :model-value="openingHeight(opening)"
+            label="Height"
+            unit="cm"
+            :min="OPENING_HEIGHT_MIN_CM"
+            :max="height"
+            @update:model-value="value => setNumber(value, openingHeight(opening), next => setOpeningShape(walls, wall.id, opening.id, { height: next }))"
+          />
+        </UFormField>
+        <UFormField
+          v-if="opening.kind === 'window'"
+          label="Sill (cm)"
+        >
+          <StudioNumberField
+            :model-value="openingSpan(opening, height).bottom"
+            label="Sill"
+            unit="cm"
+            :min="0"
+            :max="Math.min(WINDOW_SILL_MAX_CM, height)"
+            @update:model-value="value => setNumber(value, openingSpan(opening, height).bottom, sill => setOpeningShape(walls, wall.id, opening.id, { sill }))"
+          />
+        </UFormField>
       </div>
+      <template v-if="opening.kind === 'door'">
+        <USwitch
+          :model-value="opening.leaf !== false"
+          :label="kind === 'railing' ? 'Gate leaf' : 'Door leaf'"
+          description="Off: an open doorway."
+          size="sm"
+          @update:model-value="on => emit('change', setOpeningShape(walls, wall.id, opening.id, { leaf: on }))"
+        />
+        <div
+          v-if="opening.leaf !== false"
+          class="grid grid-cols-2 gap-3"
+        >
+          <UFormField label="Opens">
+            <UFieldGroup
+              size="sm"
+              class="w-full"
+            >
+              <UButton
+                v-for="option in SWINGS"
+                :key="option.value"
+                :label="option.label"
+                :color="(opening.swing ?? 'in') === option.value ? 'primary' : 'neutral'"
+                :variant="(opening.swing ?? 'in') === option.value ? 'soft' : 'outline'"
+                :aria-pressed="(opening.swing ?? 'in') === option.value"
+                class="flex-1 justify-center"
+                @click="emit('change', setOpeningShape(walls, wall.id, opening.id, { swing: option.value }))"
+              />
+            </UFieldGroup>
+          </UFormField>
+          <UFormField label="Hinge">
+            <UFieldGroup
+              size="sm"
+              class="w-full"
+            >
+              <UButton
+                v-for="option in HINGES"
+                :key="option.value"
+                :label="option.label"
+                :color="(opening.hinge ?? 'start') === option.value ? 'primary' : 'neutral'"
+                :variant="(opening.hinge ?? 'start') === option.value ? 'soft' : 'outline'"
+                :aria-pressed="(opening.hinge ?? 'start') === option.value"
+                class="flex-1 justify-center"
+                @click="emit('change', setOpeningShape(walls, wall.id, opening.id, { hinge: option.value }))"
+              />
+            </UFieldGroup>
+          </UFormField>
+        </div>
+      </template>
     </div>
   </div>
 </template>

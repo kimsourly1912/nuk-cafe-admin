@@ -303,6 +303,10 @@ describe('the shop designer on saved layouts', () => {
     await panel.getByTestId('wall-opening-door').waitFor()
     // A railing takes no windows: the wall panel offers none.
     expect(await panel.getByRole('button', { name: 'Window' }).count()).toBe(0)
+    // How it is built (owner D3): the gate opens out, hung at the doorway's end.
+    await panel.getByRole('button', { name: 'Out', exact: true }).click()
+    await panel.getByRole('button', { name: 'End', exact: true }).click()
+    await expect.poll(() => panel.getByRole('button', { name: 'Out', exact: true }).getAttribute('aria-pressed')).toBe('true')
     await shot(page, 'edge-railing-gate')
 
     // Draw wall (9A): two clicks make a wall; Enter ends the chain. Counted after the copied outer walls.
@@ -333,7 +337,7 @@ describe('the shop designer on saved layouts', () => {
     expect(loft).toMatchObject({ name: 'Loft', hasRoof: false })
     expect(loft.canvasX).toBeGreaterThan(120)
     expect(loft.slabs.map(slab => slab.outline)).toEqual(saved.floors[1]!.slabs.map(slab => slab.outline))
-    expect(loft.walls[0]).toMatchObject({ kind: 'railing', openings: [{ kind: 'door' }] })
+    expect(loft.walls[0]).toMatchObject({ kind: 'railing', openings: [{ kind: 'door', swing: 'out', hinge: 'end' }] })
     expect(loft.walls.at(-1)).toEqual(expect.objectContaining({ from: { x: 300, y: 100 }, to: { x: 300, y: 400 } }))
     expect(saved.placements.find(placement => placement.floorId === loft.id)).toBeTruthy()
 
