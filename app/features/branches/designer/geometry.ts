@@ -367,6 +367,17 @@ export function pointOnEdge(outline: readonly Point[], index: number, distance: 
   return { x: from.x + ((to.x - from.x) * distance) / length, y: from.y + ((to.y - from.y) * distance) / length }
 }
 
+/**
+ * Where a door or window is in its wall's height (D282, owner D3): a door from the floor to its
+ * own height or 210 cm; a window from its sill (90 cm) up by its height (130 cm). Never above the
+ * wall: the wall's height cuts it.
+ */
+export function openingSpan(opening: Pick<Opening, 'kind' | 'height' | 'sill'>, wallHeight: number): { bottom: number, top: number } {
+  if (opening.kind === 'door') return { bottom: 0, top: Math.min(opening.height ?? DOOR_HEIGHT_CM, wallHeight) }
+  const bottom = Math.min(opening.sill ?? WINDOW_SILL_CM, wallHeight)
+  return { bottom, top: Math.min(bottom + (opening.height ?? WINDOW_TOP_CM - WINDOW_SILL_CM), wallHeight) }
+}
+
 /** A solid piece of wall, in centimetres along the edge and above the floor. */
 export interface WallPiece {
   from: number
@@ -387,8 +398,8 @@ export function wallPieces(length: number, height: number, openings: readonly Op
     const end = Math.min(length, opening.offset + opening.width)
     if (end <= start) continue
     if (start > cursor) pieces.push({ from: cursor, to: start, bottom: 0, top: height })
-    if (opening.kind === 'window') pieces.push({ from: start, to: end, bottom: 0, top: Math.min(WINDOW_SILL_CM, height) })
-    const head = Math.min(opening.kind === 'door' ? DOOR_HEIGHT_CM : WINDOW_TOP_CM, height)
+    const { bottom, top: head } = openingSpan(opening, height)
+    if (bottom > 0) pieces.push({ from: start, to: end, bottom: 0, top: bottom })
     if (head < height) pieces.push({ from: start, to: end, bottom: head, top: height })
     cursor = end
   }

@@ -113,7 +113,8 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
         const shape = { radius: item.radius, arcStart: item.arcStart, arcSweep: item.arcSweep, arcInner: item.arcInner }
         object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, height: item.height, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height, shape })
       }
-      object.position.set(cm(item.x), 0, cm(item.y))
+      // Above its floor when it has a height off it (D282: `z`).
+      object.position.set(cm(item.x), cm(item.z ?? 0), cm(item.y))
       object.rotation.y = yRotation(item.rotation)
       // Flipped (ED-07) in its own frame, before the turn, as on the plan.
       object.scale.set(item.flipX ? -1 : 1, 1, item.flipY ? -1 : 1)
@@ -122,7 +123,7 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
       const look = findItemLook(itemLooks, item.lookId)
       const label = item.name ?? (look && look.kind === item.kind ? look.name : ITEM_SPECS[item.kind].label)
       const top = item.kind === 'stairs' ? floor.height : pieceHeight(item)
-      itemNodes.set(item.id, { itemId: item.id, label, floorId: floor.id, object, labelAnchor: new Vector3(cm(item.x), cm(top + 30), cm(item.y)) })
+      itemNodes.set(item.id, { itemId: item.id, label, floorId: floor.id, object, labelAnchor: new Vector3(cm(item.x), cm((item.z ?? 0) + top + 30), cm(item.y)) })
     }
     const plan = boundsOf(floorPoints(floor))
     floors.push({

@@ -3,7 +3,7 @@ import type { BufferGeometry, Material, Object3D } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Floor, Opening, Point } from '#shared/contracts/shop-layout'
 import { edgeLength, wallLength } from '#shared/contracts/shop-layout'
-import { DOOR_HEIGHT_CM, floorInteriorPoint, mainSlab, outwardNormal, pointInPolygon, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, WALL_THICKNESS_CM, wallFacesOut, wallHeight, wallNormal, wallOutward, wallPieces, wallThickness, WINDOW_SILL_CM, WINDOW_TOP_CM } from '../geometry'
+import { floorInteriorPoint, mainSlab, outwardNormal, pointInPolygon, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, WALL_THICKNESS_CM, wallFacesOut, wallHeight, wallNormal, wallOutward, wallPieces, wallThickness, openingSpan } from '../geometry'
 import { drawWalls } from '../walls'
 import type { BuildContext } from './furniture'
 import { cm, yRotation } from './units'
@@ -210,8 +210,7 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
   for (const opening of openings) {
     const x = opening.offset + opening.width / 2 - length / 2
     if (opening.kind === 'window') {
-      const bottom = Math.min(WINDOW_SILL_CM, height)
-      const top = Math.min(WINDOW_TOP_CM, height)
+      const { bottom, top } = openingSpan(opening, height)
       addBox(context, group, opening.width - 4, top - bottom - 4, 2, context.materials.surface('glass'), { x, y: (top + bottom) / 2, z: 0 }, false)
       addBox(context, group, opening.width, 4, thickness + 2, frame, { x, y: bottom + 2, z: 0 })
       addBox(context, group, opening.width, 4, 8, frame, { x, y: top - 2, z: 0 })
@@ -223,13 +222,17 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
       }
     }
     else {
-      if (!leaves) continue
-      const doorHeight = Math.min(DOOR_HEIGHT_CM, height)
+      if (!leaves || opening.leaf === false) continue
+      const doorHeight = openingSpan(opening, height).top
       // The leaf and its handle name their door, so Explore (D275) can swing them on a hinge.
       const leaf = addBox(context, group, opening.width - 6, doorHeight - 3, 4, context.materials.finish('walnut'), { x, y: (doorHeight - 3) / 2, z: -thickness / 2 + 4 })
       addBox(context, group, opening.width, 5, thickness + 1, frame, { x, y: doorHeight - 2.5, z: 0 })
-      const handle = addBox(context, group, 2, 18, 4, context.materials.finish('brass'), { x: x + opening.width / 2 - 14, y: 105, z: -thickness / 2 + 1 })
+      // The handle at the leaf's free end, away from its hinge (D282).
+      const free = opening.hinge === 'end' ? -1 : 1
+      const handle = addBox(context, group, 2, 18, 4, context.materials.finish('brass'), { x: x + free * (opening.width / 2 - 14), y: Math.min(105, doorHeight - 20), z: -thickness / 2 + 1 })
       leaf.userData.doorId = opening.id
+      leaf.userData.hinge = opening.hinge ?? 'start'
+      leaf.userData.swing = opening.swing ?? 'in'
       handle.userData.doorId = opening.id
     }
   }

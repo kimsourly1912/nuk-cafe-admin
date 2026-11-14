@@ -3260,3 +3260,12 @@ Studio builder plan Phase 1 ([plan](plans/studio-builder.md), ISS-045, ISS-046; 
 - **Alternatives:** keep the outline and let it be empty, turning walls into inside walls when the surface goes (proposed by Claude as smaller and lower-risk; the owner chose the full model on 2026-11-14); a server migration rewriting every row (rejected: JSON rewrites in D1 are hard to check and the read upgrade is pure and tested); one slab per floor (rejected: Room and Cut needed several).
 - **Consequences:** old layouts read and draw the same (tested: upgraded bands equal the old outline bands). A v2 layout cannot be read by an app built before it: deploy the app before anyone saves. Studio's selection has `slab` instead of `edge`; the edge panel is gone (an outer wall uses the wall panel).
 
+## D283 Studio doors, windows and pieces built as wanted (2026-11-14)
+
+Studio builder plan Phase 3 and part of Phase 4 (owner D3, "also structure"), on contract v2 (D282). Optional fields, so every saved layout reads the same.
+
+- **Openings:** `height` (a door's, or a window's from its sill), a window's `sill`, a door's `swing` (`in`, away from its wall's side, or `out`), `hinge` (`start` or `end` of the doorway) and `leaf: false` (an open doorway). Left out: 210 cm doors, windows from 90 to 220 cm, a leaf at the start opening in. The contract refuses a sill on a door and a leaf on a window. `openingSpan` is the one reading of an opening's height for the plan's warnings, 3D, and Explore; the wall's height cuts it.
+- **Pieces:** an item's `z`, how far above its floor it stands (a shelf on a wall, a sign); stairs and people and pets stay on the floor. 3D lifts it; Explore lets a body pass under it. Placements (tables) have none: they are rows with their own columns, and a table above the floor has no use yet.
+- **Explore:** a door's leaf carries its hinge and swing, and swings from that end, in or out; an open doorway has no door to push.
+- **Not built:** custom door and window shapes (the owner's "also structure" beyond sizes and swing): next, with free colours (D2), as they change the looks contract.
+

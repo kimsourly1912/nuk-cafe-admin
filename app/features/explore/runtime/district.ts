@@ -1,7 +1,7 @@
 import type { ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { wallLength } from '#shared/contracts/shop-layout'
 import type { SurroundingsPlan } from '~/features/branches'
-import { BUILT_IN_LOOKS, chairPoses, DOOR_HEIGHT_CM, findLook, ITEM_SPECS, pieceHeight, placementExtent, planLane, pointInPolygon, rectCorners, SLAB_THICKNESS_CM, toPlan, wallFacesOut, wallHeight, wallOutward } from '~/features/branches'
+import { BUILT_IN_LOOKS, chairPoses, findLook, openingSpan, ITEM_SPECS, pieceHeight, placementExtent, planLane, pointInPolygon, rectCorners, SLAB_THICKNESS_CM, toPlan, wallFacesOut, wallHeight, wallOutward } from '~/features/branches'
 import type { GatewaySide } from './network'
 import type { MotoStreet } from './moto'
 import type { RideCourse } from './ride'
@@ -190,8 +190,9 @@ export function buildDistrict(input: DistrictInput): District {
         if (!outer) continue
         const a = m(along(opening.offset))
         const b = m(along(opening.offset + opening.width))
-        const doorTop = y + Math.min(DOOR_HEIGHT_CM, floor.height) / 100
-        walls.push({ a, b, bottom: y, top: doorTop, door: opening.id })
+        const doorTop = y + openingSpan(opening, wallHeight(wall, floor.height)).top / 100
+        // An open doorway (D282, `leaf: false`) has no leaf to push: nothing stands in it.
+        if (opening.leaf !== false) walls.push({ a, b, bottom: y, top: doorTop, door: opening.id })
         // Above the door: the camera meets it, a body passes under it.
         if (top > doorTop) walls.push({ a, b, bottom: doorTop, top })
         if (ground) {
@@ -321,7 +322,9 @@ function buildGateway(plan: SurroundingsPlan, gateway: GatewayInput, street: num
   }
 }
 
-function itemSolid(item: LayoutItem, y: number): Solid {
+function itemSolid(item: LayoutItem, floorY: number): Solid {
+  // A piece off the floor (D282: `z`) blocks only where it is: a body walks under a high shelf.
+  const y = floorY + (item.z ?? 0) / 100
   const top = y + pieceHeight(item) / 100
   if (ITEM_SPECS[item.kind].footprint === 'round') return { shape: 'circle', center: m(item), radius: Math.max(item.width, item.depth) / 200, bottom: y, top }
   return { shape: 'box', center: m(item), halfWidth: item.width / 200, halfDepth: item.depth / 200, rotation: item.rotation, bottom: y, top }

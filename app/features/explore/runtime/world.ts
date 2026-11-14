@@ -1400,8 +1400,10 @@ function hinge(root: Object3D, door: DoorInfo, district: District): Group | null
   const parent = leaf?.parent
   if (!leaf || !parent) return null
   const width = leaf.geometry.boundingBox!.max.x - leaf.geometry.boundingBox!.min.x
+  // Hung at the doorway's start or end (D282: the leaf's `hinge`), opening in or out (`swing`).
+  const end = leaf.userData.hinge === 'end' ? 1 : -1
   const pivot = new Group()
-  pivot.position.set(leaf.position.x - width / 2, 0, leaf.position.z)
+  pivot.position.set(leaf.position.x + end * width / 2, 0, leaf.position.z)
   parent.add(pivot)
   for (const mesh of parts) {
     mesh.position.sub(pivot.position)
@@ -1412,7 +1414,8 @@ function hinge(root: Object3D, door: DoorInfo, district: District): Group | null
   pivot.rotation.y = OPEN_ANGLE
   pivot.updateMatrixWorld(true)
   const middle = leaf.getWorldPosition(new Vector3())
-  pivot.userData.sign = insidePolygon({ x: middle.x, z: middle.z }, outline) ? 1 : -1
+  const inward = insidePolygon({ x: middle.x, z: middle.z }, outline) ? 1 : -1
+  pivot.userData.sign = leaf.userData.swing === 'out' ? -inward : inward
   pivot.rotation.y = 0
   pivot.updateMatrixWorld(true)
   return pivot

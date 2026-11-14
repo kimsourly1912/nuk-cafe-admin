@@ -299,3 +299,16 @@ describe('shapes (D278)', () => {
     expect(Math.round(footprint(ring).x * 100)).toBe(200)
   })
 })
+
+describe('a piece above its floor (D282, plan Phase 4: z)', () => {
+  it('stands that high in 3D, and only furniture can: stairs and people stay on the floor', () => {
+    const layout = demoLayout()
+    const ground = layout.floors[0]!
+    ground.items.push({ id: 'shelf-up', kind: 'display-shelf', x: 300, y: 50, rotation: 0, width: 120, depth: 30, finishes: {}, z: 150 })
+    const scene = buildScene(context(), { layout, tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
+    expect(scene.items.get('shelf-up')!.object.position.y).toBeCloseTo(1.5)
+    const item = (extra: Partial<LayoutItem>) => v.safeParse(itemSchema, { id: 'i', kind: 'plant', x: 0, y: 0, rotation: 0, width: 50, depth: 50, finishes: {}, ...extra })
+    expect(item({ z: 150 }).success).toBe(true)
+    expect(item({ kind: 'stairs', width: 100, depth: 300, z: 10 }).issues?.map(issue => issue.message)).toContain('Stairs and people stand on the floor')
+  })
+})

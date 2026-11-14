@@ -2,7 +2,8 @@ import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import type { Wall } from '#shared/contracts/shop-layout'
 import { floorSchema, wallLength } from '#shared/contracts/shop-layout'
-import { addWallOpening, copyStructure, drawWalls, followPoints, joinWalls, moveWall, moveWallEnd, removeWallOpening, setWallKind, setWallLength, setWallStructure, splitWall, updateWallOpening, wallOpeningFits } from '../designer/walls'
+import { openingSpan, wallPieces } from '../designer/geometry'
+import { addWallOpening, copyStructure, drawWalls, followPoints, joinWalls, moveWall, moveWallEnd, removeWallOpening, setOpeningShape, setWallKind, setWallLength, setWallStructure, splitWall, updateWallOpening, wallOpeningFits } from '../designer/walls'
 
 const SQUARE = [{ x: 0, y: 0 }, { x: 800, y: 0 }, { x: 800, y: 600 }, { x: 0, y: 600 }]
 
@@ -133,5 +134,43 @@ describe('walls of any kind and how they are built (D282)', () => {
     const copied = copyStructure({ slabs: [{ id: 's', outline: SQUARE }], walls: [{ id: 'a', from: { x: 0, y: 0 }, to: { x: 800, y: 0 }, side: 'left', thickness: 20, openings: [{ id: 'd', kind: 'door', offset: 0, width: 90 }], name: 'Front' }] })
     expect(copied.slabs[0]!.id).not.toBe('s')
     expect(copied.walls[0]).toEqual({ id: expect.stringMatching(/^wall-/), from: { x: 0, y: 0 }, to: { x: 800, y: 0 }, side: 'left', thickness: 20 })
+  })
+})
+
+describe('doors and windows built as wanted (owner D3, plan Phase 3)', () => {
+  const host = (openings: Wall['openings']): Wall[] => [{ id: 'a', from: { x: 0, y: 0 }, to: { x: 600, y: 0 }, side: 'left', thickness: 20, openings }]
+
+  it('a door is 210 cm and a window 90 to 220 cm unless set; never above the wall', () => {
+    expect(openingSpan({ kind: 'door' }, 300)).toEqual({ bottom: 0, top: 210 })
+    expect(openingSpan({ kind: 'window' }, 300)).toEqual({ bottom: 90, top: 220 })
+    expect(openingSpan({ kind: 'door', height: 250 }, 300)).toEqual({ bottom: 0, top: 250 })
+    expect(openingSpan({ kind: 'window', sill: 30, height: 200 }, 300)).toEqual({ bottom: 30, top: 230 })
+    expect(openingSpan({ kind: 'window', sill: 100, height: 300 }, 280)).toEqual({ bottom: 100, top: 280 })
+    // The wall above a tall door and below a low window stays solid.
+    expect(wallPieces(600, 300, [{ id: 'w', kind: 'window', offset: 100, width: 100, sill: 30, height: 200 }])).toContainEqual({ from: 100, to: 200, bottom: 0, top: 30 })
+  })
+
+  it('stores only what differs from the default, and only on the kind that has it', () => {
+    const door = setOpeningShape(host([{ id: 'd', kind: 'door', offset: 100, width: 90 }]), 'a', 'd', { height: 240, swing: 'out', hinge: 'end', leaf: true })[0]!.openings![0]!
+    expect(door).toEqual({ id: 'd', kind: 'door', offset: 100, width: 90, height: 240, swing: 'out', hinge: 'end' })
+    const back = setOpeningShape(host([door]), 'a', 'd', { height: null, swing: 'in', hinge: 'start', leaf: false })[0]!.openings![0]!
+    expect(back).toEqual({ id: 'd', kind: 'door', offset: 100, width: 90, leaf: false })
+    const window = setOpeningShape(host([{ id: 'w', kind: 'window', offset: 100, width: 90 }]), 'a', 'w', { sill: 40, swing: 'out' })[0]!.openings![0]!
+    expect(window).toEqual({ id: 'w', kind: 'window', offset: 100, width: 90, sill: 40 })
+  })
+
+  it('the contract refuses a sill on a door and a leaf on a window', () => {
+    const messages = (openings: Wall['openings']) => (v.safeParse(floorSchema, { id: 'f', name: 'Ground', height: 300, hasRoof: true, slabs: [], walls: host(openings), items: [] }).issues ?? []).map(issue => issue.message)
+    expect(messages([{ id: 'd', kind: 'door', offset: 0, width: 90, sill: 10 }])).toContain('Only a window has a sill')
+    expect(messages([{ id: 'w', kind: 'window', offset: 0, width: 90, swing: 'out' }])).toContain('Only a door has a leaf')
+    expect(messages([{ id: 'd', kind: 'door', offset: 0, width: 90, height: 240, swing: 'out', hinge: 'end', leaf: false }])).toEqual([])
+  })
+
+  it('draws a door from its hinge, into the room or out; an open doorway has no leaf', () => {
+    const swing = (opening: NonNullable<Wall['openings']>[number]) => drawWalls(host([opening]))[0]!.doors[0]
+    // An outer wall along the top (outside up): a door opens down, into the room.
+    expect(swing({ id: 'd', kind: 'door', offset: 100, width: 90 })).toEqual({ id: 'd', hinge: { x: 100, y: 0 }, swing: { x: 100, y: 90 } })
+    expect(swing({ id: 'd', kind: 'door', offset: 100, width: 90, hinge: 'end', swing: 'out' })).toEqual({ id: 'd', hinge: { x: 190, y: 0 }, swing: { x: 190, y: -90 } })
+    expect(swing({ id: 'd', kind: 'door', offset: 100, width: 90, leaf: false })).toBeUndefined()
   })
 })
