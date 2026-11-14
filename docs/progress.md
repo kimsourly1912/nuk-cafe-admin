@@ -8,7 +8,7 @@
 Branch `ccr-e78bff39-u70ma7` (after PR #319): one commit per step (free colours, walls and floors, doors and windows). Owner D2 (free colours, for everything) and the rest of D3.
 
 - **Status:** **Fixed, needs retest**: [RETEST-QUEUE.md](qa/RETEST-QUEUE.md) section F. Left in the plan: the per-floor 3D rebuild (ISS-041 step 3) after a benchmark on a real device. Not built (see D285): arched or round windows, double or sliding doors.
-- **Evidence:** EVIDENCE_PLACEHOLDER
+- **Evidence:** `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` (201 files, 3087 tests; new `designer-colours`: contract, slot materials, tints, walls, surfaces, door and window styles in 3D); two guards removed one at a time (the colour check, the door/window style check) and the shutters' outside side flipped, each failing a test, then restored. E2E `shop-designer` 33 of 33 with a new free-colours test (a piece's colour, a wall's colour, a glazed door, a concrete floor, saved and undone). Full `pnpm test:e2e` 979 of 980: the Explore walk timed out under load again (third run this day); `explore` and `explore-branches` alone 10 of 10. No migration. No manual browser check; one screenshot of the picker and one of 3D looked right.
 
 ### Studio builder: snap step, polygon shapes, saved groups (D284, 2026-11-14)
 
