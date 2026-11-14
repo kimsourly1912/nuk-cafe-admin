@@ -41,3 +41,5 @@ YYYY-MM-DD: question, answer.
 
 ## Work (written by the fixer)
 Branch or PR, what changed, what was not done and why.
+
+**Regression test:** the unit or e2e test that fails if this comes back (file and name), or why none is possible.
