@@ -8,7 +8,7 @@
 Branch `ccr-e78bff39-u70ma7`. [Studio builder QA](qa/studio-builder/README.md) ISS-037, 038, 039, 042, 043, 044 and ISS-041 step 1, from the [plan](plans/studio-builder.md)'s Phase 0. Owner decisions: ISS-037 no warning; ISS-038 (plan D7) ask first, then turn Explore off.
 
 - **Status:** all **Fixed, needs retest** (ISS-041: step 1 only). Steps in [RETEST-QUEUE.md](qa/RETEST-QUEUE.md) section B.
-- **Evidence:** `pnpm lint`, `pnpm typecheck` (needed `NODE_OPTIONS=--max-old-space-size=6144` in this container; the default heap ran out), `pnpm test:unit` (199 files, 3032 tests). New unit tests: `designer-outline`, `designer-group`, `designer-limits`. Each new guard removed made its test fail. E2E step added to `shop-designer.test.ts` (street door confirm); see the PR for whether the e2e file ran. Not checked in a browser.
+- **Evidence:** `pnpm lint`, `pnpm typecheck` (needed `NODE_OPTIONS=--max-old-space-size=6144` in this container; the default heap ran out), `pnpm test:unit` (199 files, 3032 tests). New unit tests: `designer-outline`, `designer-group`, `designer-limits`. Each new guard removed made its test fail. E2E step added to `shop-designer.test.ts` (street door: Cancel keeps Explore, agreeing withdraws it, Undo publishes again); the whole file passes locally (31 tests, Chromium). No manual browser check; the other issues are covered by unit tests only.
 - **Open:** saved staging/production layouts not checked for crossing outlines or repeated ids (the read-only D1 query was blocked in this session); the query is in the QA area README. Run it before deploying.
 
 ### QA standard and retest queue (2026-11-14)

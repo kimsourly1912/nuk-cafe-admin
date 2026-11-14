@@ -1944,8 +1944,14 @@ describe('the shop designer on saved layouts', () => {
       await page.keyboard.press('Delete')
       await warning.waitFor()
     }
+    /** Closes the phone's Properties sheet and clears the edge, so Properties shows Explore settings again. */
+    async function deselect() {
+      await page.keyboard.press('Escape')
+      await plan(page).press('Escape')
+    }
     await deleteStreetWall()
     await warning.getByRole('button', { name: 'Cancel' }).click()
+    await deselect()
     await openExplore()
     expect(await toggle.getAttribute('aria-checked')).toBe('true')
     await dialog.getByRole('button', { name: 'Done' }).click()
@@ -1953,6 +1959,7 @@ describe('the shop designer on saved layouts', () => {
     await warning.getByRole('button', { name: 'Turn off Explore' }).click()
     await save(page)
     expect((await fetch(publicPath())).status).toBe(404)
+    await deselect()
     await page.keyboard.press('ControlOrMeta+z')
     await save(page)
     expect((await fetch(publicPath())).status).toBe(200)
