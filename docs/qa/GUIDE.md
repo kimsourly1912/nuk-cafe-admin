@@ -117,7 +117,7 @@ So any agent, now or later, can read exactly what was found, with the evidence, 
 Because the person who builds a fix should not be the only one who says it works. A second check finds mistakes.
 
 **Is there a spreadsheet?**
-Not any more. The first QA round used a Claude Sheet, "Figma vs Studio — Behavior Audit", as the tester's working index. It is retired and may be archived. The repo is the only source of truth. The table in each area's README is the index, and it is what any agent should read and update.
+No. The repo is the only source of truth. The table in each area's README is the index.
 
 **How does a new agent know all this?**
 `AGENTS.md` has a row for QA that points to `STANDARD.md`. You can also start with the mode line above.
