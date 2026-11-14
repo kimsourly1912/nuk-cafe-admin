@@ -15,8 +15,7 @@ function layout(): ShopLayout {
       name: 'Ground',
       height: 300,
       hasRoof: true,
-      outline: [{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 800 }, { x: 0, y: 800 }],
-      edges: Array.from({ length: 4 }, () => ({ kind: 'wall' as const, openings: [] })),
+      slabs: [{ id: 's', outline: [{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 800 }, { x: 0, y: 800 }] }],
       walls: [
         { id: 'w1', from: { x: 600, y: 400 }, to: { x: 900, y: 400 } },
         { id: 'w2', from: { x: 600, y: 400 }, to: { x: 600, y: 800 } },
@@ -132,7 +131,7 @@ describe('Tab through the floor (ISS-007)', () => {
     expect(cycleSelection(set, set[0]!, 1)).toEqual(set[1])
     expect(cycleSelection(set, set[2]!, 1)).toEqual(set[0])
     expect(cycleSelection(set, set[0]!, -1)).toEqual(set[2])
-    expect(cycleSelection(set, { kind: 'edge', id: '0' }, 1)).toEqual(set[0])
+    expect(cycleSelection(set, { kind: 'slab', id: 's' }, 1)).toEqual(set[0])
     expect(cycleSelection([], null, 1)).toBeNull()
   })
 })
@@ -219,15 +218,16 @@ describe('copied doors and windows get ids of their own (ISS-042)', () => {
     expect(messages(next)).toContain('Door and window ids repeat')
   })
 
-  it('a layout saved with repeated ids gets new ones on load, keeping the first (an edge\'s street door)', () => {
+  it('a layout saved with repeated ids gets new ones on load, keeping the first (an outer wall\'s street door)', () => {
     const next = withDoor()
-    next.floors[0]!.edges[0]!.openings = [{ id: 'o1', kind: 'door', offset: 100, width: 90 }]
-    next.floors[0]!.walls[1]!.openings = [{ id: 'o1', kind: 'door', offset: 100, width: 90 }]
+    // Upgraded outer walls come first on a floor (D282).
+    next.floors[0]!.walls.unshift({ id: 'front', from: { x: 0, y: 0 }, to: { x: 1000, y: 0 }, side: 'left', thickness: 20, openings: [{ id: 'o1', kind: 'door', offset: 100, width: 90 }] })
+    next.floors[0]!.walls[2]!.openings = [{ id: 'o1', kind: 'door', offset: 100, width: 90 }]
     const floors = renewRepeatedOpeningIds(next.floors)
-    expect(floors[0]!.edges[0]!.openings[0]!.id).toBe('o1')
+    expect(floors[0]!.walls[0]!.openings![0]!.id).toBe('o1')
     const renewed = { ...next, floors }
     expect(messages(renewed)).toEqual([])
-    expect(doorIds(renewed)).not.toContain('o1')
+    expect(doorIds(renewed).filter(id => id === 'o1')).toHaveLength(1)
     // Nothing repeats: the same floors back, untouched.
     const clean = withDoor()
     expect(renewRepeatedOpeningIds(clean.floors)).toBe(clean.floors)

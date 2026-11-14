@@ -83,3 +83,17 @@ Issue files: [studio-builder/issues](studio-builder/issues/). Built from code an
 | ISS-044 | Remove-floor text | The dialog ends "You can undo this." Undo after the autosave brings the floor back. |
 | ISS-041 step 1 | 3D stays open | Orbit in 3D, switch to 2D and back: same camera, no loading. Edit in 2D, back to 3D: the edit shows. |
 
+## C. Studio builder: contract v2 and grid (ISS-040, 041, 045, 046, branch `ccr-e78bff39-u70ma7`)
+
+Owner decisions D1–D6 (2026-11-14) in the [plan](plans/studio-builder.md). Read with "How to verify" in each [issue file](studio-builder/issues/).
+
+| ID | What to retest | Steps and expected result |
+|---|---|---|
+| ISS-046 | Real delete | Select an outer wall: Delete removes it (and its doors), Undo brings it back. Layers → Floor surface: Delete removes the surface, its walls stay. A street-door wall still asks first. 3D and Explore show the same. |
+| ISS-045 | Empty new floor | Add floor: empty, floor below shown faintly, Draw outline open. Copy walls from floor below: surface and walls appear (no doors), one Undo removes them. An empty floor saves and reloads; 3D shows nothing for it. |
+| D282 | Old layouts unchanged | Open a branch saved before this change: the plan and 3D look as before (walls outside the floor, corners clean, doors and windows in place); Explore still opens at the street door. |
+| D282 | Room and Edit points | Room beside the floor: one L-shaped surface, no wall left between the two parts. Room apart: a second surface. Cut through the middle: two surfaces. Edit points: a dragged corner takes its two walls along; a new corner splits the wall; a removed corner joins them. |
+| D3 | Wall structure | Select a wall: set Thickness 30, Height 150, Stands Right: the plan band and 3D wall change; "Use the type's thickness and height" puts them back. |
+| ISS-040 | Grid | At 2 %, 100 %, 400 % and the maximum: finer lines appear as you zoom in (1 cm at the maximum, about 5 lines across), lines sharp in light and dark. |
+| ISS-041 step 2 | Street not rebuilt | Neighborhood lane on: move a chair in 2D, switch to 3D: the street does not flicker or rebuild; drag an outer corner: it does. |
+

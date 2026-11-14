@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { LayoutScene, ShopLayout } from '#shared/contracts/shop-layout'
 import { NO_SCENE, streetDoor } from '#shared/contracts/shop-layout'
-import { edgeNames } from '../designer/outline'
+import { wallNames } from '../designer/outline'
 
 const props = defineProps<{ layout: ShopLayout, hasPin: boolean }>()
 const emit = defineEmits<{ change: [scene: LayoutScene] }>()
@@ -12,11 +12,11 @@ const none = '@none'
 const doors = computed(() => {
   const ground = props.layout.floors[0]
   if (!ground) return []
-  const edges = edgeNames(ground.outline)
-  return ground.edges.flatMap((edge, index) => edge.openings
+  const names = wallNames(ground)
+  return ground.walls.flatMap((wall, index) => (wall.openings ?? [])
     .filter(opening => opening.kind === 'door')
     .flatMap((door, position) => streetDoor(props.layout.floors, door.id)
-      ? [{ label: `${edges[index]} · Door ${position + 1}`, value: door.id }]
+      ? [{ label: `${names[index]} · Door ${position + 1}`, value: door.id }]
       : []))
 })
 const options = computed(() => [{ label: 'No street door', value: none }, ...doors.value])

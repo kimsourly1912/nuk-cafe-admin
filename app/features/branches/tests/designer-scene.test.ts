@@ -132,7 +132,7 @@ describe('the building from the layout', () => {
   it('leaves the saved gate clear through the whole railing', () => {
     const layout = demoLayout()
     const floor = layout.floors[0]!
-    floor.edges[0] = { kind: 'railing', openings: [{ id: 'gate', kind: 'door', offset: 150, width: 120 }] }
+    floor.walls[0] = { ...floor.walls[0]!, kind: 'railing', thickness: 6, openings: [{ id: 'gate', kind: 'door', offset: 150, width: 120 }] }
     const scene = buildScene(context(), { layout, tables: DEMO_TABLES, looks: BUILT_IN_LOOKS })
     const railing = scene.floors[0]!.walls[0]!.object
     const through = (x: number) => new Raycaster(new Vector3(x, 1.02, -2), new Vector3(0, 0, 1)).intersectObject(railing, true)

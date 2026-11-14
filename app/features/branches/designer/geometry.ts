@@ -1,5 +1,5 @@
-import type { Edge, Floor, InnerWallKind, Opening, Placement, Point, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength, signedArea } from '#shared/contracts/shop-layout'
+import type { Floor, Opening, Placement, Point, Slab, TableLook, Wall, WallKind } from '#shared/contracts/shop-layout'
+import { edgeLength, signedArea, wallKind, wallLength } from '#shared/contracts/shop-layout'
 
 /**
  * Layout geometry shared by the 2D editor and the 3D builders (D273). Pure functions in layout
@@ -16,6 +16,7 @@ export const SNAP_CM = 1
 /** The arrow keys' nudge, and with Shift (Figma's 1 and 10). */
 export const NUDGE_CM = 1
 export const BIG_NUDGE_CM = 10
+/** An outer wall's thickness: what Room and Draw outline give the walls around a floor (D282). */
 export const WALL_THICKNESS_CM = 20
 /** A floor's slab, under its surface: the ground floor stands this much above the street. */
 export const SLAB_THICKNESS_CM = 20
@@ -23,16 +24,84 @@ export const DOOR_HEIGHT_CM = 210
 export const WINDOW_SILL_CM = 90
 export const WINDOW_TOP_CM = 220
 export const RAILING_HEIGHT_CM = 105
-/** An inside wall's thickness, a glass partition's, and a half wall's height (D278). */
+/** A wall's thickness by kind when it has none of its own (D278): a full or half wall, glass, a railing. */
 export const INNER_WALL_THICKNESS_CM = 12
 export const GLASS_THICKNESS_CM = 4
+export const RAILING_THICKNESS_CM = 6
 export const HALF_WALL_HEIGHT_CM = 110
 
-/** How tall an inside wall of this kind stands on a floor this high. */
-export function innerWallHeight(kind: InnerWallKind, floorHeight: number): number {
+/** How tall a wall of this kind stands on a floor this high, when it has no height of its own. */
+export function kindHeight(kind: WallKind, floorHeight: number): number {
   if (kind === 'half') return Math.min(HALF_WALL_HEIGHT_CM, floorHeight)
   if (kind === 'railing') return Math.min(RAILING_HEIGHT_CM, floorHeight)
   return floorHeight
+}
+
+/** How tall a wall stands (D282): its own height or its kind's, never above its floor. */
+export function wallHeight(wall: Pick<Wall, 'kind' | 'height'>, floorHeight: number): number {
+  return Math.min(floorHeight, wall.height ?? kindHeight(wallKind(wall), floorHeight))
+}
+
+/** How thick a wall is (D282): its own thickness or its kind's. */
+export function wallThickness(wall: Pick<Wall, 'kind' | 'thickness'>): number {
+  if (wall.thickness) return wall.thickness
+  const kind = wallKind(wall)
+  return kind === 'glass' ? GLASS_THICKNESS_CM : kind === 'railing' ? RAILING_THICKNESS_CM : INNER_WALL_THICKNESS_CM
+}
+
+/** The unit normal on a wall's right, looking from `from` to `to` on the screen (y down): `wallStrip`'s. */
+export function wallNormal(wall: Pick<Wall, 'from' | 'to'>): Point {
+  const length = wallLength(wall) || 1
+  return { x: -(wall.to.y - wall.from.y) / length, y: (wall.to.x - wall.from.x) / length }
+}
+
+/**
+ * Where a wall's two faces are, as distances along its right normal (D282): beside its line on
+ * its `side` (an outer wall outside its floor), or centred on it.
+ */
+export function wallBand(wall: Pick<Wall, 'kind' | 'thickness' | 'side'>): { near: number, far: number } {
+  const thickness = wallThickness(wall)
+  if (wall.side === 'right') return { near: 0, far: thickness }
+  if (wall.side === 'left') return { near: 0, far: -thickness }
+  return { near: -thickness / 2, far: thickness / 2 }
+}
+
+/** A point on a wall's line, `distance` from its start. */
+export function pointAlongWall(wall: Pick<Wall, 'from' | 'to'>, distance: number): Point {
+  const length = wallLength(wall) || 1
+  return { x: wall.from.x + (wall.to.x - wall.from.x) * distance / length, y: wall.from.y + (wall.to.y - wall.from.y) * distance / length }
+}
+
+/**
+ * The unit vector out of the building from a wall (D282): towards its `side`; for a centred wall,
+ * towards whichever side has no floor surface (its right when both or neither have).
+ */
+export function wallOutward(wall: Pick<Wall, 'from' | 'to' | 'side'>, slabs: readonly Pick<Slab, 'outline'>[]): Point {
+  const normal = wallNormal(wall)
+  if (wall.side === 'right') return normal
+  if (wall.side === 'left') return { x: -normal.x, y: -normal.y }
+  const middle = pointAlongWall(wall, wallLength(wall) / 2)
+  const inside = (sign: number) => slabs.some(slab => pointInPolygon({ x: middle.x + normal.x * 30 * sign, y: middle.y + normal.y * 30 * sign }, slab.outline))
+  return inside(1) && !inside(-1) ? { x: -normal.x, y: -normal.y } : normal
+}
+
+/** A wall between the building and the outside (D282): beside its line, or with floor on one side only. */
+export function wallFacesOut(floor: Pick<Floor, 'slabs'>, wall: Pick<Wall, 'from' | 'to' | 'side'>): boolean {
+  if (wall.side) return true
+  const normal = wallNormal(wall)
+  const middle = pointAlongWall(wall, wallLength(wall) / 2)
+  const onFloor = (sign: number) => floor.slabs.some(slab => pointInPolygon({ x: middle.x + normal.x * 30 * sign, y: middle.y + normal.y * 30 * sign }, slab.outline))
+  return onFloor(1) !== onFloor(-1)
+}
+
+/** A floor's largest surface (D282): where its light hangs and its viewpoints look; none on an empty floor. */
+export function mainSlab(floor: Pick<Floor, 'slabs'>): Slab | undefined {
+  return floor.slabs.reduce<Slab | undefined>((best, slab) => (!best || Math.abs(signedArea(slab.outline)) > Math.abs(signedArea(best.outline)) ? slab : best), undefined)
+}
+
+/** Every corner and wall end of a floor (D282): what its frame, Fit and bounds are measured from. */
+export function floorPoints(floor: Pick<Floor, 'slabs' | 'walls'>): Point[] {
+  return [...floor.slabs.flatMap(slab => slab.outline), ...floor.walls.flatMap(wall => [wall.from, wall.to])]
 }
 /** How far a chair's centre sits outside its table's edge. */
 const CHAIR_GAP_CM = 26
@@ -341,40 +410,42 @@ export interface Viewpoint {
  * no Entrance.
  */
 export function floorViewpoints(floor: Floor, floorBelow?: Floor): Viewpoint[] {
-  const middle = floorInteriorPoint(floor.outline)
-  if (!middle) return []
+  const slab = mainSlab(floor)
+  const middle = slab && floorInteriorPoint(slab.outline)
+  if (!slab || !middle) return []
+  const onFloor = (point: Point) => floor.slabs.some(candidate => pointInPolygon(point, candidate.outline))
   const points: Viewpoint[] = []
-  const inside = (index: number, along: number, inward: number): Point => {
-    const point = pointOnEdge(floor.outline, index, along)
-    const normal = outwardNormal(floor.outline, index)
-    return { x: point.x - normal.x * inward, y: point.y - normal.y * inward }
+  const inside = (wall: Wall, along: number, inward: number): Point => {
+    const point = pointAlongWall(wall, along)
+    const out = wallOutward(wall, floor.slabs)
+    return { x: point.x - out.x * inward, y: point.y - out.y * inward }
   }
-  const door = findOpening(floor.edges, 'door')
-  if (door) points.push({ id: 'entrance', label: 'Entrance', eye: inside(door.index, door.opening.offset + door.opening.width / 2, 120), target: middle })
-  const stairs = [...(floorBelow?.items ?? []), ...floor.items].find(item => item.kind === 'stairs' && pointInPolygon(item, floor.outline))
+  const door = findOpening(floor.walls, 'door')
+  if (door) points.push({ id: 'entrance', label: 'Entrance', eye: inside(door.wall, door.opening.offset + door.opening.width / 2, 120), target: middle })
+  const stairs = [...(floorBelow?.items ?? []), ...floor.items].find(item => item.kind === 'stairs' && onFloor(item))
   if (stairs) {
     const top = rotatePoint({ x: 0, y: -stairs.depth / 2 + 40 }, stairs.rotation)
     points.push({ id: 'stairs', label: 'Top of stairs', eye: { x: stairs.x + top.x + 60, y: stairs.y + top.y + 60 }, target: middle })
   }
-  const window = findOpening(floor.edges, 'window', true)
+  const window = findOpening(floor.walls, 'window', true)
   if (window) {
-    const eye = inside(window.index, window.opening.offset + window.opening.width / 2, 90)
+    const eye = inside(window.wall, window.opening.offset + window.opening.width / 2, 90)
     points.push({ id: 'window', label: 'Window side', eye, target: { x: 2 * middle.x - eye.x, y: 2 * middle.y - eye.y } })
   }
-  const usable = points.filter(point => pointInPolygon(point.eye, floor.outline))
+  const usable = points.filter(point => onFloor(point.eye))
   if (!usable.length) usable.push({ id: 'centre', label: 'Middle', eye: middle, target: { x: middle.x, y: middle.y - 100 } })
   return usable
 }
 
-/** The first door or window on a floor (with `longest`, the widest one): its edge and itself. */
-export function findOpening(edges: readonly Edge[], kind: Opening['kind'], longest = false): { index: number, opening: Opening } | undefined {
-  let found: { index: number, opening: Opening } | undefined
-  edges.forEach((edge, index) => {
-    for (const opening of edge.openings) {
+/** The first door or window on a floor's walls (with `longest`, the widest one): its wall and itself. */
+export function findOpening(walls: readonly Wall[], kind: Opening['kind'], longest = false): { wall: Wall, opening: Opening } | undefined {
+  let found: { wall: Wall, opening: Opening } | undefined
+  for (const wall of walls) {
+    for (const opening of wall.openings ?? []) {
       if (opening.kind !== kind) continue
-      if (!found || (longest && opening.width > found.opening.width)) found = { index, opening }
+      if (!found || (longest && opening.width > found.opening.width)) found = { wall, opening }
     }
-  })
+  }
   return found
 }
 
@@ -440,8 +511,8 @@ const unit = (from: Point, to: Point): Point => {
 }
 
 /**
- * A wall drawn as a band (ISS-034): between `near` and `far`, its sides' distances along its left
- * normal (outline walls 0 and the thickness outwards, inside walls ± half). Each end is mitred to
+ * A wall drawn as a band (ISS-034): between `near` and `far`, its sides' distances along its right
+ * normal on screen (`wallBand`). Each end is mitred to
  * the wall joined there, `before` ending where this one starts and `after` starting where it ends,
  * so a corner is clean at any angle; with none, or a corner sharper than about 30°, the end is
  * square. The band's four corners, in order.
@@ -459,25 +530,6 @@ export function wallStrip(wall: WallSegment, near: number, far: number, before?:
     return mitre && Math.hypot(mitre.x - square.x, mitre.y - square.y) <= limit ? mitre : square
   }
   return [side(near, wall.from, before), side(near, wall.to, after), side(far, wall.to, after), side(far, wall.from, before)]
-}
-
-/**
- * The outline's wall bands (ISS-034): one per edge, null where the edge is not a wall. The band
- * runs outwards from the outline by `thickness`, mitred where the next edge is a wall too.
- */
-export function outlineWallBands(outline: readonly Point[], isWall: readonly boolean[], thickness: number = WALL_THICKNESS_CM): (Point[] | null)[] {
-  const count = outline.length
-  const segment = (index: number): WallSegment => ({ from: outline[(index + count) % count]!, to: outline[(index + 1) % count]! })
-  return outline.map((_, index) => {
-    if (!isWall[index]) return null
-    const wall = segment(index)
-    const d = unit(wall.from, wall.to)
-    const outward = outwardNormal(outline, index)
-    const sign = -d.y * outward.x + d.x * outward.y >= 0 ? 1 : -1
-    const before = isWall[(index - 1 + count) % count] ? segment(index - 1) : undefined
-    const after = isWall[(index + 1) % count] ? segment(index + 1) : undefined
-    return wallStrip(wall, 0, sign * thickness, before, after)
-  })
 }
 
 /**

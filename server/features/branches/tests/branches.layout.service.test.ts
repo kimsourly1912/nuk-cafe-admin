@@ -2,13 +2,13 @@ import { eq } from 'drizzle-orm'
 import * as v from 'valibot'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MAX_BRANCH_TABLES, updateBranchSettingsSchema } from '#shared/contracts/branches'
-import type { Floor, Placement, SaveLayoutInput } from '#shared/contracts/shop-layout'
-import { FIGURE_SIZES, floorSchema, LAYOUT_MAX_BODY_BYTES, LAYOUT_MAX_FLOOR_BYTES, NO_SCENE, saveLayoutSchema } from '#shared/contracts/shop-layout'
+import type { Floor, FloorGeometry, Placement, SaveLayoutInput, ShopLayout } from '#shared/contracts/shop-layout'
+import { FIGURE_SIZES, floorSchema, LAYOUT_MAX_BODY_BYTES, LAYOUT_MAX_FLOOR_BYTES, NO_SCENE, saveLayoutSchema, upgradeFloor } from '#shared/contracts/shop-layout'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { getLayout, getLayoutSnapshot, getPublicExploreLayout, LAYOUT_SNAPSHOT_EVERY_MS, listLayoutHistory, saveLayout } from '#server/features/branches/branches.layout.service'
 import { archiveTable, createTable, deleteTable, listPublicBranches, restoreTable, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
-import { deletePlacementStatement, insertSnapshotStatement, LAYOUT_HISTORY_KEEP, layoutRows, listSnapshots, pruneSnapshotsStatement, replaceLayoutStatements, requireActiveTables, snapshotAt, touchLayoutStatement } from '#server/features/branches/branches.layout.repository'
+import { deletePlacementStatement, insertLayoutStatement, insertSnapshotStatement, LAYOUT_HISTORY_KEEP, layoutRows, listSnapshots, pruneSnapshotsStatement, replaceLayoutStatements, requireActiveTables, snapshotAt, touchLayoutStatement } from '#server/features/branches/branches.layout.repository'
 import { branchLayoutItemLooks, branchLayoutPlacements, branchLayoutVersions, branches, customFurnitureLooks, customItemLooks, diningTables } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
@@ -42,7 +42,8 @@ beforeEach(async () => {
 
 /** A 6 × 5 m room with a front door, and its table spots. */
 function floor(id: string, name = 'Ground', extra: Partial<Floor> = {}): Floor {
-  return {
+  // Written as before contract v2 (an outline and its edges) and upgraded, as the server reads old rows (D282).
+  return { ...upgradeFloor<unknown>({
     id,
     name,
     height: 300,
@@ -56,8 +57,7 @@ function floor(id: string, name = 'Ground', extra: Partial<Floor> = {}): Floor {
     ],
     walls: [],
     items: [{ id: `${id}-plant`, kind: 'plant', x: 50, y: 50, rotation: 0, width: 40, depth: 40, finishes: {} }],
-    ...extra,
-  }
+  }) as Floor, ...extra }
 }
 
 const placed = (tableId: string, floorId: string, x = 200): Placement =>
@@ -162,6 +162,55 @@ describe('reading a layout', () => {
     await db.update(branches).set({ status: 'archived' }).where(eq(branches.id, branch))
     expect((await getLayout(db, TEST_TENANT, branch)).version).toBe(0)
     await expectApiError(() => save({ version: 0, layout: { floors: [floor('ground')], placements: [] } }), 409, 'INVALID_STATE')
+  })
+})
+
+describe('contract v2 (D282): layouts saved before it', () => {
+  const v1Ground = () => ({
+    id: 'ground',
+    outline: [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 500 }, { x: 0, y: 500 }],
+    edges: [
+      { kind: 'wall', openings: [{ id: 'street', kind: 'door', offset: 250, width: 100 }] },
+      { kind: 'open', openings: [] },
+      { kind: 'railing', openings: [] },
+      { kind: 'wall', openings: [] },
+    ],
+    walls: [{ id: 'kitchen', from: { x: 400, y: 0 }, to: { x: 400, y: 300 } }],
+    items: [],
+  })
+
+  it('reads an old floor row as slabs and one wall list, the outer walls outside the outline', async () => {
+    const { id: _id, ...geometry } = v1Ground()
+    await db.batch([
+      insertLayoutStatement(db, TEST_TENANT, branch, actor.userId, new Date(), { preset: 'none', entrance: 'street' }),
+      ...replaceLayoutStatements(db, TEST_TENANT, branch, [{ id: 'ground', position: 0, name: 'Ground', heightCm: 300, hasRoof: true, geometry: geometry as unknown as FloorGeometry, canvasXCm: null, canvasYCm: null, pageId: null, hidden: false, locked: false }], []),
+    ] as Batch)
+    const read = await getLayout(db, TEST_TENANT, branch)
+    const ground = read.floors[0]!
+    expect(ground.slabs).toEqual([{ id: expect.stringMatching(/^s-/), outline: v1Ground().outline }])
+    // The open edge has no wall; the street door keeps its id, so Explore's entrance still finds it.
+    expect(ground.walls.map(wall => [wall.kind ?? 'wall', wall.side, wall.thickness])).toEqual([['wall', 'left', 20], ['railing', 'left', 6], ['wall', 'left', 20], ['wall', undefined, undefined]])
+    expect(ground.walls[0]).toMatchObject({ from: { x: 0, y: 0 }, to: { x: 600, y: 0 }, openings: [{ id: 'street' }] })
+    expect(v.safeParse(floorSchema, ground).success).toBe(true)
+    // The same ids every time it is read.
+    expect((await getLayout(db, TEST_TENANT, branch)).floors).toEqual(read.floors)
+    // Saved back unchanged: stored in v2 from then on.
+    const saved = await save({ version: read.version, layout: { floors: read.floors, placements: [], scene: read.scene } })
+    expect(saved.floors).toEqual(read.floors)
+  })
+
+  it('accepts an old save body at the route and upgrades it before checking', () => {
+    const parsed = v.safeParse(saveLayoutSchema, { version: 0, layout: { floors: [{ ...v1Ground(), name: 'Ground', height: 300, hasRoof: true }], placements: [], scene: { preset: 'none', entrance: 'street', explore: false } } })
+    expect(parsed.issues?.map(issue => issue.message)).toBeUndefined()
+    expect(parsed.success && parsed.output.layout.floors[0]!.slabs).toHaveLength(1)
+  })
+
+  it('upgrades a history snapshot saved before it', async () => {
+    const old = { floors: [{ ...v1Ground(), name: 'Ground', height: 300, hasRoof: true }], placements: [] }
+    await db.batch([insertLayoutStatement(db, TEST_TENANT, branch, null, new Date()), insertSnapshotStatement(db, TEST_TENANT, branch, 7, null, new Date(), old as unknown as ShopLayout)] as Batch)
+    const snapshot = await snapshotAt(db, TEST_TENANT, branch, 7)
+    expect(snapshot?.floors[0]!.slabs).toHaveLength(1)
+    expect(snapshot?.floors[0]!.walls).toHaveLength(4)
   })
 })
 
@@ -537,11 +586,14 @@ describe('size limits', () => {
 
   it('a malformed floor is refused with its issues, never a thrown error (found on the built server)', () => {
     const fine = floor('ground')
-    for (const outline of [fine.outline.slice(0, 2), fine.outline.slice(0, 3), [...fine.outline, { x: 0, y: 250 }]]) {
-      const result = v.safeParse(floorSchema, { ...fine, outline })
+    const outline = fine.slabs[0]!.outline
+    for (const [broken, message] of [[outline.slice(0, 2), 'An outline needs 3 corners'], [[outline[0]!, outline[1]!, outline[3]!, outline[2]!], 'The outline crosses itself']] as const) {
+      const result = v.safeParse(floorSchema, { ...fine, slabs: [{ id: 'slab', outline: broken }] })
       expect(result.success).toBe(false)
-      expect(result.issues?.map(issue => issue.message)).toContain(outline.length >= 3 ? 'Every outline edge needs its kind' : 'An outline needs 3 corners')
+      expect(result.issues?.map(issue => issue.message)).toContain(message)
     }
+    // A v1 floor sent to the floor schema itself is refused, not thrown on.
+    expect(v.safeParse(floorSchema, { ...fine, slabs: undefined, outline, edges: [] }).success).toBe(false)
   })
 
   it('the largest save (every floor full, every table placed) fits the route\'s body limit and passes the contract', () => {

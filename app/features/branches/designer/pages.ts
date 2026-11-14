@@ -1,6 +1,6 @@
 import { floorPageId, LAYOUT_MAX_PAGES, layoutPages } from '#shared/contracts/shop-layout'
 import type { Floor, LayoutPage, Point, ShopLayout } from '#shared/contracts/shop-layout'
-import { boundsOf } from './geometry'
+import { boundsOf, floorPoints } from './geometry'
 
 /**
  * Studio's pages (ISS-036, like Figma's): groups of floors by purpose. Each function changes the
@@ -59,14 +59,26 @@ export const FRAME_GAP_CM = 400
  * Where a new floor's frame goes on a page (ISS-036): to the right of the frames already there,
  * top-aligned with the first, like Figma placing a new frame beside the others. (0, 0) on an empty page.
  */
-export function besideFrames(frames: readonly Pick<Floor, 'outline' | 'canvasX' | 'canvasY'>[], outline: readonly Point[]): Point {
-  const placed = frames.filter(frame => frame.outline.length >= 3)
+export function besideFrames(frames: readonly FramePlace[], points: readonly Point[]): Point {
+  const placed = frames.filter(frame => frame.points.length > 0)
   if (!placed.length) return { x: 0, y: 0 }
-  const right = Math.max(...placed.map(frame => (frame.canvasX ?? 0) + boundsOf(frame.outline).maxX))
-  const left = outline.length >= 3 ? boundsOf(outline).minX : 0
+  const right = Math.max(...placed.map(frame => (frame.canvasX ?? 0) + boundsOf(frame.points).maxX))
+  const left = points.length ? boundsOf(points).minX : 0
   const first = placed[0]!
-  const top = (first.canvasY ?? 0) + boundsOf(first.outline).minY - (outline.length >= 3 ? boundsOf(outline).minY : 0)
+  const top = (first.canvasY ?? 0) + boundsOf(first.points).minY - (points.length ? boundsOf(points).minY : 0)
   return { x: Math.round(right + FRAME_GAP_CM - left), y: Math.round(top) }
+}
+
+/** A frame already on the page: its drawing's corners and wall ends (`floorPoints`) and its offset. */
+export interface FramePlace {
+  points: readonly Point[]
+  canvasX?: number
+  canvasY?: number
+}
+
+/** A floor as a frame to place: its corners and wall ends (D282: an empty floor has none). */
+export function framePlace(floor: Pick<Floor, 'slabs' | 'walls' | 'canvasX' | 'canvasY'>): FramePlace {
+  return { points: floorPoints(floor), canvasX: floor.canvasX, canvasY: floor.canvasY }
 }
 
 /**
@@ -75,15 +87,16 @@ export function besideFrames(frames: readonly Pick<Floor, 'outline' | 'canvasX' 
  * don't sit on top of each other. Display only: the editor writes them all out the first time one
  * of them moves, so none jumps.
  */
-export function effectiveFrames(floors: readonly Pick<Floor, 'id' | 'outline' | 'canvasX' | 'canvasY'>[]): Record<string, Point> {
-  const placed: { outline: Point[], canvasX: number, canvasY: number }[] = []
+export function effectiveFrames(floors: readonly Pick<Floor, 'id' | 'slabs' | 'walls' | 'canvasX' | 'canvasY'>[]): Record<string, Point> {
+  const placed: FramePlace[] = []
   const offsets: Record<string, Point> = {}
   for (const floor of floors) {
+    const points = floorPoints(floor)
     const at = floor.canvasX !== undefined || floor.canvasY !== undefined
       ? { x: floor.canvasX ?? 0, y: floor.canvasY ?? 0 }
-      : besideFrames(placed, floor.outline)
+      : besideFrames(placed, points)
     offsets[floor.id] = at
-    placed.push({ outline: floor.outline, canvasX: at.x, canvasY: at.y })
+    placed.push({ points, canvasX: at.x, canvasY: at.y })
   }
   return offsets
 }

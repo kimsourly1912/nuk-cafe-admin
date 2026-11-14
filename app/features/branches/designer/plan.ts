@@ -6,11 +6,11 @@ import type { ItemKind } from '#shared/contracts/shop-layout'
  */
 
 /**
- * What's selected on the plan: a placed table (by its table id), furniture or an inside wall (by
- * id), or an outline edge (by its index, as a string).
+ * What's selected on the plan: a placed table (by its table id), furniture, a wall or a floor
+ * surface (D282) by id.
  */
 export interface PlanSelection {
-  kind: 'table' | 'item' | 'wall' | 'edge'
+  kind: 'table' | 'item' | 'wall' | 'slab'
   id: string
 }
 

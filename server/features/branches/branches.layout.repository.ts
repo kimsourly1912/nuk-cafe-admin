@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, exists, inArray, max, notInArray, sql } from 'drizzle-orm'
 import type { BuiltInLookId, FloorGeometry, ItemLook, ItemLookKind, LayoutPage, LayoutScene, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { upgradeLayout } from '#shared/contracts/shop-layout'
 import type { Db, Statement } from '#server/utils/batch'
 import { chunk, insertAll, requireCount } from '#server/utils/batch'
 import { inTenant } from '#server/utils/query'
@@ -254,5 +255,6 @@ export function listSnapshots(db: Db, tenantId: string, branchId: string) {
 export async function snapshotAt(db: Db, tenantId: string, branchId: string, version: number): Promise<ShopLayout | undefined> {
   const rows = await db.select({ snapshot: branchLayoutVersions.snapshot }).from(branchLayoutVersions)
     .where(inTenant(branchLayoutVersions, tenantId, eq(branchLayoutVersions.branchId, branchId), eq(branchLayoutVersions.version, version))).limit(1)
-  return rows[0]?.snapshot
+  // Snapshots saved before contract v2 (D282) are upgraded as they are read.
+  return rows[0] && upgradeLayout(rows[0].snapshot)
 }

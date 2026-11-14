@@ -13,13 +13,13 @@ Rules: [QA standard](../STANDARD.md). Issue numbers continue after the Studio vs
 | [ISS-037](issues/ISS-037.md) | High | Bug | Fixed, needs retest | Removing a corner can make the layout impossible to save |
 | [ISS-038](issues/ISS-038.md) | High | Bug | Fixed, needs retest | Explore is switched off for customers without warning when the street door goes |
 | [ISS-039](issues/ISS-039.md) | Medium | Bug | Fixed, needs retest | A floor outline can cross itself and still saves |
-| [ISS-040](issues/ISS-040.md) | Medium | Bug | Open | Grid shows only 1–2 lines when zoomed in, and lines look blurry |
-| [ISS-041](issues/ISS-041.md) | Medium | Improvement | Step 1 fixed, needs retest | 3D is slow to open and rebuilds the whole building and street on every edit |
+| [ISS-040](issues/ISS-040.md) | Medium | Bug | Fixed, needs retest | Grid shows only 1–2 lines when zoomed in, and lines look blurry |
+| [ISS-041](issues/ISS-041.md) | Medium | Improvement | Steps 1–2 fixed, needs retest; step 3 open | 3D is slow to open and rebuilds the whole building and street on every edit |
 | [ISS-042](issues/ISS-042.md) | Low | Bug | Fixed, needs retest | Copy, duplicate and paste keep the same door and window ids |
 | [ISS-043](issues/ISS-043.md) | Medium | Bug | Fixed, needs retest | The editor lets a floor go over its limits, then autosave stops |
 | [ISS-044](issues/ISS-044.md) | Low | Bug | Fixed, needs retest | Remove-floor dialog says "undo until you save", but autosave saves at once |
-| [ISS-045](issues/ISS-045.md) | Medium | Gap | Needs owner decision | A new floor always starts as a copy of the floor below |
-| [ISS-046](issues/ISS-046.md) | Medium | Gap | Needs owner decision | Outer walls and the floor surface cannot be deleted |
+| [ISS-045](issues/ISS-045.md) | Medium | Gap | Fixed, needs retest | A new floor always starts as a copy of the floor below |
+| [ISS-046](issues/ISS-046.md) | Medium | Gap | Fixed, needs retest | Outer walls and the floor surface cannot be deleted |
 
 ## Suggested fix order
 

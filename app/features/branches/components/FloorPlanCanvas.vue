@@ -2,12 +2,13 @@
 /**
  * One floor of the shop layout, drawn from above (D273, frames 1–3, 9A, 9C). Three tools (`mode`):
  *
- * - **select:** tap or click selects a table, furniture, an inside wall or an outline edge (pieces
- *   win over the edge behind them; the pointer's target gets a hover outline); a drag past a few
+ * - **select:** tap or click selects a table, furniture or a wall (pieces win over the wall behind
+ *   them; the pointer's target gets a hover outline); a drag past a few
  *   pixels moves the selected piece, on whole centimetres (ISS-004) with smart guides (off with Ctrl/⌘), straight across
  *   or down with Shift); a drag just outside a corner turns it freely (15° steps with Shift, like
  *   Figma); a corner handle resizes it in whole centimetres with the opposite corner staying put (2B).
- * - **outline** (frame 3A): with no outline yet, clicks add corners and clicking the first corner,
+ * - **outline** (frame 3A, D282): on a floor surface (`slabId`, or the floor's first), corners and
+ *   sides drag with the walls joined to them; with no surface yet, clicks add corners and clicking the first corner,
  *   a double-click or Enter closes the shape; otherwise corners drag freely (ISS-019: Shift on a
  *   straight or 45° line, Alt keeping the corners beside it at right angles; was: right angles unless
  *   Alt is held), a round edge handle adds a corner, a clicked corner moves with the arrow keys and
@@ -21,18 +22,18 @@
  * gesture ends: then one event is emitted, one undo step.
  */
 import { useElementBounding, useEventListener } from '@vueuse/core'
-import type { Floor, InnerWall, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength, floorPageId, innerWallKind, isSimpleOutline, layoutPages, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
+import type { Floor, Wall, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { edgeLength, floorPageId, isSimpleOutline, layoutPages, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
 import { handleLayout, SMALL_PIECE_PX } from '../designer/handles'
 import { arcFromDrag, arcHandles, arcOf, radiusDot, radiusFromDrag, shapeLabelSize, shapeOutline, shapePath } from '../designer/shapes'
 import type { ArcHandle, ShapeEdit } from '../designer/shapes'
-import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeCursor, resizeFromCorner, rotatePoint, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
+import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, floorPoints, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeCursor, resizeFromCorner, rotatePoint, rotationFromDrag, snap, WALL_THICKNESS_CM, wallBand, wallStrip } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
-import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, majorGridOpacity, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, gridLines, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
-import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
-import { moveWall, moveWallEnd, moveWalls } from '../designer/walls'
+import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner, shapeOf } from '../designer/outline'
+import { drawWalls, moveWall, moveWallEnd, moveWalls } from '../designer/walls'
 import { cornerBounds, distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
 import type { Gap, Guide } from '../designer/guides'
 import type { FloorShape } from '../designer/outline'
@@ -61,6 +62,8 @@ const props = defineProps<{
   roomCut?: boolean
   /** Everything selected (D278 multi-select): two or more pieces and walls moved and drawn together. */
   group?: readonly PlanSelection[]
+  /** The floor surface Edit points works on (D282); the floor's first when left out. */
+  slabId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -76,17 +79,19 @@ const emit = defineEmits<{
   /** A corner handle was dragged: the new size, and the centre that keeps the opposite corner. */
   resize: [selection: PlanSelection, size: Omit<Sized, 'rotation'>]
   remove: [selection: PlanSelection]
-  /** The outline changed (Draw outline): corners and edges together. */
-  shape: [shape: FloorShape]
-  addWall: [wall: Omit<InnerWall, 'id'>]
+  /** A floor surface's outline changed in Edit points (D282), with the walls joined to it: the floor's walls after it. */
+  shape: [slabId: string, shape: FloorShape]
+  /** A new floor surface drawn (Draw outline on an empty floor), with its new walls around it. */
+  newSlab: [shape: FloorShape]
+  addWall: [wall: Omit<Wall, 'id'>]
   /** An inside wall's end or the whole wall was dragged (D278): the floor's walls after it. */
-  walls: [walls: InnerWall[]]
+  walls: [walls: Wall[]]
   /** The Room tool's rectangle (D278), and whether it cuts it out (the tool bar's Cut). */
   room: [bounds: Bounds, cut: boolean]
   /** The Shape tool's rectangle or circle (D278): a new shape piece there. */
   block: [bounds: Bounds]
-  /** A double-click on the floor or its edge in Select: open Edit points (D278). */
-  editPoints: []
+  /** A double-click on a floor surface in Select: open Edit points on it (D278, D282). */
+  editPoints: [slabId: string]
   /** Shift+click (D278): this piece or wall joins the selection, or leaves it. */
   toggle: [target: PlanSelection]
   /** A box dragged on empty plan (D278): what it touches; `additive` with Shift keeps the rest. */
@@ -129,9 +134,6 @@ const viewBox = computed(() => `${view.value.x} ${view.value.y} ${view.value.wid
 const perPixel = computed(() => 1 / scale.value)
 /** The canvas's size to fit to: none while hidden (3D), nor while the splitter lays out its first frame (a few pixels wide). */
 const MEASURED_MIN_PX = 100
-/** The fine grid fades out when its lines get close on screen (ISS-031). */
-const minorOpacity = computed(() => minorGridOpacity(scale.value))
-const majorOpacity = computed(() => majorGridOpacity(scale.value))
 const measured = computed(() => screenWidth.value >= MEASURED_MIN_PX && screenHeight.value >= MEASURED_MIN_PX)
 
 // The canvas moved on the page (the sidebar hid, showed or was resized): every plan point stays
@@ -152,7 +154,7 @@ function fit() {
     return
   }
   fitWhenMeasured = false
-  const points = floor.value.outline.length ? floor.value.outline : below.value?.outline ?? []
+  const points = floorPoints(floor.value).length ? floorPoints(floor.value) : below.value ? floorPoints(below.value) : []
   if (!points.length) {
     frame({ minX: -100, minY: -100, maxX: 1100, maxY: 1000 }, 0)
     return
@@ -165,9 +167,9 @@ function fit() {
  * others beside it; just this floor when it is alone.
  */
 function fitPage() {
-  const others = otherFrames.value.flatMap(other => other.outline.map(point => ({ x: point.x + other.at.x, y: point.y + other.at.y })))
-  if (!others.length || !measured.value || floor.value.outline.length < 3) return fit()
-  frame(boundsOf([...floor.value.outline, ...others]), 160)
+  const others = otherFrames.value.flatMap(other => other.points.map(point => ({ x: point.x + other.at.x, y: point.y + other.at.y })))
+  if (!others.length || !measured.value || !floorPoints(floor.value).length) return fit()
+  frame(boundsOf([...floorPoints(floor.value), ...others]), 160)
 }
 
 /** Shows these bounds whole and centred, with a margin around them. */
@@ -198,7 +200,7 @@ watch(() => props.floorId, (id, old) => {
     const from = offsetOf(previous)
     const to = offsetOf(next)
     camera.value = { ...camera.value, x: camera.value.x + from.x - to.x, y: camera.value.y + from.y - to.y }
-    if (next.outline.length < 3 || overlaps(boundsOf(next.outline), { minX: view.value.x, minY: view.value.y, maxX: view.value.x + view.value.width, maxY: view.value.y + view.value.height })) return
+    if (!floorPoints(next).length || overlaps(boundsOf(floorPoints(next)), { minX: view.value.x, minY: view.value.y, maxX: view.value.x + view.value.width, maxY: view.value.y + view.value.height })) return
   }
   fit()
 }, { immediate: true })
@@ -211,6 +213,12 @@ watch(() => props.floorId, (id, old) => {
  */
 const offsetOf = (target: Pick<Floor, 'id' | 'canvasX' | 'canvasY'>): Point => props.frameOffsets?.[target.id] ?? { x: target.canvasX ?? 0, y: target.canvasY ?? 0 }
 const frameOffset = computed(() => offsetOf(floor.value))
+/** The grid's lines on screen (ISS-040), from the floor frame's own (0, 0). */
+const grid = computed(() => gridLines(camera.value, screenSize.value, { x: -frameOffset.value.x, y: -frameOffset.value.y }))
+function gridPath(xs: readonly number[], ys: readonly number[]): string {
+  const { width, height } = screenSize.value
+  return [...xs.map(x => `M${x} 0V${height}`), ...ys.map(y => `M0 ${y}H${width}`)].join('')
+}
 /** The frame being dragged by its name: drawn moved by this until let go. */
 const frameDrag = shallowRef<Point | null>(null)
 // The frame moved (a drag, a typed X or Y, an undo): the canvas around it stays where it is on the
@@ -222,16 +230,17 @@ watch(() => [floor.value.id, frameOffset.value.x, frameOffset.value.y] as const,
  * The page's other frames (ISS-036), placed by their offsets from this one: their outline, walls,
  * pieces and tables as plain shapes, their name above. Read only: a click opens the floor.
  */
-const otherFrames = computed(() => (props.frames ?? []).filter(other => other.outline.length >= 3).map((other) => {
+const otherFrames = computed(() => (props.frames ?? []).filter(other => floorPoints(other).length > 0).map((other) => {
   const place = offsetOf(other)
   const at = { x: place.x - frameOffset.value.x, y: place.y - frameOffset.value.y }
-  const box = boundsOf(other.outline)
+  const box = boundsOf(floorPoints(other))
   return {
     id: other.id,
     name: other.name,
     at,
-    outline: other.outline,
-    bands: outlineWallBands(other.outline, other.edges.map(edge => edge.kind === 'wall')).filter((band): band is Point[] => !!band),
+    points: floorPoints(other),
+    slabs: other.slabs.map(slab => slab.outline),
+    bands: drawWalls(other.walls.filter(wall => !wall.hidden)).flatMap(drawing => drawing.bands),
     pieces: [
       ...other.items.filter(item => !item.hidden).map(item => ({ id: item.id, corners: rectCorners(item, item.width, item.depth, item.rotation) })),
       ...props.layout.placements.filter(placement => placement.floorId === other.id && !placement.hidden).map((placement) => {
@@ -245,9 +254,9 @@ const otherFrames = computed(() => (props.frames ?? []).filter(other => other.ou
 
 /** The frame's name tag, above its top-left corner. */
 const frameLabel = computed(() => {
-  const outline = shape.value.outline
-  if (outline.length < 3) return null
-  const box = boundsOf(outline)
+  const points = floorPoints(floor.value)
+  if (!points.length) return null
+  const box = boundsOf(points)
   return { x: box.minX - WALL_THICKNESS_CM, y: box.minY - WALL_THICKNESS_CM - 8 * perPixel.value }
 })
 
@@ -282,10 +291,10 @@ const altHeld = ref(false)
 /** The Room tool's rectangle while it's dragged, and whether it will cut (the tool bar's Cut) (D278). */
 const roomPreview = shallowRef<{ bounds: Bounds, cut: boolean } | null>(null)
 
-/** The inside walls while an end or a whole wall is dragged (D278). */
-const liveWalls = shallowRef<InnerWall[] | null>(null)
-const walls = computed(() => liveWalls.value ?? floor.value.walls)
-/** The inside walls drawn: a hidden one (ISS-021) is not, but still stays joined to the others. */
+/** The walls while an end or a whole wall is dragged (D278), or while a surface's corner takes them along (D282). */
+const liveWalls = shallowRef<Wall[] | null>(null)
+const walls = computed(() => liveWalls.value ?? liveShape.value?.walls ?? floor.value.walls)
+/** The walls drawn: a hidden one (ISS-021) is not, but still stays joined to the others. */
 const shownWalls = computed(() => walls.value.filter(wall => !wall.hidden))
 
 /**
@@ -297,75 +306,42 @@ function isLocked(kind: PlanSelection['kind'], id: string): boolean {
   if (kind === 'table') return !!props.layout.placements.find(placement => placement.tableId === id)?.locked
   if (kind === 'item') return !!floor.value.items.find(item => item.id === id)?.locked
   if (kind === 'wall') return !!floor.value.walls.find(wall => wall.id === id)?.locked
+  if (kind === 'slab') return !!floor.value.slabs.find(slab => slab.id === id)?.locked
   return false
 }
-/** Each inside wall as drawn: its solid spans, its doors (gaps with a swing) and windows. */
-/** An inside wall's thickness as built in 3D: glass is thin, the others a full wall's. */
-const innerThickness = (wall: InnerWall) => (innerWallKind(wall) === 'glass' ? GLASS_THICKNESS_CM : INNER_WALL_THICKNESS_CM)
 
-/** Inside walls joined end to end: where exactly two solid walls meet, the other one (ISS-034). */
-const pointKey = (point: Point) => `${point.x},${point.y}`
-const solidEnds = computed(() => {
-  const ends = new Map<string, InnerWall[]>()
-  for (const wall of shownWalls.value) {
-    if (innerWallKind(wall) !== 'wall') continue
-    for (const point of [wall.from, wall.to]) ends.set(pointKey(point), [...(ends.get(pointKey(point)) ?? []), wall])
-  }
-  return ends
-})
-/** The other solid wall joined at `point`, turned to run into it (`into`) or out of it; none at a T. */
-function joinedAt(wall: InnerWall, point: Point, into: boolean) {
-  const others = (solidEnds.value.get(pointKey(point)) ?? []).filter(other => other.id !== wall.id)
-  if (others.length !== 1) return undefined
-  const other = others[0]!
-  const endsHere = pointKey(other.to) === pointKey(point)
-  return into === endsHere ? { from: other.from, to: other.to } : { from: other.to, to: other.from }
+/** Each wall as drawn (D282: outer and inside alike): its solid spans and bands, its doors and windows. */
+const drawnWalls = computed(() => drawWalls(shownWalls.value).map(drawing => ({
+  ...drawing.wall,
+  kind: drawing.kind,
+  spans: drawing.spans,
+  bands: drawing.bands,
+  windows: drawing.windows,
+  doors: drawing.doors,
+})))
+/** Every full wall's band, for smart guides: pieces line up with wall faces (ISS-034). */
+const wallBands = computed(() => drawnWalls.value.flatMap(wall => wall.bands))
+/** A wall's band, faces included, not its centre line. */
+const wallBox = (wall: Wall) => {
+  const { near, far } = wallBand(wall)
+  return boundsOf(wallStrip(wall, near, far))
 }
 
-const innerWalls = computed(() => shownWalls.value.map((wall) => {
-  const length = innerWallLength(wall)
-  const along = (offset: number) => ({ x: wall.from.x + (wall.to.x - wall.from.x) * offset / Math.max(length, 1), y: wall.from.y + (wall.to.y - wall.from.y) * offset / Math.max(length, 1) })
-  // A door swings to the wall's right as drawn (start to end), one width long.
-  const side = { x: -(wall.to.y - wall.from.y) / Math.max(length, 1), y: (wall.to.x - wall.from.x) / Math.max(length, 1) }
-  const openings = [...(wall.openings ?? [])].sort((a, b) => a.offset - b.offset)
-  const spans: { from: Point, to: Point }[] = []
-  let cursor = 0
-  for (const opening of openings) {
-    if (opening.kind === 'door' && opening.offset > cursor) spans.push({ from: along(cursor), to: along(opening.offset) })
-    if (opening.kind === 'door') cursor = opening.offset + opening.width
-  }
-  if (cursor < length) spans.push({ from: along(cursor), to: wall.to })
-  const kind = innerWallKind(wall)
-  // A solid wall's pieces as bands, mitred where it meets another solid wall end to end (ISS-034).
-  const half = INNER_WALL_THICKNESS_CM / 2
-  const before = kind === 'wall' ? joinedAt(wall, wall.from, true) : undefined
-  const after = kind === 'wall' ? joinedAt(wall, wall.to, false) : undefined
-  const bands = kind === 'wall'
-    ? spans.map(span => wallStrip(span, -half, half, pointKey(span.from) === pointKey(wall.from) ? before : undefined, pointKey(span.to) === pointKey(wall.to) ? after : undefined))
-    : []
-  return {
-    ...wall,
-    kind,
-    spans,
-    bands,
-    windows: openings.filter(opening => opening.kind === 'window').map(opening => ({ id: opening.id, from: along(opening.offset), to: along(opening.offset + opening.width) })),
-    doors: openings.filter(opening => opening.kind === 'door').map((opening) => {
-      const hinge = along(opening.offset)
-      return { id: opening.id, hinge, swing: { x: hinge.x + side.x * opening.width, y: hinge.y + side.y * opening.width } }
-    }),
-  }
-}))
-
-/** The outline while a corner is dragged. */
+/** The floor surface Edit points works on (D282): the one asked for, or the floor's first. */
+const slab = computed(() => floor.value.slabs.find(candidate => candidate.id === props.slabId) ?? floor.value.slabs[0] ?? null)
+/** The surface's outline and the walls while a corner or side is dragged. */
 const liveShape = shallowRef<FloorShape | null>(null)
-const shape = computed<FloorShape>(() => liveShape.value ?? { outline: floor.value.outline, edges: floor.value.edges })
+const shape = computed<FloorShape>(() => liveShape.value ?? (slab.value ? shapeOf(floor.value, slab.value) : { outline: [], walls: floor.value.walls }))
+function emitShape(next: FloorShape) {
+  if (slab.value) emit('shape', slab.value.id, next)
+}
 /**
  * A corner or side drag's shape: an outline that would cross itself is not shown (ISS-039), so
  * the drag stays at its last good place and drops there. A floor that already crossed itself
  * follows freely, so it can be dragged straight again.
  */
 function showLiveShape(next: FloorShape) {
-  if (isSimpleOutline(next.outline) || !isSimpleOutline(floor.value.outline)) liveShape.value = next
+  if (isSimpleOutline(next.outline) || !isSimpleOutline(slab.value?.outline ?? [])) liveShape.value = next
 }
 
 // --- Draw outline and Draw wall state ---
@@ -396,7 +372,7 @@ function snapToChainStart(point: Point): Point {
 /** What a click would pick, under the pointer in the select tool (D278). */
 const hovered = shallowRef<PlanSelection | null>(null)
 
-const drawing = computed(() => props.mode === 'outline' && floor.value.outline.length === 0)
+const drawing = computed(() => props.mode === 'outline' && !slab.value)
 watch(() => [props.mode, props.floorId], () => {
   drawn.value = []
   hover.value = null
@@ -404,36 +380,14 @@ watch(() => [props.mode, props.floorId], () => {
   endWallChain()
 })
 
-/** The outline's walls as bands with clean corners (ISS-034); null for a railing or an open edge. */
-const wallBands = computed(() => (shape.value.outline.length >= 3 ? outlineWallBands(shape.value.outline, shape.value.edges.map(edge => edge.kind === 'wall')) : []))
-
-const edges = computed(() => shape.value.edges.map((edge, index) => {
+/** The surface's sides in Edit points (D282): where to drag, double-click and type a length. */
+const sides = computed(() => shape.value.outline.map((from, index) => {
   const outline = shape.value.outline
-  const from = outline[index]!
   const to = outline[(index + 1) % outline.length]!
   const normal = outwardNormal(outline, index)
-  const shift = edge.kind === 'wall' ? WALL_THICKNESS_CM / 2 : 0
-  const at = (point: Point) => ({ x: point.x + normal.x * shift, y: point.y + normal.y * shift })
   const length = edgeLength(outline, index)
   const middle = pointOnEdge(outline, index, length / 2)
-  return {
-    index,
-    kind: edge.kind,
-    band: wallBands.value[index] ?? null,
-    from: at(from),
-    to: at(to),
-    length,
-    middle,
-    label: { x: middle.x + normal.x * 50, y: middle.y + normal.y * 50 },
-    openings: edge.openings.map((opening) => {
-      const start = at(pointOnEdge(outline, index, opening.offset))
-      const end = at(pointOnEdge(outline, index, opening.offset + opening.width))
-      const hinge = pointOnEdge(outline, index, opening.offset)
-      // A door swings into the room: the arc's far corner is one width inside the hinge.
-      const swing = { x: hinge.x - normal.x * opening.width, y: hinge.y - normal.y * opening.width }
-      return { id: opening.id, kind: opening.kind, start, end, hinge, swing, width: opening.width }
-    }),
-  }
+  return { index, from, to, length, middle, label: { x: middle.x + normal.x * 50, y: middle.y + normal.y * 50 } }
 }))
 
 function posed<T extends Sized>(selection: PlanSelection, object: T): T {
@@ -469,7 +423,14 @@ const footprints = computed(() => [
   ...placed.value.map(table => tableFootprint(table, table.look, table.chairs)),
   ...items.value.map(itemFootprint),
 ])
-const floorShape = computed(() => ({ ...floor.value, ...shape.value }))
+/** The floor as placement warnings read it: a surface being edited and the walls as they are drawn now. */
+const floorShape = computed(() => ({
+  ...floor.value,
+  slabs: floor.value.slabs.map(surface => (liveShape.value && surface.id === slab.value?.id ? { ...surface, outline: liveShape.value.outline } : surface)),
+  walls: walls.value,
+}))
+/** The surfaces drawn: the one being edited as it is dragged (D282). */
+const drawnSlabs = computed(() => floorShape.value.slabs.filter(surface => !surface.hidden))
 const warnings = computed(() => placementWarnings(floorShape.value, footprints.value))
 
 const ghostView = computed(() => {
@@ -506,7 +467,7 @@ const pieceBoxes = computed((): { target: PlanSelection, bounds: Bounds, from?: 
   ...items.value.map(item => ({ target: { kind: 'item' as const, id: item.id }, bounds: boundsOf(rectCorners(item, item.width, item.depth, item.rotation)) })),
   // A wall's box is its band, faces included, not its centre line (ISS-034): pieces line up with
   // its faces and can sit flush against it.
-  ...shownWalls.value.map(wall => ({ target: { kind: 'wall' as const, id: wall.id }, bounds: boundsOf(wallStrip(wall, -innerThickness(wall) / 2, innerThickness(wall) / 2)), from: wall.from, to: wall.to })),
+  ...shownWalls.value.map(wall => ({ target: { kind: 'wall' as const, id: wall.id }, bounds: wallBox(wall), from: wall.from, to: wall.to })),
 ])
 const boxOf = (target: PlanSelection) => pieceBoxes.value.find(box => box.target.kind === target.kind && box.target.id === target.id)?.bounds
 const union = (list: readonly Bounds[]): Bounds | null => (list.length ? boundsOf(list.flatMap(bounds => [{ x: bounds.minX, y: bounds.minY }, { x: bounds.maxX, y: bounds.maxY }])) : null)
@@ -522,9 +483,9 @@ function guided(moving: Bounds, exclude: (target: PlanSelection) => boolean, fin
     guides.value = []
     return { x: 0, y: 0 }
   }
-  // Pieces, the floor's corners (its walls' inner faces) and its wall bands (their outer faces too).
-  const bands = wallBands.value.filter((band): band is Point[] => !!band).map(band => boundsOf(band))
-  const targets = [...pieceBoxes.value.filter(box => !exclude(box.target)).map(box => box.bounds), ...cornerBounds(shape.value.outline), ...bands]
+  // Pieces, the surfaces' corners (outer walls' inner faces) and the wall bands (their outer faces too).
+  const bands = wallBands.value.map(band => boundsOf(band))
+  const targets = [...pieceBoxes.value.filter(box => !exclude(box.target)).map(box => box.bounds), ...floor.value.slabs.flatMap(surface => cornerBounds(surface.outline)), ...bands]
   const snapped = snapToGuides(moving, targets, 8 * perPixel.value)
   guides.value = snapped.guides
   return { x: snapped.dx, y: snapped.dy }
@@ -535,10 +496,11 @@ const measurements = computed((): Gap[] => {
   const box = selectedBounds.value
   if (!altHeld.value || !box || props.mode !== 'select' || preview.value || groupDelta.value) return []
   const target = hovered.value
-  const other = target && !isSelected(target.kind, target.id) ? (target.kind === 'edge' ? null : boxOf(target)) : null
+  const other = target && !isSelected(target.kind, target.id) ? boxOf(target) : null
   if (other) return gapsBetween(box, other)
   const middle = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
-  return shape.value.outline.length >= 3 && pointInPolygon(middle, shape.value.outline) ? distancesToOutline(box, shape.value.outline) : []
+  const surface = floor.value.slabs.find(candidate => pointInPolygon(middle, candidate.outline))
+  return surface ? distancesToOutline(box, surface.outline) : []
 })
 /** Tables and furniture take part in the select tool only; the other tools draw over them. */
 const piecesActive = computed(() => props.mode === 'select')
@@ -569,8 +531,7 @@ const hoverOutline = computed(() => {
     const wall = walls.value.find(candidate => candidate.id === target.id)
     return wall ? { kind: 'line' as const, from: wall.from, to: wall.to } : null
   }
-  const edge = edges.value[Number(target.id)]
-  return edge ? { kind: 'line' as const, from: edge.from, to: edge.to } : null
+  return null
 })
 
 /** The plan points a selection covers: a piece's frame, a wall's or an edge's ends. */
@@ -592,8 +553,8 @@ const selectionPoints = computed((): Point[] | null => {
     const wall = walls.value.find(candidate => candidate.id === selection.id)
     return wall ? ends(wall.from, wall.to) : null
   }
-  const edge = selection.kind === 'edge' ? edges.value[Number(selection.id)] : undefined
-  return edge ? ends(edge.from, edge.to) : null
+  const surface = selection.kind === 'slab' ? floor.value.slabs.find(candidate => candidate.id === selection.id) : undefined
+  return surface ? surface.outline : null
 })
 
 /**
@@ -772,7 +733,7 @@ function onContextMenu(event: MouseEvent) {
   contextPoint.value = toPlan(event.clientX, event.clientY)
   const target = (event.target as Element).closest<SVGElement>('[data-kind]')
   const kind = target?.dataset.kind
-  if (target && (kind === 'table' || kind === 'item' || kind === 'wall' || kind === 'edge')) {
+  if (target && (kind === 'table' || kind === 'item' || kind === 'wall')) {
     const id = target.dataset.id!
     if (!isSelected(kind, id)) emit('select', { kind, id })
   }
@@ -855,7 +816,7 @@ function onPointerDown(event: PointerEvent) {
   }
   if (kind === 'midpoint') {
     const index = Number(id)
-    emit('shape', insertCorner(shape.value, index))
+    emitShape(insertCorner(shape.value, index))
     corner.value = index + 1
     return
   }
@@ -866,8 +827,8 @@ function onPointerDown(event: PointerEvent) {
   if (kind === 'edge-length') {
     // No mousedown follows, so the plan doesn't take the focus from the length's input.
     event.preventDefault()
-    const edge = edges.value[Number(id)]
-    if (edge) emit('editLength', edge.index, toScreen(edge.label))
+    const side = sides.value[Number(id)]
+    if (side) emit('editLength', side.index, toScreen(side.label))
     return
   }
   const pickable = props.mode === 'select' && (kind === 'table' || kind === 'item' || kind === 'wall') && !target.dataset.handle
@@ -895,14 +856,11 @@ function onPointerDown(event: PointerEvent) {
     return
   }
   if (kind === 'edge' && props.mode === 'outline') {
-    // Edit points (D278): a side drags sideways, both its corners together; a tap selects it.
+    // Edit points (D278): a side drags sideways, both its corners together.
     gesture = { type: 'side', index: Number(id), startPlan: plan, startClient: { x: event.clientX, y: event.clientY }, moved: false }
     return
   }
-  if (kind === 'edge') {
-    emit('select', { kind, id })
-    return
-  }
+  if (kind === 'edge') return
   const selection: PlanSelection = { kind: kind as PlanSelection['kind'], id }
   const origin = stored(selection)
   if (!origin) return
@@ -1051,7 +1009,8 @@ function followPointer(event: PointerMove) {
   }
   if (gesture.type === 'side') {
     const step = SNAP_CM
-    const base = { outline: floor.value.outline, edges: floor.value.edges }
+    if (!slab.value) return
+    const base = shapeOf(floor.value, slab.value)
     const normal = outwardNormal(base.outline, gesture.index)
     const distance = snap((plan.x - gesture.startPlan.x) * normal.x + (plan.y - gesture.startPlan.y) * normal.y, step)
     showLiveShape(moveSide(base, gesture.index, distance))
@@ -1097,7 +1056,7 @@ function followPointer(event: PointerMove) {
     // Like Figma (ISS-019): the corner moves freely, Shift keeps it on a straight or 45° line from
     // where it was; Alt keeps the corners beside it at right angles.
     const at = event.shiftKey ? constrainAngle(gesture.origin, to, step) : to
-    showLiveShape(moveCorner({ outline: floor.value.outline, edges: floor.value.edges }, gesture.index, at, event.altKey))
+    if (slab.value) showLiveShape(moveCorner(shapeOf(floor.value, slab.value), gesture.index, at, event.altKey))
     return
   }
   preview.value = { selection: gesture.selection, ...to, rotation: gesture.origin.rotation, copy: gesture.type === 'drag' && event.altKey }
@@ -1118,7 +1077,7 @@ function hoverTarget(event: PointerEvent): PlanSelection | null {
   if (props.mode !== 'select' || props.placing || event.pointerType === 'touch') return null
   const target = (event.target as Element).closest<SVGElement>('[data-kind]')
   const kind = target?.dataset.kind
-  if (!target || (kind !== 'table' && kind !== 'item' && kind !== 'wall' && kind !== 'edge')) return null
+  if (!target || (kind !== 'table' && kind !== 'item' && kind !== 'wall')) return null
   const id = target.dataset.id!
   return hovered.value?.kind === kind && hovered.value.id === id ? hovered.value : { kind, id }
 }
@@ -1179,11 +1138,7 @@ function onPointerUp(event: PointerEvent, cancelled = false) {
   if (finished.type === 'resize' && live?.width !== undefined && live.depth !== undefined && (live.width !== finished.origin.width || live.depth !== finished.origin.depth)) {
     emit('resize', finished.selection, { x: live.x, y: live.y, width: live.width, depth: live.depth })
   }
-  if (finished.type === 'corner' && finished.moved && liveOutline) emit('shape', liveOutline)
-  if (finished.type === 'side') {
-    if (finished.moved && liveOutline) emit('shape', liveOutline)
-    else if (!finished.moved) emit('select', { kind: 'edge', id: String(finished.index) })
-  }
+  if ((finished.type === 'corner' || finished.type === 'side') && finished.moved && liveOutline) emitShape(liveOutline)
   if ((finished.type === 'wall' || finished.type === 'wall-end') && finished.moved && movedWalls) emit('walls', movedWalls)
   if (finished.type === 'room' && room) {
     if (props.mode === 'shape') emit('block', room.bounds)
@@ -1259,7 +1214,7 @@ function tap(plan: Point | null, keys: { shiftKey: boolean, fine: boolean }) {
 
 function closeDrawing() {
   if (!canClose(drawn.value)) return
-  emit('shape', closedShape(drawn.value))
+  emit('newSlab', closedShape(drawn.value))
   drawn.value = []
   hover.value = null
 }
@@ -1278,11 +1233,11 @@ function onDoubleClick(event: MouseEvent) {
   const target = under && svg.value?.contains(under) ? under.closest<SVGElement>('[data-kind]') : null
   const plan = toPlan(event.clientX, event.clientY)
   if (props.mode === 'outline' && target?.dataset.kind === 'edge' && plan) {
-    emit('shape', insertCorner(shape.value, Number(target.dataset.id), plan))
+    emitShape(insertCorner(shape.value, Number(target.dataset.id), plan))
     return
   }
-  const onFloor = !target && plan && shape.value.outline.length >= 3 && pointInPolygon(plan, shape.value.outline)
-  if (props.mode === 'select' && !props.placing && (target?.dataset.kind === 'edge' || onFloor)) emit('editPoints')
+  const surface = !target && plan ? floor.value.slabs.find(candidate => pointInPolygon(plan, candidate.outline)) : undefined
+  if (props.mode === 'select' && !props.placing && surface) emit('editPoints', surface.id)
 }
 
 /** Zooms by `factor` (above 1 zooms in), keeping this plan point where it is on screen. */
@@ -1358,11 +1313,11 @@ function keydown(event: KeyboardEvent): boolean {
     const at = shape.value.outline[index]
     if (arrow && at) {
       // A nudge moves only this corner (ISS-019, Figma's point nudge).
-      emit('shape', moveCorner(shape.value, index, { x: at.x + arrow.x * step, y: at.y + arrow.y * step }, false))
+      emitShape(moveCorner(shape.value, index, { x: at.x + arrow.x * step, y: at.y + arrow.y * step }, false))
       return done()
     }
     if ((event.key === 'Delete' || event.key === 'Backspace') && shape.value.outline.length > 3) {
-      emit('shape', removeCorner(shape.value, index))
+      emitShape(removeCorner(shape.value, index))
       corner.value = null
       return done()
     }
@@ -1489,54 +1444,35 @@ const sizeBadge = computed(() => {
     @contextmenu="onContextMenu"
     @wheel.prevent="onWheel"
   >
-    <defs>
-      <pattern
-        id="plan-grid-minor"
-        :width="GRID_MINOR_CM"
-        :height="GRID_MINOR_CM"
-        patternUnits="userSpaceOnUse"
-        :patternTransform="`translate(${-frameOffset.x} ${-frameOffset.y})`"
-      >
-        <path
-          :d="`M${GRID_MINOR_CM} 0H0V${GRID_MINOR_CM}`"
-          fill="none"
-          stroke="var(--ui-border)"
-          :stroke-opacity="minorOpacity"
-          stroke-width="1"
-          vector-effect="non-scaling-stroke"
-        />
-      </pattern>
-      <pattern
-        id="plan-grid"
-        :width="GRID_MAJOR_CM"
-        :height="GRID_MAJOR_CM"
-        patternUnits="userSpaceOnUse"
-        :patternTransform="`translate(${-frameOffset.x} ${-frameOffset.y})`"
-      >
-        <rect
-          v-if="minorOpacity > 0"
-          :width="GRID_MAJOR_CM"
-          :height="GRID_MAJOR_CM"
-          fill="url(#plan-grid-minor)"
-        />
-        <path
-          :d="`M${GRID_MAJOR_CM} 0H0V${GRID_MAJOR_CM}`"
-          fill="none"
-          stroke="var(--ui-border-accented)"
-          :stroke-opacity="majorOpacity"
-          stroke-width="1"
-          vector-effect="non-scaling-stroke"
-        />
-      </pattern>
-    </defs>
     <rect
       :x="view.x - view.width"
       :y="view.y - view.height"
       :width="view.width * 3"
       :height="view.height * 3"
-      fill="url(#plan-grid)"
-      style="background: var(--ui-bg-muted)"
+      fill="transparent"
     />
+    <!-- The grid in screen pixels (ISS-040): one unit here is one pixel, so lines are sharp. -->
+    <g
+      :transform="`translate(${view.x} ${view.y}) scale(${perPixel})`"
+      fill="none"
+      stroke-width="1"
+      shape-rendering="crispEdges"
+      pointer-events="none"
+      data-testid="plan-grid"
+      :data-minor="grid.minor"
+      :data-major="grid.major"
+    >
+      <path
+        v-if="grid.minorOpacity > 0"
+        :d="gridPath(grid.minorX, grid.minorY)"
+        stroke="var(--ui-border)"
+        :stroke-opacity="grid.minorOpacity"
+      />
+      <path
+        :d="gridPath(grid.majorX, grid.majorY)"
+        stroke="var(--ui-border-accented)"
+      />
+    </g>
 
     <!-- The page's other floors (ISS-036): frames beside this one, read only; a click opens one. -->
     <g
@@ -1550,7 +1486,9 @@ const sizeBadge = computed(() => {
     >
       <title>{{ other.name }}: click to edit this floor</title>
       <polygon
-        :points="points(other.outline)"
+        v-for="(outline, index) in other.slabs"
+        :key="`slab-${index}`"
+        :points="points(outline)"
         fill="var(--ui-bg)"
         stroke="var(--ui-border-accented)"
         stroke-width="1"
@@ -1618,7 +1556,11 @@ const sizeBadge = computed(() => {
         pointer-events="none"
         data-testid="plan-below"
       >
-        <polygon :points="points(below.outline)" />
+        <polygon
+          v-for="surface in below.slabs"
+          :key="surface.id"
+          :points="points(surface.outline)"
+        />
         <rect
           v-for="stairs in belowStairs"
           :key="stairs.id"
@@ -1631,30 +1573,17 @@ const sizeBadge = computed(() => {
         />
       </g>
 
+      <!-- The floor surfaces (D282); the one Edit points works on is tinted. -->
       <polygon
-        v-if="shape.outline.length >= 3"
-        :points="points(shape.outline)"
-        :fill="mode === 'outline' ? 'color-mix(in oklab, var(--ui-primary) 10%, var(--ui-bg))' : 'var(--ui-bg)'"
+        v-for="surface in drawnSlabs"
+        :key="surface.id"
+        :points="points(surface.outline)"
+        :fill="mode === 'outline' && surface.id === slab?.id ? 'color-mix(in oklab, var(--ui-primary) 10%, var(--ui-bg))' : 'var(--ui-bg)'"
+        :stroke="isSelected('slab', surface.id) ? 'var(--ui-primary)' : undefined"
+        :stroke-width="isSelected('slab', surface.id) ? 3 : undefined"
+        vector-effect="non-scaling-stroke"
+        :data-testid="`plan-slab-${surface.id}`"
       />
-
-      <!-- Edges to click (3B): wide and invisible, under furniture, inside walls and tables, so a
-         piece against a wall is picked, not the wall (D278). -->
-      <template v-if="mode !== 'wall'">
-        <line
-          v-for="edge in edges"
-          :key="edge.index"
-          :x1="edge.from.x"
-          :y1="edge.from.y"
-          :x2="edge.to.x"
-          :y2="edge.to.y"
-          stroke="transparent"
-          :stroke-width="Math.max(40, perPixel * 16)"
-          data-kind="edge"
-          :data-id="edge.index"
-          :data-testid="`plan-edge-${edge.index}`"
-          class="cursor-pointer"
-        />
-      </template>
 
       <!-- Furniture, tables and inside walls fade back while the outline is edited (3A). -->
       <g
@@ -1663,7 +1592,7 @@ const sizeBadge = computed(() => {
       >
         <!-- Inside walls (D278): a wall, railing, half wall or glass, with doors (gaps) and windows. -->
         <g
-          v-for="wall in innerWalls"
+          v-for="wall in drawnWalls"
           :key="wall.id"
           :pointer-events="isLocked('wall', wall.id) ? 'none' : undefined"
           data-kind="wall"
@@ -1687,6 +1616,7 @@ const sizeBadge = computed(() => {
             :key="`band-${index}`"
             :points="points(band)"
             fill="var(--ui-text-toned)"
+            data-testid="plan-band"
           />
           <line
             v-for="(span, index) in (wall.kind === 'wall' ? [] : wall.spans)"
@@ -1729,7 +1659,7 @@ const sizeBadge = computed(() => {
         </g>
         <!-- A selected inside wall's ends: drag one to stretch or turn the wall (D278). -->
         <template
-          v-for="wall in innerWalls"
+          v-for="wall in drawnWalls"
           :key="`ends-${wall.id}`"
         >
           <template v-if="mode === 'select' && !multi && isSelected('wall', wall.id)">
@@ -1972,97 +1902,6 @@ const sizeBadge = computed(() => {
             >{{ item.kind === 'service-counter' ? 'Counter' : 'Shelf' }}</text>
           </template>
         </g>
-      </g>
-
-      <!-- Walls, railings, doors and windows on the outline. -->
-      <g
-        v-for="edge in edges"
-        :key="edge.index"
-        pointer-events="none"
-      >
-        <line
-          v-if="isSelected('edge', String(edge.index))"
-          :x1="edge.from.x"
-          :y1="edge.from.y"
-          :x2="edge.to.x"
-          :y2="edge.to.y"
-          stroke="color-mix(in oklab, var(--ui-warning) 40%, transparent)"
-          stroke-width="44"
-          data-testid="plan-edge-selected"
-        />
-        <!-- A wall band with mitred corners (ISS-034): square line caps left notches at corners. -->
-        <polygon
-          v-if="edge.kind === 'wall' && edge.band"
-          :points="points(edge.band)"
-          fill="var(--ui-text-toned)"
-          :data-testid="`plan-outline-band-${edge.index}`"
-        />
-        <template v-else-if="edge.kind === 'railing'">
-          <line
-            :x1="edge.from.x"
-            :y1="edge.from.y"
-            :x2="edge.to.x"
-            :y2="edge.to.y"
-            stroke="var(--ui-text-muted)"
-            stroke-width="8"
-          />
-          <line
-            :x1="edge.from.x"
-            :y1="edge.from.y"
-            :x2="edge.to.x"
-            :y2="edge.to.y"
-            stroke="var(--ui-bg)"
-            stroke-width="3"
-            stroke-dasharray="3 22"
-          />
-        </template>
-        <line
-          v-else
-          :x1="edge.from.x"
-          :y1="edge.from.y"
-          :x2="edge.to.x"
-          :y2="edge.to.y"
-          stroke="var(--ui-border-accented)"
-          stroke-width="3"
-          stroke-dasharray="10 10"
-        />
-        <template
-          v-for="opening in edge.openings"
-          :key="opening.id"
-        >
-          <line
-            :x1="opening.start.x"
-            :y1="opening.start.y"
-            :x2="opening.end.x"
-            :y2="opening.end.y"
-            stroke="var(--ui-bg)"
-            :stroke-width="WALL_THICKNESS_CM + 3"
-          />
-          <template v-if="opening.kind === 'window'">
-            <line
-              :x1="opening.start.x"
-              :y1="opening.start.y"
-              :x2="opening.end.x"
-              :y2="opening.end.y"
-              stroke="color-mix(in oklab, var(--ui-info) 35%, var(--ui-bg))"
-              stroke-width="16"
-            />
-            <line
-              :x1="opening.start.x"
-              :y1="opening.start.y"
-              :x2="opening.end.x"
-              :y2="opening.end.y"
-              stroke="var(--ui-info)"
-              stroke-width="3"
-            />
-          </template>
-          <path
-            v-else
-            :d="`M${opening.hinge.x} ${opening.hinge.y} L${opening.swing.x} ${opening.swing.y}`"
-            stroke="var(--ui-text-toned)"
-            stroke-width="5"
-          />
-        </template>
       </g>
 
       <!-- The real dining tables (amber: each has a QR), their chairs from their seats. -->
@@ -2510,48 +2349,63 @@ const sizeBadge = computed(() => {
           vector-effect="non-scaling-stroke"
           pointer-events="none"
         />
+        <!-- A side to drag sideways, double-click for a corner (D278): wide and invisible. -->
+        <line
+          v-for="side in sides"
+          :key="`side-${side.index}`"
+          :x1="side.from.x"
+          :y1="side.from.y"
+          :x2="side.to.x"
+          :y2="side.to.y"
+          stroke="transparent"
+          :stroke-width="Math.max(40, perPixel * 16)"
+          data-kind="edge"
+          :data-id="side.index"
+          :data-testid="`plan-edge-${side.index}`"
+          class="cursor-move"
+        />
         <g
-          v-for="edge in edges"
-          :key="`label-${edge.index}`"
+          v-for="side in sides"
+          :key="`label-${side.index}`"
           data-kind="edge-length"
-          :data-id="edge.index"
+          :data-id="side.index"
           class="cursor-text"
         >
           <title>Click to type the length</title>
           <rect
-            :x="edge.label.x - chipSize(metres(edge.length)).width / 2"
-            :y="edge.label.y - chipSize(metres(edge.length)).height / 2"
-            :width="chipSize(metres(edge.length)).width"
-            :height="chipSize(metres(edge.length)).height"
+            :x="side.label.x - chipSize(metres(side.length)).width / 2"
+            :y="side.label.y - chipSize(metres(side.length)).height / 2"
+            :width="chipSize(metres(side.length)).width"
+            :height="chipSize(metres(side.length)).height"
             :rx="4 * perPixel"
             fill="var(--ui-bg)"
             stroke="var(--ui-border-accented)"
             vector-effect="non-scaling-stroke"
           />
           <text
-            :x="edge.label.x"
-            :y="edge.label.y"
+            :x="side.label.x"
+            :y="side.label.y"
             text-anchor="middle"
             dominant-baseline="central"
             :font-size="chipSize('').font"
             font-weight="600"
             fill="var(--ui-text-highlighted)"
-            :data-testid="`plan-edge-length-${edge.index}`"
-          >{{ metres(edge.length) }}</text>
+            :data-testid="`plan-edge-length-${side.index}`"
+          >{{ metres(side.length) }}</text>
         </g>
         <circle
-          v-for="edge in edges"
-          :key="`mid-${edge.index}`"
-          :cx="edge.middle.x"
-          :cy="edge.middle.y"
+          v-for="side in sides"
+          :key="`mid-${side.index}`"
+          :cx="side.middle.x"
+          :cy="side.middle.y"
           :r="7 * perPixel"
           fill="var(--ui-bg)"
           stroke="var(--ui-primary)"
           stroke-width="2"
           vector-effect="non-scaling-stroke"
           data-kind="midpoint"
-          :data-id="edge.index"
-          :data-testid="`plan-midpoint-${edge.index}`"
+          :data-id="side.index"
+          :data-testid="`plan-midpoint-${side.index}`"
           class="cursor-copy"
         >
           <title>Add a corner here</title>

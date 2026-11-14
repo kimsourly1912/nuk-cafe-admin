@@ -1,6 +1,6 @@
 # Studio flexible builder plan
 
-Status: proposal, 2026-11-14. Owner decisions D1–D6 below are open (D7 decided 2026-11-14); each has a recommended default. When accepted, record the architecture change in [decisions](../decisions.md) (it amends D273's floor model) and refresh the index. Bugs and gaps found with this plan: [Studio builder QA](../qa/studio-builder/README.md) (ISS-037 to ISS-046).
+Status: Phases 0, 1 and 2 (grid) built on 2026-11-14 (D281, D282); Phases 3–5 next. Owner decisions D1–D7 below were all decided on 2026-11-14. When accepted, record the architecture change in [decisions](../decisions.md) (it amends D273's floor model) and refresh the index. Bugs and gaps found with this plan: [Studio builder QA](../qa/studio-builder/README.md) (ISS-037 to ISS-046).
 
 ## Goal
 
@@ -111,16 +111,16 @@ Each phase is one PR or a small set, following `AGENTS.md`.
 | 4. Finishes, polygon, height | Wall-side and floor finishes, paint tool, polygon shape, `z` in the inspector | — | Phase 1; D2 |
 | 5. Split view, saved groups | 2D + live 3D, incremental rebuild, save a group as a look | ISS-041 | Phase 1; D4 |
 
-## Owner decisions (open)
+## Owner decisions
 
 | # | Question | Recommendation | Why |
 |---|---|---|---|
-| D1 | How does a new floor start? | Empty, floor below as a guide, "Copy walls from floor below" button | Most flexible; copying stays one click |
-| D2 | Fixed palette or free colours? | Keep the fixed palette; add wall and floor finishes | Consistent 3D; free colours are easy to add later, hard to remove |
-| D3 | Free building for decoration or also structure? | Decoration first (shapes, finishes, saved groups); doors as presets with options | Covers most needs without custom door geometry |
-| D4 | Split view breakpoint | Tailwind `lg` (1024 px) | Tablets in landscape get it; phones keep the toggle |
-| D5 | Maximum zoom | 32 px per cm (3,200 %) | Positions are whole cm; more zoom shows nothing new |
-| D6 | Deleting a wall with doors | Delete its openings too, after a warning | Same as Revit; no orphan doors |
+| D1 | How does a new floor start? | **Decided (owner, 2026-11-14): empty, floor below as a guide, "Copy walls from floor below" button** | As recommended |
+| D2 | Fixed palette or free colours? | **Decided (owner, 2026-11-14): free colours, for everything** (furniture, table looks, walls, floors); recommendation was the fixed palette | Changes the looks contract and 3D materials |
+| D3 | Free building for decoration or also structure? | **Decided (owner, 2026-11-14): also structure** (per-wall thickness and height, door and window geometry); recommendation was decoration first | Larger Phase 3 |
+| D4 | Split view breakpoint | **Decided (owner, 2026-11-14): no split view**; keep the 2D / 3D toggle everywhere | 3D stays mounted (ISS-041) |
+| D5 | Maximum zoom | **Decided (owner, 2026-11-14): keep 25,600 %** (256 px per cm); recommendation was 3,200 % | Grid levels go down to 1 cm |
+| D6 | Deleting a wall with doors | **Decided (owner, 2026-11-14): delete its openings silently**; Undo brings them back; recommendation was a warning | Street door still asks (D7) |
 | D7 | Street door removed by an edit (ISS-038) | **Decided (owner, 2026-11-14): ask first, then turn Explore off** (recommendation was refuse) | Built in Phase 0; moving a floor keeps its refusal |
 
 ## Sources

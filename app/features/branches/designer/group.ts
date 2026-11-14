@@ -1,4 +1,4 @@
-import type { InnerWall, LayoutItem, Point, ShopLayout } from '#shared/contracts/shop-layout'
+import type { Wall, LayoutItem, Point, ShopLayout } from '#shared/contracts/shop-layout'
 import { newLayoutId, normalizeRotation } from './geometry'
 import type { Bounds } from './geometry'
 import type { PlanSelection } from './plan'
@@ -7,7 +7,7 @@ import { moveWalls } from './walls'
 /**
  * Several selected pieces changed together (D278, multi-select): tables, furniture and inside walls
  * of one floor. Each function changes the draft's copy of the layout it is given (inside one
- * `draft.change`, so the whole change is one undo step). Outline edges never join a set.
+ * `draft.change`, so the whole change is one undo step). Floor surfaces never join a set.
  */
 
 const ids = (targets: readonly PlanSelection[], kind: PlanSelection['kind']) => new Set(targets.filter(target => target.kind === kind).map(target => target.id))
@@ -88,7 +88,7 @@ export function duplicateSelected(layout: ShopLayout, floorId: string, targets: 
     copies.push({ kind: 'item', id })
     return { ...structuredClone(item), id, x: item.x + offset.x, y: item.y + offset.y }
   })
-  const wallCopies: InnerWall[] = floor.walls.filter(wall => walls.has(wall.id)).map((wall) => {
+  const wallCopies: Wall[] = floor.walls.filter(wall => walls.has(wall.id)).map((wall) => {
     const id = newLayoutId('wall')
     copies.push({ kind: 'wall', id })
     return { ...copyWall(wall), id, from: { x: wall.from.x + offset.x, y: wall.from.y + offset.y }, to: { x: wall.to.x + offset.x, y: wall.to.y + offset.y } }
@@ -107,7 +107,7 @@ export function duplicateSelected(layout: ShopLayout, floorId: string, targets: 
 export interface PlanClipboard {
   floorId: string
   items: LayoutItem[]
-  walls: InnerWall[]
+  walls: Wall[]
   tableIds: string[]
 }
 
@@ -148,7 +148,7 @@ export function pasteClipboard(layout: ShopLayout, clipboard: PlanClipboard, flo
 }
 
 /** A copy of a wall whose doors and windows get ids of their own (ISS-042), as the panels make them. */
-function copyWall(wall: InnerWall): InnerWall {
+function copyWall(wall: Wall): Wall {
   const copy = structuredClone(wall)
   if (copy.openings) copy.openings = copy.openings.map(opening => ({ ...opening, id: newLayoutId(opening.kind) }))
   return copy

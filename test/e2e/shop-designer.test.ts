@@ -228,7 +228,7 @@ describe('the shop designer on saved layouts', () => {
     expect(await unplaced(page, 'L1').count()).toBe(0)
   })
 
-  it('adds a floor, sets it up from its menu, makes an edge a railing with a gate, draws a wall, and removes the floor', { timeout: 60_000 }, async () => {
+  it('adds a floor, copies the walls from below, makes a wall a railing with a gate, draws a wall, and removes the floor', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page)
     await page.getByTestId('floor-tab-Ground').waitFor()
@@ -241,6 +241,9 @@ describe('the shop designer on saved layouts', () => {
     await floorName.fill('Loft')
     await floorName.press('Enter')
     await expect.poll(() => page.getByTestId('floor-tab-Loft').getAttribute('aria-pressed')).toBe('true')
+    // A new floor starts empty, in Draw outline (owner D1, D282): copy the floor below's to build on.
+    await page.getByTestId('tool-bar').getByRole('button', { name: 'Copy walls from floor below' }).click()
+    await page.getByTestId('tool-bar').waitFor({ state: 'detached' })
     // The floor's settings (9B) are in Properties while nothing is selected (D277): roof.
     const floorSettings = page.getByTestId('floor-settings')
     await floorSettings.getByRole('switch', { name: 'Roof over this floor' }).click()
@@ -290,17 +293,21 @@ describe('the shop designer on saved layouts', () => {
     await plan(page).getByTestId('plan-table-L2').waitFor()
     await plan(page).press('Escape')
 
-    // An edge (3B): a railing, and a gate on it; windows need a wall.
-    await plan(page).getByTestId('plan-edge-0').click({ force: true })
+    // A wall (D282: outer walls are walls like any other), picked in Layers: a railing, and a gate on it; windows need a wall.
+    await showPanel(page, 'Floors')
+    await page.getByRole('button', { name: 'Outer wall 1' }).first().click()
     const panel = page.getByRole('complementary', { name: 'Properties' })
-    await panel.getByText('Back edge').waitFor()
+    await panel.getByTestId('selected-wall').waitFor()
     await panel.getByRole('button', { name: 'Railing' }).click()
     await panel.getByRole('button', { name: 'Gate' }).click()
-    await panel.getByTestId('opening-door').waitFor()
-    expect(await panel.getByRole('button', { name: 'Window' }).isDisabled()).toBe(true)
+    await panel.getByTestId('wall-opening-door').waitFor()
+    // A railing takes no windows: the wall panel offers none.
+    expect(await panel.getByRole('button', { name: 'Window' }).count()).toBe(0)
     await shot(page, 'edge-railing-gate')
 
-    // Draw wall (9A): two clicks make a wall; Enter ends the chain.
+    // Draw wall (9A): two clicks make a wall; Enter ends the chain. Counted after the copied outer walls.
+    const drawnWalls = async () => (await plan(page).locator('[data-testid^="plan-wall-"]').count()) - copiedWalls
+    const copiedWalls = await plan(page).locator('[data-testid^="plan-wall-"]').count()
     await drawWith(page, 'Draw wall')
     await page.getByTestId('tool-bar').getByText('Draw wall').waitFor()
     await clickPlan(page, { x: 300, y: 100 })
@@ -308,26 +315,26 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Enter')
     // Any angle by default; a click on the chain's first point closes the loop and ends it (ISS-018).
     for (const point of [{ x: 500, y: 100 }, { x: 700, y: 175 }, { x: 550, y: 350 }, { x: 500, y: 100 }]) await clickPlan(page, point)
-    await expect.poll(() => plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(4)
+    await expect.poll(drawnWalls).toBe(4)
     await clickPlan(page, { x: 800, y: 400 })
     await clickPlan(page, { x: 800, y: 400 })
-    expect(await plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(4)
+    expect(await drawnWalls()).toBe(4)
     await page.keyboard.press('Control+z')
     await page.keyboard.press('Control+z')
     await page.keyboard.press('Control+z')
     // Escape ends the chain and leaves the tool.
     await page.keyboard.press('Escape')
     await page.getByTestId('tool-bar').waitFor({ state: 'detached' })
-    await expect.poll(() => plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(1)
+    await expect.poll(drawnWalls).toBe(1)
     await save(page)
 
     const saved = await savedLayout(page)
     const loft = saved.floors[2]!
     expect(loft).toMatchObject({ name: 'Loft', hasRoof: false })
     expect(loft.canvasX).toBeGreaterThan(120)
-    expect(loft.outline).toEqual(saved.floors[1]!.outline)
-    expect(loft.edges[0]).toMatchObject({ kind: 'railing', openings: [{ kind: 'door' }] })
-    expect(loft.walls).toEqual([expect.objectContaining({ from: { x: 300, y: 100 }, to: { x: 300, y: 400 } })])
+    expect(loft.slabs.map(slab => slab.outline)).toEqual(saved.floors[1]!.slabs.map(slab => slab.outline))
+    expect(loft.walls[0]).toMatchObject({ kind: 'railing', openings: [{ kind: 'door' }] })
+    expect(loft.walls.at(-1)).toEqual(expect.objectContaining({ from: { x: 300, y: 100 }, to: { x: 300, y: 400 } }))
     expect(saved.placements.find(placement => placement.floorId === loft.id)).toBeTruthy()
 
     // Removing it names the table that goes back to Unplaced (6B).
@@ -336,6 +343,7 @@ describe('the shop designer on saved layouts', () => {
     const dialog = page.getByRole('alertdialog').or(page.getByRole('dialog')).filter({ hasText: 'Remove the Loft floor?' })
     await dialog.getByText('L2 will move to Unplaced tables. Its QR code keeps working.').waitFor()
     await dialog.getByRole('button', { name: 'Remove floor' }).click()
+    await showPanel(page, 'Tables')
     await unplaced(page, 'L2').waitFor()
     await showPanel(page, 'Floors')
     expect(await page.getByTestId('floor-tab-Loft').count()).toBe(0)
@@ -456,8 +464,11 @@ describe('the shop designer on saved layouts', () => {
     await placeTable(page, 'A1')
     await save(page)
     const layout = await savedLayout(page, lab.annexBranchId)
-    expect(layout.floors[0]!.outline).toEqual([{ x: 0, y: 0 }, { x: 620, y: 0 }, { x: 600, y: 400 }, { x: 0, y: 400 }])
-    expect(layout.floors[0]!.edges.every(edge => edge.kind === 'wall')).toBe(true)
+    expect(layout.floors[0]!.slabs.map(slab => slab.outline)).toEqual([[{ x: 0, y: 0 }, { x: 620, y: 0 }, { x: 600, y: 400 }, { x: 0, y: 400 }]])
+    // Its walls stand outside it (D282), and the moved corner took the two walls on it along.
+    expect(layout.floors[0]!.walls).toHaveLength(4)
+    expect(layout.floors[0]!.walls.every(wall => wall.side && !wall.kind)).toBe(true)
+    expect(layout.floors[0]!.walls.filter(wall => [wall.from, wall.to].some(end => end.x === 620 && end.y === 0))).toHaveLength(2)
   })
 
   it('finds a placed table on its floor in 3D, shows its QR code, and goes back to it on the plan', { timeout: 60_000 }, async () => {
@@ -902,7 +913,7 @@ describe('the shop designer on saved layouts', () => {
 
     // A plant against the outside wall is picked, not the wall behind it.
     const ground = (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!
-    const outline = ground.outline
+    const outline = ground.slabs[0]!.outline
     const index = outline.findIndex((point, at) => point.x === outline[(at + 1) % outline.length]!.x && point.x === Math.max(...outline.map(corner => corner.x)))
     const wallX = outline[index]!.x
     const wallY = Math.round((outline[index]!.y + outline[(index + 1) % outline.length]!.y) / 2)
@@ -919,14 +930,14 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => panel.getByLabel('X (cm)', { exact: true }).count()).toBe(0)
     await clickPlan(page, { x: wallX - 15, y: wallY })
     await expect.poll(() => panel.getByLabel('X (cm)', { exact: true }).inputValue()).toBe(String(wallX - 15))
-    expect(await plan(page).getByTestId('plan-edge-selected').count()).toBe(0)
+    expect(await panel.getByTestId('selected-wall').count()).toBe(0)
 
     // Dragged near the wall, the plant snaps flush against its inner face (ISS-034): its right edge
     // (25 cm from its centre) on the wall, no gap.
     await dragPlan(page, { x: wallX - 15, y: wallY }, { x: wallX - 29, y: wallY + 40 })
     await expect.poll(() => panel.getByLabel('X (cm)', { exact: true }).inputValue()).toBe(String(wallX - 25))
-    // The outline's walls are drawn as mitred bands, one shape per wall edge (clean corners).
-    expect(await plan(page).locator('[data-testid^="plan-outline-band-"]').count()).toBeGreaterThan(0)
+    // Walls are drawn as mitred bands, one shape per solid piece (clean corners).
+    expect(await plan(page).locator('[data-testid="plan-band"]').count()).toBeGreaterThan(0)
     await page.getByRole('button', { name: 'Undo' }).click()
   })
 
@@ -935,8 +946,8 @@ describe('the shop designer on saved layouts', () => {
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').waitFor()
     const before = (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!
-    const right = Math.max(...before.outline.map(point => point.x))
-    const top = Math.min(...before.outline.map(point => point.y))
+    const right = Math.max(...before.slabs[0]!.outline.map(point => point.x))
+    const top = Math.min(...before.slabs[0]!.outline.map(point => point.y))
     const groundOf = async () => (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!
     const mode = () => plan(page).getAttribute('data-mode')
 
@@ -949,7 +960,7 @@ describe('the shop designer on saved layouts', () => {
     // The new room reaches past the view: Shift+1 fits the floor again.
     await page.keyboard.press('Shift+1')
     let ground = await groundOf()
-    expect(Math.max(...ground.outline.map(point => point.x))).toBe(right + 200)
+    expect(Math.max(...ground.slabs[0]!.outline.map(point => point.x))).toBe(right + 200)
     // A cut inside the floor would leave a hole: refused, and it says why.
     await page.keyboard.press('r')
     // Cut is the tool bar's choice now; Alt draws from the middle (owner: like Figma).
@@ -976,7 +987,7 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(mode).toBe('select')
     await save(page)
     ground = await groundOf()
-    expect(ground.outline.filter(point => point.x === right + 300)).toHaveLength(2)
+    expect(ground.slabs[0]!.outline.filter(point => point.x === right + 300)).toHaveLength(2)
 
     // Draw wall (W) inside the new room, then make it glass with a gap, and drag its end.
     await page.keyboard.press('w')
@@ -1605,13 +1616,13 @@ describe('the shop designer on saved layouts', () => {
     await shot(page, 'phone-looks-page')
   })
 
-  it('types a length on the plan\'s label; Delete removes an inside wall, and an edge has its menu (D278)', { timeout: 60_000 }, async () => {
+  it('types a length on the plan\'s label; Delete removes a wall, and an outer wall has its menu (D278, D282)', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page)
     await plan(page).getByTestId('plan-table-L1').waitFor()
     const ground = (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!
-    const right = Math.max(...ground.outline.map(point => point.x))
-    const top = Math.min(...ground.outline.map(point => point.y))
+    const right = Math.max(...ground.slabs[0]!.outline.map(point => point.x))
+    const top = Math.min(...ground.slabs[0]!.outline.map(point => point.y))
 
     // An inside wall goes with Delete (drawn just outside the building, where nothing covers it).
     const walls = () => plan(page).locator('[data-testid^="plan-wall-"]').count()
@@ -1645,10 +1656,13 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => label.textContent()).toBe(`${length + 100} cm`)
     await page.getByTestId('tool-bar').getByRole('button', { name: 'Done' }).click()
 
-    // An edge's menu: its type and a gate, a quarter of the way along it.
-    const edge = await plan(page).getByTestId('plan-edge-2').evaluate(line => ['x1', 'y1', 'x2', 'y2'].map(name => Number(line.getAttribute(name))))
-    const quarter = { x: edge[0]! + (edge[2]! - edge[0]!) / 4, y: edge[1]! + (edge[3]! - edge[1]!) / 4 }
-    const rightClickEdge = async () => {
+    // An outer wall's menu: its type and a gate, a quarter of the way along the surface's third side.
+    await save(page)
+    const sides = (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!.slabs[0]!.outline
+    const [a, b] = [sides[2]!, sides[3]!]
+    const quarter = { x: a.x + (b.x - a.x) / 4, y: a.y + (b.y - a.y) / 4 }
+    const along = (wall: { from: { x: number, y: number }, to: { x: number, y: number } }) => [wall.from, wall.to].every(end => (end.x === a.x && end.y === a.y) || (end.x === b.x && end.y === b.y))
+    const rightClickWall = async () => {
       const at = await plan(page).evaluate((svg, target) => {
         const screen = new DOMPoint(target.x, target.y).matrixTransform((svg as SVGSVGElement).getScreenCTM()!)
         return { x: screen.x, y: screen.y }
@@ -1657,29 +1671,33 @@ describe('the shop designer on saved layouts', () => {
       return page.getByRole('menu')
     }
     const properties = page.getByRole('complementary', { name: 'Properties' })
-    let menu = await rightClickEdge()
+    let menu = await rightClickWall()
     await menu.getByRole('menuitemcheckbox', { name: 'Railing' }).click()
     await expect.poll(() => properties.getByRole('button', { name: 'Railing', exact: true }).getAttribute('aria-pressed')).toBe('true')
-    menu = await rightClickEdge()
-    await menu.getByRole('menuitem', { name: 'Remove railing' }).waitFor()
+    menu = await rightClickWall()
+    await menu.getByRole('menuitem', { name: 'Delete wall' }).waitFor()
     expect(await menu.getByRole('menuitem', { name: 'Add a window' }).count()).toBe(0)
-    const gates = () => properties.getByTestId('opening-door').count()
+    const gates = () => properties.getByTestId('wall-opening-door').count()
     const gatesBefore = await gates()
     await shot(page, 'edge-menu')
     await menu.getByRole('menuitem', { name: 'Add a gate' }).click()
     await expect.poll(gates).toBe(gatesBefore + 1)
 
-    // Delete on an edge makes it Open (its gate goes with it); Undo puts the railing back.
+    // Delete removes the railing for real (ISS-046, owner D6: its gate goes with it); Undo puts it back.
+    const wallCount = async () => (await plan(page).locator('[data-testid^="plan-wall-"]').count())
+    const withRailing = await wallCount()
     await page.keyboard.press('Delete')
-    await expect.poll(() => properties.getByRole('button', { name: 'Open', exact: true }).getAttribute('aria-pressed')).toBe('true')
+    await expect.poll(wallCount).toBe(withRailing - 1)
     await page.getByRole('button', { name: 'Undo' }).click()
-    await expect.poll(gates).toBe(gatesBefore + 1)
+    await expect.poll(wallCount).toBe(withRailing)
 
     await save(page)
     const saved = (await savedLayout(page)).floors.find(floor => floor.id === 'ground')!
-    expect(Math.round(Math.hypot(saved.outline[2]!.x - saved.outline[1]!.x, saved.outline[2]!.y - saved.outline[1]!.y))).toBe(length + 100)
-    expect(saved.edges[2]!.kind).toBe('railing')
-    expect(saved.edges[2]!.openings.filter(opening => opening.kind === 'door')).toHaveLength(gatesBefore + 1)
+    const outline = saved.slabs[0]!.outline
+    expect(Math.round(Math.hypot(outline[2]!.x - outline[1]!.x, outline[2]!.y - outline[1]!.y))).toBe(length + 100)
+    const railing = saved.walls.find(along)!
+    expect(railing.kind).toBe('railing')
+    expect((railing.openings ?? []).filter(opening => opening.kind === 'door')).toHaveLength(gatesBefore + 1)
     expect(saved.walls).toHaveLength(ground.walls.length)
   })
 
@@ -1923,7 +1941,7 @@ describe('the shop designer on saved layouts', () => {
     await openExplore()
     expect(await toggle.isDisabled()).toBe(true)
     await dialog.getByRole('combobox', { name: 'Street door' }).click()
-    await page.getByRole('option', { name: 'Front edge · Door 1' }).click()
+    await page.getByRole('option', { name: 'Front wall · Door 1' }).click()
     await toggle.click()
     await shot(page, 'explore-settings-phone')
     await dialog.getByRole('button', { name: 'Done' }).click()

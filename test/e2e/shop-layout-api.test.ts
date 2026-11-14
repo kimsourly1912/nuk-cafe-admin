@@ -1,6 +1,6 @@
 import { url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
-import type { BranchLayout, CustomItemLook, CustomLook, SaveLayoutInput } from '#shared/contracts/shop-layout'
+import type { BranchLayout, CustomItemLook, CustomLook, FloorV1, Placement } from '#shared/contracts/shop-layout'
 import { LAYOUT_MAX_BODY_BYTES } from '#shared/contracts/shop-layout'
 import { jsonBytes, largestLayout } from '../../server/tests/support/layouts'
 import { setupE2e } from './support/mock-api'
@@ -27,7 +27,8 @@ const read = (path: string, cookie: string) => fetch(path, { headers: { cookie }
 const put = (path: string, cookie: string, body: unknown) =>
   fetch(path, { method: 'PUT', headers: { 'content-type': 'application/json', origin, cookie }, body: typeof body === 'string' ? body : JSON.stringify(body) })
 
-const room = (id: string): SaveLayoutInput['layout']['floors'][number] => ({
+/** Sent as a tab opened before contract v2 would (an outline with edges): the route upgrades it (D282). */
+const room = (id: string): FloorV1 => ({
   id,
   name: 'Ground',
   height: 300,
@@ -48,7 +49,7 @@ describe('the shop layout over HTTP', () => {
     const b1 = layout.tables.find(table => table.label === 'B1')!
     expect(b1.seats).toBe(2)
 
-    const body: SaveLayoutInput = { version: layout.version, layout: { floors: [room('ground')], placements: [{ tableId: b1.id, floorId: 'ground', x: 200, y: 200, rotation: 0, width: 80, depth: 80, lookId: 'round-cafe' }] } }
+    const body: { version: number, layout: { floors: FloorV1[], placements: Placement[] } } = { version: layout.version, layout: { floors: [room('ground')], placements: [{ tableId: b1.id, floorId: 'ground', x: 200, y: 200, rotation: 0, width: 80, depth: 80, lookId: 'round-cafe' }] } }
     const saved = await put(path, owner, body)
     expect(saved.status).toBe(200)
     expect(await saved.json()).toMatchObject({ version: layout.version + 1, placements: [{ tableId: b1.id, x: 200 }] })

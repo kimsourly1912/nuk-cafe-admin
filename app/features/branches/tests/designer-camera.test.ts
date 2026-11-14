@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitBounds, followCanvas, majorGridOpacity, minorGridOpacity, panBy, parseZoomPercent, planToScreen, screenToPlan, visibleRect, wheelZoomFactor, ZOOM_LIMITS, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, gridLevels, gridLines, panBy, parseZoomPercent, planToScreen, screenToPlan, visibleRect, wheelZoomFactor, ZOOM_LIMITS, zoomAt } from '../designer/camera'
 import type { Camera } from '../designer/camera'
 
 const camera: Camera = { x: 100, y: 50, scale: 1.96 }
@@ -79,18 +79,39 @@ describe('the plan camera (ISS-028)', () => {
     for (const text of ['', 'abc', '0', '-50', '1e3', '15a', '%']) expect(parseZoomPercent(text)).toBeNull()
   })
 
-  it('fades the 10 cm grid out when its lines get close on screen (ISS-031)', () => {
-    expect(minorGridOpacity(1)).toBe(1)
-    expect(minorGridOpacity(0.8)).toBe(1)
-    expect(minorGridOpacity(0.6)).toBeCloseTo(0.5)
-    expect(minorGridOpacity(0.4)).toBe(0)
-    expect(minorGridOpacity(0.1)).toBe(0)
+  it('zooms from 2 % to 25,600 % (ISS-005)', () => {
+    expect(ZOOM_LIMITS).toEqual({ min: 0.02, max: 256 })
   })
 
-  it('zooms from 2 % to 25,600 % (ISS-005), and the metre lines fade far out', () => {
-    expect(ZOOM_LIMITS).toEqual({ min: 0.02, max: 256 })
-    expect(majorGridOpacity(0.08)).toBe(1)
-    expect(majorGridOpacity(0.06)).toBeCloseTo(0.5)
-    expect(majorGridOpacity(0.02)).toBe(0)
+  it('picks finer grid lines as you zoom in, down to 1 cm (ISS-040)', () => {
+    // 100 %: 10 cm lines are 10 px apart (fading in), metres strong.
+    expect(gridLevels(1)).toEqual({ minor: 10, minorOpacity: 0.25, major: 100 })
+    expect(gridLevels(1.6)).toMatchObject({ minor: 10, minorOpacity: 1 })
+    // Zoomed out: metres fine, 10 m strong.
+    expect(gridLevels(0.1)).toMatchObject({ minor: 100, major: 1_000 })
+    // 2 %: 10 m lines 20 px apart.
+    expect(gridLevels(0.02)).toMatchObject({ minor: 1_000, major: 10_000, minorOpacity: 1 })
+    // 1,600 % and the maximum: centimetres.
+    expect(gridLevels(16)).toEqual({ minor: 1, minorOpacity: 1, major: 10 })
+    expect(gridLevels(256)).toMatchObject({ minor: 1, major: 10 })
+  })
+
+  it('puts every line on a whole screen pixel\'s middle, from the frame\'s origin', () => {
+    const lines = gridLines({ x: 3.3, y: -0.5, scale: 16 }, { width: 160, height: 64 })
+    // 1 cm lines from x = 4 cm (11 px after rounding) on, leaving out the 10 cm one under the strong line.
+    expect(lines.minorX.slice(0, 3)).toEqual([11.5, 27.5, 43.5])
+    expect(lines.majorX).toEqual([107.5])
+    expect([...lines.minorX, ...lines.majorX, ...lines.minorY, ...lines.majorY].every(px => px % 1 === 0.5)).toBe(true)
+    expect(lines.minorX).not.toContain(107.5)
+    expect(lines.majorY).toEqual([8.5])
+    // A frame moved by 5 cm moves its grid with it.
+    expect(gridLines({ x: 0, y: 0, scale: 16 }, { width: 160, height: 64 }, { x: 5, y: 0 }).majorX).toEqual([80.5])
+  })
+
+  it('never draws more lines than the canvas has room for at 8 px apart', () => {
+    for (const scale of [0.02, 0.05, 0.3, 1, 7.9, 64, 256]) {
+      const lines = gridLines({ x: 0, y: 0, scale }, { width: 2000, height: 1000 })
+      expect(lines.minorX.length + lines.majorX.length, String(scale)).toBeLessThanOrEqual(2000 / 8 + 2)
+    }
   })
 })

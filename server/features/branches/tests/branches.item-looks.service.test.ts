@@ -67,8 +67,7 @@ const floor = (id: string, items: LayoutItem[], name = id === 'ground' ? 'Ground
   name,
   height: 300,
   hasRoof: true,
-  outline: [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 500 }, { x: 0, y: 500 }],
-  edges: [{ kind: 'wall', openings: [] }, { kind: 'wall', openings: [] }, { kind: 'wall', openings: [] }, { kind: 'wall', openings: [] }],
+  slabs: [{ id: `${id}-slab`, outline: [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 500 }, { x: 0, y: 500 }] }],
   walls: [],
   items,
 })
@@ -245,7 +244,7 @@ describe('item looks on the plan', () => {
     const created = await createItemLook(db, actor, chair('Walnut chair'))
     await furnish([floor('ground', [])])
     const write = (kind: 'cafe-chair' | 'bar-stool', pieces: number) =>
-      db.batch(replaceLayoutStatements(db, TEST_TENANT, branch, [{ id: 'ground', position: 0, name: 'Ground', heightCm: 300, hasRoof: true, geometry: { outline: [], edges: [], walls: [], items: [] } }], [], [{ floorId: 'ground', lookId: created.id, kind, pieces }]) as Batch)
+      db.batch(replaceLayoutStatements(db, TEST_TENANT, branch, [{ id: 'ground', position: 0, name: 'Ground', heightCm: 300, hasRoof: true, geometry: { slabs: [], walls: [], items: [] } }], [], [{ floorId: 'ground', lookId: created.id, kind, pieces }]) as Batch)
     await expect(write('bar-stool', 1)).rejects.toThrow(/foreign key/i)
     await expect(write('cafe-chair', 0)).rejects.toThrow(/check/i)
     await expect(write('cafe-chair', 201)).rejects.toThrow(/check/i)
@@ -315,7 +314,7 @@ describe('tenants', () => {
     await expectApiError(() => furnish([floor('ground', [piece(theirLook)])]), 409, 'LAYOUT_LOOK_UNAVAILABLE', lookField(0, 0))
     await furnish([floor('ground', [])])
     const row = { floorId: 'ground', lookId: theirLook, kind: 'cafe-chair' as const, pieces: 1 }
-    const floorRow = { id: 'ground', position: 0, name: 'Ground', heightCm: 300, hasRoof: true, geometry: { outline: [], edges: [], walls: [], items: [] } }
+    const floorRow = { id: 'ground', position: 0, name: 'Ground', heightCm: 300, hasRoof: true, geometry: { slabs: [], walls: [], items: [] } }
     await expect(db.batch(replaceLayoutStatements(db, TEST_TENANT, branch, [floorRow], [], [row]) as Batch)).rejects.toThrow(/foreign key/i)
   })
 

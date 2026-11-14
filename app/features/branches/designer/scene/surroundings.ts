@@ -47,6 +47,14 @@ const AWNINGS: LaneSurface[] = ['awning-red', 'awning-green', 'awning-blue']
 /** Walking pace, metres a second. */
 const WALK_SPEED = 0.75
 
+/**
+ * What the street would be built from (ISS-041): equal keys build the same street, so the viewer
+ * builds it again only when this changes, not on every edit inside the café.
+ */
+export function surroundingsKey(layout: Pick<ShopLayout, 'floors' | 'scene'>, preset: ScenePreset, seed: string): string {
+  return preset === 'neighborhood-lane' ? JSON.stringify(planLane(layout, seed)) : preset
+}
+
 export function buildSurroundings(materials: MaterialLibrary, layout: Pick<ShopLayout, 'floors' | 'scene'>, preset: ScenePreset, seed: string): BuiltSurroundings | null {
   if (preset !== 'neighborhood-lane') return null
   const plan = planLane(layout, seed)

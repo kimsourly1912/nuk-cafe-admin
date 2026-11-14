@@ -1,4 +1,4 @@
-import type { Floor, LayoutItem, Placement, SaveLayoutInput } from '#shared/contracts/shop-layout'
+import type { Floor, LayoutItem, Placement, SaveLayoutInput, Wall } from '#shared/contracts/shop-layout'
 import { LAYOUT_MAX_CORNERS, LAYOUT_MAX_FLOOR_BYTES, LAYOUT_MAX_FLOORS, LAYOUT_MAX_ITEMS_PER_FLOOR, LAYOUT_MAX_WALLS_PER_FLOOR } from '#shared/contracts/shop-layout'
 
 /**
@@ -25,8 +25,9 @@ function item(floorId: string, n: number, lookIds: readonly string[]): LayoutIte
 }
 
 /**
- * A 64-corner floor (a circle of 40 m) with doors and windows on every edge, inside walls and
- * furniture; with `lookIds` (service-counter looks), the pieces take them in turn (step 3d).
+ * A 64-corner floor (a circle of 40 m) with an outer wall on every side holding doors and windows,
+ * inside walls up to the limit (D282: one wall list) and furniture; with `lookIds`
+ * (service-counter looks), the pieces take them in turn (step 3d).
  */
 export function largestFloor(id: string, lookIds: readonly string[] = []): Floor {
   const outline = Array.from({ length: LAYOUT_MAX_CORNERS }, (_, i) => {
@@ -34,17 +35,23 @@ export function largestFloor(id: string, lookIds: readonly string[] = []): Floor
     // `+ 0`: JSON has no negative zero, so a saved -0 reads back as 0.
     return { x: Math.round(4000 * Math.cos(angle)) + 0, y: Math.round(4000 * Math.sin(angle)) + 0 }
   })
+  const outer: Wall[] = outline.map((from, edge) => ({
+    id: longId(`${id}e`, edge),
+    from,
+    to: outline[(edge + 1) % outline.length]!,
+    openings: [0, 1, 2].map(n => ({ id: longId(`${id}o${edge}`, n), kind: n === 1 ? 'window' as const : 'door' as const, offset: n * 125, width: 120 })),
+    side: 'left',
+    thickness: 20,
+    height: 800,
+  }))
+  const inside: Wall[] = Array.from({ length: LAYOUT_MAX_WALLS_PER_FLOOR - outer.length }, (_, n) => ({ id: longId(`${id}w`, n), from: { x: -2000, y: n * 10 }, to: { x: 2000, y: n * 10 } }))
   const floor: Floor = {
     id: longId(id, 0),
     name: 'F'.repeat(30),
     height: 800,
     hasRoof: true,
-    outline,
-    edges: outline.map((_, edge) => ({
-      kind: 'wall' as const,
-      openings: [0, 1, 2].map(n => ({ id: longId(`${id}o${edge}`, n), kind: n === 1 ? 'window' as const : 'door' as const, offset: n * 125, width: 120 })),
-    })),
-    walls: Array.from({ length: LAYOUT_MAX_WALLS_PER_FLOOR }, (_, n) => ({ id: longId(`${id}w`, n), from: { x: -2000, y: n * 10 }, to: { x: 2000, y: n * 10 } })),
+    slabs: [{ id: longId(`${id}s`, 0), outline }],
+    walls: [...outer, ...inside],
     items: Array.from({ length: LAYOUT_MAX_ITEMS_PER_FLOOR }, (_, n) => item(id, n, lookIds)),
   }
   while (jsonBytes(floor) > LAYOUT_MAX_FLOOR_BYTES) floor.items.pop()

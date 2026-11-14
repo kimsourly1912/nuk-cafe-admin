@@ -1,6 +1,6 @@
 import type { Point, ShopLayout } from '#shared/contracts/shop-layout'
-import { streetDoor, edgeLength } from '#shared/contracts/shop-layout'
-import { findOpening, outwardNormal, pointOnEdge } from './geometry'
+import { edgeLength, streetDoor, wallKind, wallLength } from '#shared/contracts/shop-layout'
+import { findOpening, mainSlab, outwardNormal, pointAlongWall, pointOnEdge, wallOutward } from './geometry'
 
 /**
  * Where the surroundings go (step 3h, D274, docs/plans/shop-designer-scenes.md): a pure function of
@@ -117,29 +117,31 @@ export function seededRandom(seed: string): () => number {
 }
 
 /**
- * The café's front: the ground floor's first door, or, without one, its longest wall (any edge if
- * it has no wall). Null when the layout has no drawn floor.
+ * The café's front: the ground floor's street door or first door, or, without one, its longest
+ * outer wall (D282: a wall beside its line), any wall, or its largest surface's longest side. Null
+ * when the layout has no floor surface.
  */
 export function frontFrame(layout: Pick<ShopLayout, 'floors' | 'scene'>): FrontFrame | null {
-  const ground = layout.floors.find(floor => floor.outline.length >= 3)
+  const ground = layout.floors.find(floor => floor.slabs.length > 0)
   if (!ground) return null
   const door = (ground === layout.floors[0] ? streetDoor(layout.floors, layout.scene?.entrance) : undefined)
-    ?? findOpening(ground.edges, 'door')
-  let index: number
-  let along: number
-  if (door) {
-    index = door.index
-    along = door.opening.offset + door.opening.width / 2
+    ?? findOpening(ground.walls, 'door')
+  let origin: Point
+  let out: Point
+  const solid = ground.walls.filter(wall => wallKind(wall) === 'wall' && wallLength(wall) > 0)
+  const outer = solid.filter(wall => wall.side)
+  const longest = (outer.length ? outer : solid).reduce<typeof solid[number] | undefined>((best, wall) => (!best || wallLength(wall) > wallLength(best) ? wall : best), undefined)
+  if (door || longest) {
+    const wall = door?.wall ?? longest!
+    origin = pointAlongWall(wall, door ? door.opening.offset + door.opening.width / 2 : wallLength(wall) / 2)
+    out = wallOutward(wall, ground.slabs)
   }
   else {
-    const lengths = ground.outline.map((_, edge) => ({ edge, length: edgeLength(ground.outline, edge), wall: ground.edges[edge]?.kind === 'wall' }))
-    const walls = lengths.filter(entry => entry.wall)
-    const longest = (walls.length ? walls : lengths).reduce((best, entry) => (entry.length > best.length ? entry : best))
-    index = longest.edge
-    along = longest.length / 2
+    const outline = mainSlab(ground)!.outline
+    const edge = outline.map((_, index) => index).reduce((best, index) => (edgeLength(outline, index) > edgeLength(outline, best) ? index : best))
+    origin = pointOnEdge(outline, edge, edgeLength(outline, edge) / 2)
+    out = outwardNormal(outline, edge)
   }
-  const origin = pointOnEdge(ground.outline, index, along)
-  const out = outwardNormal(ground.outline, index)
   const angle = (Math.atan2(-out.x, out.y) * 180) / Math.PI
   return { origin, out, right: { x: out.y, y: -out.x }, angle, from: door ? 'door' : 'longest-wall' }
 }
@@ -167,14 +169,14 @@ export function planLane(layout: Pick<ShopLayout, 'floors' | 'scene'>, seed: str
   if (!frame) return null
   const random = seededRandom(`lane:${seed}`)
   const between = (min: number, max: number) => Math.round(min + random() * (max - min))
-  const points = layout.floors.filter(floor => floor.outline.length >= 3).flatMap(floor => floor.outline).map(point => toFrame(frame, point))
+  const points = layout.floors.flatMap(floor => floor.slabs.flatMap(slab => slab.outline)).map(point => toFrame(frame, point))
   const building: Span = {
     u0: Math.min(...points.map(point => point.u)),
     u1: Math.max(...points.map(point => point.u)),
     n0: Math.min(...points.map(point => point.n)),
     n1: Math.max(...points.map(point => point.n)),
   }
-  const floorCount = layout.floors.filter(floor => floor.outline.length >= 3).length
+  const floorCount = layout.floors.filter(floor => floor.slabs.length > 0).length
 
   // Shophouses: their fronts in line with the café's, as deep as it, one or two a side.
   const neighbours: Neighbour[] = []

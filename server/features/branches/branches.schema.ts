@@ -144,9 +144,10 @@ export const branchLayouts = sqliteTable('branch_layouts', {
 ])
 
 /**
- * A floor of the layout, bottom first (`position` 0 is the ground floor). Its drawing (outline,
- * edges with doors and windows, inside walls, furniture) is one JSON value, checked by the shared
- * `floorSchema` and at most `LAYOUT_MAX_FLOOR_BYTES`. Its id is the editor's, unique in its layout
+ * A floor of the layout, bottom first (`position` 0 is the ground floor). Its drawing (floor
+ * surfaces, walls with doors and windows, furniture) is one JSON value, checked by the shared
+ * `floorSchema` and at most `LAYOUT_MAX_FLOOR_BYTES`. Rows saved before contract v2 (D282) hold an
+ * outline and its edges instead; the service upgrades them as it reads them (`upgradeFloor`). Its id is the editor's, unique in its layout
  * only, so the key names the branch. Replaced whole on every save.
  */
 export const branchLayoutFloors = sqliteTable('branch_layout_floors', {

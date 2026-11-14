@@ -122,22 +122,60 @@ export function parseZoomPercent(text: string): number | null {
   return Number.isFinite(percent) && percent > 0 ? percent : null
 }
 
-/** The drawn grid (ISS-031), apart from the snap step: a fine line every 10 cm, a strong one every metre. */
-export const GRID_MINOR_CM = 10
-export const GRID_MAJOR_CM = 100
+/**
+ * The drawn grid (ISS-031, ISS-040), apart from the snap step: levels of 1 cm, 10 cm, 1 m, 10 m and
+ * 100 m. The fine lines are the smallest level at least 8 px apart on screen, fading in until they
+ * are 16 px apart; the strong lines are ten times that. So zooming in always brings finer lines,
+ * as in Figma, down to 1 cm (positions are whole centimetres).
+ */
+export const GRID_LEVELS_CM = [1, 10, 100, 1_000, 10_000] as const
+const GRID_MIN_GAP_PX = 8
+const GRID_FULL_GAP_PX = 16
+
+export interface GridLevels {
+  /** The fine lines' spacing in cm, and how strongly they show (0 to 1). */
+  minor: number
+  minorOpacity: number
+  /** The strong lines' spacing in cm. */
+  major: number
+}
+
+export function gridLevels(scale: number): GridLevels {
+  const minor = GRID_LEVELS_CM.find(level => level * scale >= GRID_MIN_GAP_PX) ?? GRID_LEVELS_CM.at(-1)!
+  const gap = minor * scale
+  return { minor, minorOpacity: Math.min(1, Math.max(0, (gap - GRID_MIN_GAP_PX) / (GRID_FULL_GAP_PX - GRID_MIN_GAP_PX))), major: minor * 10 }
+}
+
+export interface GridLines extends GridLevels {
+  /** Screen pixels from the canvas's left and top edges, each on a pixel's middle so a 1 px line is sharp. */
+  minorX: number[]
+  minorY: number[]
+  majorX: number[]
+  majorY: number[]
+}
 
 /**
- * How strongly the fine grid lines show at this zoom: fully from 8 px apart on screen, fading out
- * below and gone at 4 px, so zooming out never turns the grid into a grey texture.
+ * Where the grid lines fall on a canvas this size, in screen pixels (ISS-040): drawn outside the
+ * zoom, rounded to whole pixels, so they are sharp at every zoom. `origin` is the plan point the
+ * grid starts from (the floor frame's offset). The fine lines leave out those under a strong one.
  */
-export function minorGridOpacity(scale: number): number {
-  return gridOpacity(GRID_MINOR_CM * scale)
+export function gridLines(camera: Camera, size: ScreenSize, origin: Point = { x: 0, y: 0 }): GridLines {
+  const levels = gridLevels(camera.scale)
+  const axis = (start: number, length: number, from: number, step: number, skip?: number) => {
+    const lines: number[] = []
+    const first = Math.ceil((start - from) / step)
+    const last = Math.floor((start + length / camera.scale - from) / step)
+    for (let index = first; index <= last; index++) {
+      if (skip && index % skip === 0) continue
+      lines.push(Math.round((from + index * step - start) * camera.scale) + 0.5)
+    }
+    return lines
+  }
+  return {
+    ...levels,
+    minorX: levels.minorOpacity > 0 ? axis(camera.x, size.width, origin.x, levels.minor, 10) : [],
+    minorY: levels.minorOpacity > 0 ? axis(camera.y, size.height, origin.y, levels.minor, 10) : [],
+    majorX: axis(camera.x, size.width, origin.x, levels.major),
+    majorY: axis(camera.y, size.height, origin.y, levels.major),
+  }
 }
-
-/** The metre lines fade the same way when zoomed far out (ISS-005: down to 2 %). */
-export function majorGridOpacity(scale: number): number {
-  return gridOpacity(GRID_MAJOR_CM * scale)
-}
-
-/** Full from 8 px apart on screen, gone at 4 px. */
-const gridOpacity = (gap: number) => Math.min(1, Math.max(0, (gap - 4) / 4))
