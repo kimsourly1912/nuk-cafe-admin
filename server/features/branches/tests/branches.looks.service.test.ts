@@ -59,8 +59,7 @@ const floor = (id: string): Floor => ({
   name: 'Ground',
   height: 300,
   hasRoof: true,
-  outline: [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 500 }, { x: 0, y: 500 }],
-  edges: [{ kind: 'wall', openings: [] }, { kind: 'wall', openings: [] }, { kind: 'wall', openings: [] }, { kind: 'wall', openings: [] }],
+  slabs: [{ id: `${id}-slab`, outline: [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 500 }, { x: 0, y: 500 }] }],
   walls: [],
   items: [],
 })

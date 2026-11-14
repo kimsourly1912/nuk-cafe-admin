@@ -19,7 +19,10 @@ import { idSchema as uploadIdSchema } from './common'
 export const LAYOUT_MAX_FLOORS = 10
 export const LAYOUT_MAX_CORNERS = 64
 export const LAYOUT_MAX_ITEMS_PER_FLOOR = 200
-export const LAYOUT_MAX_WALLS_PER_FLOOR = 100
+/** Contract v2 (D282): outer and inside walls are one list, so an upgraded floor keeps its 100 inside walls and up to 64 outer ones. */
+export const LAYOUT_MAX_WALLS_PER_FLOOR = 200
+/** Floor surfaces (slabs) on one floor (D282). */
+export const LAYOUT_MAX_SLABS_PER_FLOOR = 20
 /** No building is larger than this in either direction (100 m). */
 export const LAYOUT_MAX_EXTENT_CM = 10_000
 export const FLOOR_HEIGHT_MIN_CM = 200
@@ -169,14 +172,18 @@ export type TableBase = typeof TABLE_BASES[number]
 export const LOOK_CHAIRS = ['cafe-chair', 'bentwood-chair', 'bar-stool', 'none'] as const
 export type LookChair = typeof LOOK_CHAIRS[number]
 
-export const EDGE_KINDS = ['wall', 'railing', 'open'] as const
-export type EdgeKind = typeof EDGE_KINDS[number]
 /**
- * What an inside wall is (D278): a full wall, a railing (a mezzanine's edge), a half wall (a bar's
- * back, 110 cm) or a glass partition. Left out: a wall, as every inside wall was before.
+ * What a wall is (D278, D282): a full wall, a railing (a mezzanine's or a patio's edge), a half
+ * wall (a bar's back, 110 cm) or a glass partition. Left out: a wall.
  */
-export const INNER_WALL_KINDS = ['wall', 'railing', 'half', 'glass'] as const
-export type InnerWallKind = typeof INNER_WALL_KINDS[number]
+export const WALL_KINDS = ['wall', 'railing', 'half', 'glass'] as const
+export type WallKind = typeof WALL_KINDS[number]
+/** Which side of its line a wall stands (D282), looking from `from` to `to` on the plan. Left out: centred on it. */
+export const WALL_SIDES = ['left', 'right'] as const
+export type WallSide = typeof WALL_SIDES[number]
+export const WALL_THICKNESS_MIN_CM = 2
+export const WALL_THICKNESS_MAX_CM = 100
+export const WALL_HEIGHT_MIN_CM = 20
 export const OPENING_KINDS = ['door', 'window'] as const
 export type OpeningKind = typeof OPENING_KINDS[number]
 
@@ -205,35 +212,51 @@ export const openingSchema = v.strictObject({
 })
 export type Opening = v.InferOutput<typeof openingSchema>
 
-/** Edge `i` runs from corner `i` to corner `i + 1` (the last one back to the first). */
-export const edgeSchema = v.strictObject({
-  kind: v.picklist(EDGE_KINDS),
-  openings: v.pipe(v.array(openingSchema), v.maxLength(20)),
-})
-export type Edge = v.InferOutput<typeof edgeSchema>
+export const OUTLINE_CROSSES = 'The outline crosses itself'
 
 /**
- * A wall inside a floor (a stair kiosk, a kitchen), drawn with Draw wall. `kind` and `openings`
- * (D278) are left out for a plain wall without doors, as saved before: a door's offset runs from
- * `from`. Only a full wall takes windows; a door in a railing is a gate, in a half wall or glass a
- * gap.
+ * A floor surface (D282): one simple polygon, at least 1 m². A floor has 0..n of them; the roof
+ * covers the same ones. Clockwise or not, as drawn.
  */
-export const innerWallSchema = v.strictObject({
+export const slabSchema = v.pipe(
+  v.strictObject({
+    id: idSchema,
+    outline: v.pipe(v.array(pointSchema), v.minLength(3, 'An outline needs 3 corners'), v.maxLength(LAYOUT_MAX_CORNERS)),
+    name: layerNameSchema,
+    hidden: flagSchema,
+    locked: flagSchema,
+  }),
+  v.check(slab => Math.abs(signedArea(slab.outline)) >= 10_000, 'The outline has no area'),
+  v.check(slab => isSimpleOutline(slab.outline), OUTLINE_CROSSES),
+)
+export type Slab = v.InferOutput<typeof slabSchema>
+
+/**
+ * A wall (D278, D282): one straight segment, outer or inside alike. `kind` and `openings` are left
+ * out for a plain wall without doors; a door's offset runs from `from`. Only a full wall takes
+ * windows; a door in a railing is a gate, in a half wall or glass a gap. `side` stands the wall
+ * beside its line instead of on it (an outer wall outside its floor, so the room keeps the size
+ * drawn); `thickness` and `height` replace the kind's own (geometry: `wallThickness`, `wallHeight`).
+ */
+export const wallSchema = v.strictObject({
   id: idSchema,
   from: pointSchema,
   to: pointSchema,
-  kind: v.optional(v.picklist(INNER_WALL_KINDS)),
+  kind: v.optional(v.picklist(WALL_KINDS)),
   openings: v.optional(v.pipe(v.array(openingSchema), v.maxLength(20))),
+  side: v.optional(v.picklist(WALL_SIDES)),
+  thickness: v.optional(sizeSchema(WALL_THICKNESS_MIN_CM, WALL_THICKNESS_MAX_CM)),
+  height: v.optional(sizeSchema(WALL_HEIGHT_MIN_CM, FLOOR_HEIGHT_MAX_CM)),
   name: layerNameSchema,
   hidden: flagSchema,
   locked: flagSchema,
 })
-export type InnerWall = v.InferOutput<typeof innerWallSchema>
+export type Wall = v.InferOutput<typeof wallSchema>
 
-/** An inside wall's kind, a plain wall when left out. */
-export const innerWallKind = (wall: Pick<InnerWall, 'kind'>): InnerWallKind => wall.kind ?? 'wall'
-/** An inside wall's length in centimetres. */
-export const innerWallLength = (wall: Pick<InnerWall, 'from' | 'to'>) => Math.hypot(wall.to.x - wall.from.x, wall.to.y - wall.from.y)
+/** A wall's kind, a plain wall when left out. */
+export const wallKind = (wall: Pick<Wall, 'kind'>): WallKind => wall.kind ?? 'wall'
+/** A wall's length in centimetres. */
+export const wallLength = (wall: Pick<Wall, 'from' | 'to'>) => Math.hypot(wall.to.x - wall.from.x, wall.to.y - wall.from.y)
 
 const finishesSchema = v.pipe(
   v.record(v.pipe(v.string(), v.regex(/^[a-z]{1,20}$/)), finishSchema),
@@ -297,17 +320,15 @@ export const itemSchema = v.pipe(
 )
 export type LayoutItem = v.InferOutput<typeof itemSchema>
 
-export const OUTLINE_CROSSES = 'The outline crosses itself'
-
 export const floorSchema = v.pipe(
   v.strictObject({
     id: idSchema,
     name: v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(FLOOR_NAME_MAX)),
     height: sizeSchema(FLOOR_HEIGHT_MIN_CM, FLOOR_HEIGHT_MAX_CM),
     hasRoof: v.boolean(),
-    outline: v.pipe(v.array(pointSchema), v.minLength(3, 'An outline needs 3 corners'), v.maxLength(LAYOUT_MAX_CORNERS)),
-    edges: v.array(edgeSchema),
-    walls: v.pipe(v.array(innerWallSchema), v.maxLength(LAYOUT_MAX_WALLS_PER_FLOOR)),
+    /** Its floor surfaces (D282): none on an empty floor. */
+    slabs: v.pipe(v.array(slabSchema), v.maxLength(LAYOUT_MAX_SLABS_PER_FLOOR)),
+    walls: v.pipe(v.array(wallSchema), v.maxLength(LAYOUT_MAX_WALLS_PER_FLOOR)),
     items: v.pipe(v.array(itemSchema), v.maxLength(LAYOUT_MAX_ITEMS_PER_FLOOR)),
     /**
      * The floor as a frame on Studio's canvas (ISS-035): where its own (0, 0) sits, in cm. Its
@@ -321,21 +342,13 @@ export const floorSchema = v.pipe(
     hidden: flagSchema,
     locked: flagSchema,
   }),
-  // Valibot runs every check of a pipe, even after one failed: a check that reads both lists runs
-  // only when they match, so a malformed floor is a 400, never a thrown error.
-  v.check(floor => floor.edges.length === floor.outline.length, 'Every outline edge needs its kind'),
-  v.check(floor => floor.edges.length !== floor.outline.length || floor.edges.every((edge, index) => openingsFit(edge, edgeLength(floor.outline, index))), 'A door or window does not fit its edge'),
-  v.check(floor => floor.edges.every(edge => edge.kind !== 'open' || edge.openings.length === 0), 'An open edge has no doors or windows'),
-  v.check(floor => floor.edges.every(edge => edge.kind !== 'railing' || edge.openings.every(opening => opening.kind === 'door')), 'A window needs a wall'),
-  v.check(floor => floor.walls.every(wall => openingsFit({ openings: wall.openings ?? [] }, innerWallLength(wall))), 'A door or window does not fit its wall'),
-  v.check(floor => floor.walls.every(wall => innerWallKind(wall) === 'wall' || (wall.openings ?? []).every(opening => opening.kind === 'door')), 'A window needs a full wall'),
-  v.check(floor => Math.abs(signedArea(floor.outline)) >= 10_000, 'The outline has no area'),
-  v.check(floor => isSimpleOutline(floor.outline), OUTLINE_CROSSES),
+  v.check(floor => floor.walls.every(wall => openingsFit({ openings: wall.openings ?? [] }, wallLength(wall))), 'A door or window does not fit its wall'),
+  v.check(floor => floor.walls.every(wall => wallKind(wall) === 'wall' || (wall.openings ?? []).every(opening => opening.kind === 'door')), 'A window needs a full wall'),
   v.check(floor => jsonBytes(floor) <= LAYOUT_MAX_FLOOR_BYTES, 'This floor holds too much: move some furniture to another floor'),
 )
 export type Floor = v.InferOutput<typeof floorSchema>
 /** What a floor stores as its drawing: everything but its id, name, height, roof and Studio frame. */
-export type FloorGeometry = Pick<Floor, 'outline' | 'edges' | 'walls' | 'items'>
+export type FloorGeometry = Pick<Floor, 'slabs' | 'walls' | 'items'>
 
 /** The built-in table looks (D273); the app's catalog describes each. */
 export const BUILT_IN_LOOK_IDS = ['round-cafe', 'square-bistro', 'oak-rectangle', 'communal', 'green-booth'] as const
@@ -401,13 +414,13 @@ export type LayoutScene = v.InferOutput<typeof layoutSceneSchema>
 /** A branch that never chose one. */
 export const NO_SCENE: LayoutScene = { preset: 'none' }
 
-/** The uniquely identified door on the first floor, with its edge for the street frame. */
-export function streetDoor(floors: readonly Pick<Floor, 'edges'>[], entrance: string | null | undefined): { index: number, opening: Opening } | undefined {
+/** The uniquely identified door on the ground floor's walls, with its wall for the street frame. */
+export function streetDoor(floors: readonly Pick<Floor, 'walls'>[], entrance: string | null | undefined): { wall: Wall, opening: Opening } | undefined {
   const ground = floors[0]
   if (!ground || entrance == null) return
-  const matches = ground.edges.flatMap((edge, index) => edge.openings
+  const matches = ground.walls.flatMap(wall => (wall.openings ?? [])
     .filter(opening => opening.kind === 'door' && opening.id === entrance)
-    .map(opening => ({ index, opening })))
+    .map(opening => ({ wall, opening })))
   return matches.length === 1 ? matches[0] : undefined
 }
 
@@ -426,9 +439,9 @@ export const layoutSchema = v.pipe(
   v.check(layout => unique(layout.floors.map(floor => floor.id)), 'Floor ids repeat'),
   v.check(layout => unique(layout.placements.map(placement => placement.tableId)), 'A table is placed twice'),
   v.check(layout => layout.placements.every(placement => layout.floors.some(floor => floor.id === placement.floorId)), 'A table is on a floor that does not exist'),
-  v.check(layout => unique(layout.floors.flatMap(floor => [...floor.items.map(item => item.id), ...floor.walls.map(wall => wall.id)])), 'Item ids repeat'),
+  v.check(layout => unique(layout.floors.flatMap(floor => [...floor.items.map(item => item.id), ...floor.walls.map(wall => wall.id), ...floor.slabs.map(slab => slab.id)])), 'Item ids repeat'),
   v.check(layout => unique((layout.pages ?? []).map(page => page.id)), 'Page ids repeat'),
-  v.check(layout => unique(layout.floors.flatMap(floor => [...floor.edges, ...floor.walls].flatMap(host => (host.openings ?? []).map(opening => opening.id)))), 'Door and window ids repeat'),
+  v.check(layout => unique(layout.floors.flatMap(floor => floor.walls.flatMap(wall => (wall.openings ?? []).map(opening => opening.id)))), 'Door and window ids repeat'),
   v.check(layout => layout.floors.every(floor => floor.pageId === undefined || (layout.pages ?? [DEFAULT_PAGE]).some(page => page.id === floor.pageId)), 'A floor is on a page that does not exist'),
 )
 export type ShopLayout = v.InferOutput<typeof layoutSchema>
@@ -445,7 +458,8 @@ export const layoutPages = (layout: Pick<ShopLayout, 'pages'>): LayoutPage[] => 
  */
 export const saveLayoutSchema = v.strictObject({
   version: v.pipe(v.number(), v.integer(), v.minValue(0)),
-  layout: layoutSchema,
+  // A tab opened before contract v2 (D282) still sends floors with an outline: upgraded first.
+  layout: v.pipe(v.unknown(), v.transform(upgradeLayout), layoutSchema),
 })
 export type SaveLayoutInput = v.InferOutput<typeof saveLayoutSchema>
 
@@ -691,7 +705,7 @@ function segmentsMeet(a: Point, b: Point, c: Point, d: Point): boolean {
   return (abc === 0 && onSegment(a, b, c)) || (abd === 0 && onSegment(a, b, d)) || (cda === 0 && onSegment(c, d, a)) || (cdb === 0 && onSegment(c, d, b))
 }
 
-function openingsFit(edge: Pick<Edge, 'openings'>, length: number): boolean {
+function openingsFit(edge: { openings: readonly Opening[] }, length: number): boolean {
   const sorted = [...edge.openings].sort((a, b) => a.offset - b.offset)
   let cursor = 0
   for (const opening of sorted) {
@@ -708,3 +722,79 @@ function jsonBytes(value: unknown): number {
 function unique(values: readonly string[]): boolean {
   return new Set(values).size === values.length
 }
+
+// --- Contract v1 → v2 (D282) ---
+
+/** A floor as saved before contract v2: one outline whose edges are its outer walls. */
+export interface FloorV1 {
+  id: string
+  outline: Point[]
+  edges: { kind: 'wall' | 'railing' | 'open', openings: Opening[] }[]
+  walls: Wall[]
+  items: LayoutItem[]
+  [key: string]: unknown
+}
+
+/** An outer wall's thickness before v2, and a railing's (it stood 3 cm outside the outline). */
+const V1_OUTER_WALL_CM = 20
+const V1_RAILING_CM = 6
+
+/**
+ * A floor in contract v2 (D282), whatever version it was saved in. A v1 floor's outline becomes its
+ * one slab (none when it had no outline yet), each edge that was a wall or a railing a wall standing
+ * outside the outline with its doors and windows, and its inside walls stay, after them. New ids are
+ * made from the floor's id, so reading the same floor again gives the same ones. Anything that is
+ * not a v1 floor comes back as it was, for the schema to check.
+ */
+export function upgradeFloor<T>(floor: T): T {
+  if (!isFloorV1(floor)) return floor
+  const { outline, edges, walls, ...rest } = floor
+  const tag = shortHash(floor.id)
+  const clockwise = signedArea(outline) >= 0
+  const outer: Wall[] = outline.length >= 3
+    ? edges.flatMap((edge, index): Wall[] => {
+        if (edge.kind === 'open') return []
+        const from = outline[index]!
+        const to = outline[(index + 1) % outline.length]!
+        return [{
+          id: `e${index}-${tag}`,
+          from: { ...from },
+          to: { ...to },
+          ...(edge.kind === 'railing' && { kind: 'railing' as const }),
+          ...(edge.openings.length && { openings: edge.openings.map(opening => ({ ...opening })) }),
+          // Outside the floor: on the screen's left of a clockwise outline's edges, its right otherwise.
+          side: clockwise ? 'left' : 'right',
+          thickness: edge.kind === 'railing' ? V1_RAILING_CM : V1_OUTER_WALL_CM,
+        }]
+      })
+    : []
+  return {
+    ...rest,
+    slabs: outline.length >= 3 ? [{ id: `s-${tag}`, outline: outline.map(point => ({ ...point })) }] : [],
+    walls: [...outer, ...walls],
+  } as T
+}
+
+/** A whole layout in contract v2 (D282): each floor upgraded. Anything else comes back as it was. */
+export function upgradeLayout<T>(layout: T): T {
+  if (!layout || typeof layout !== 'object' || !Array.isArray((layout as { floors?: unknown }).floors)) return layout
+  return { ...layout, floors: (layout as { floors: unknown[] }).floors.map(upgradeFloor) }
+}
+
+function isFloorV1(floor: unknown): floor is FloorV1 {
+  if (!floor || typeof floor !== 'object') return false
+  const candidate = floor as Partial<FloorV1> & { slabs?: unknown }
+  return candidate.slabs === undefined && Array.isArray(candidate.outline) && Array.isArray(candidate.edges) && typeof candidate.id === 'string'
+    && Array.isArray(candidate.walls) && candidate.edges.length === candidate.outline.length
+}
+
+/** FNV-1a, base 36: a short, stable tag for ids made from another id. */
+function shortHash(text: string): string {
+  let hash = 0x811C9DC5
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+

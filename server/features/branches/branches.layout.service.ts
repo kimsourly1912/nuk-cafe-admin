@@ -1,5 +1,5 @@
-import { INVALID_STREET_DOOR, isBuiltInLook, isItemLookKind, ITEM_HEIGHTS, NO_SCENE, streetDoor } from '#shared/contracts/shop-layout'
-import type { BranchLayout, Floor, LayoutHistoryEntry, LayoutScene, Placement, PublicExploreLayout, SaveLayoutInput, ShopLayout } from '#shared/contracts/shop-layout'
+import { INVALID_STREET_DOOR, isBuiltInLook, isItemLookKind, ITEM_HEIGHTS, NO_SCENE, streetDoor, upgradeFloor } from '#shared/contracts/shop-layout'
+import type { BranchLayout, Floor, FloorGeometry, LayoutHistoryEntry, LayoutScene, Placement, PublicExploreLayout, SaveLayoutInput, ShopLayout } from '#shared/contracts/shop-layout'
 import type { Db, Statement } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
 import { apiError, ErrorCodes, notFound } from '#server/utils/errors'
@@ -44,9 +44,18 @@ function frameOf(row: FloorRow): Pick<Floor, 'canvasX' | 'canvasY' | 'pageId' | 
   }
 }
 
+/**
+ * A floor's drawing in contract v2 (D282): rows saved before it hold an outline and its edges, and
+ * are upgraded as they are read. The row itself changes on the layout's next save.
+ */
+function geometryOf(row: FloorRow): FloorGeometry {
+  const { slabs, walls, items } = upgradeFloor({ id: row.id, ...row.geometry })
+  return { slabs, walls, items }
+}
+
 function toFloor(row: FloorRow): Floor {
-  const { outline, edges, walls, items } = row.geometry
-  return { id: row.id, name: row.name, height: row.heightCm, hasRoof: row.hasRoof, outline, edges, walls, items, ...frameOf(row) }
+  const { slabs, walls, items } = geometryOf(row)
+  return { id: row.id, name: row.name, height: row.heightCm, hasRoof: row.hasRoof, slabs, walls, items, ...frameOf(row) }
 }
 
 /**
@@ -54,12 +63,12 @@ function toFloor(row: FloorRow): Floor {
  * flags (design-only) are left out, also its pieces' and walls' flags (names stay: a shape's shows in 3D).
  */
 function toPublicFloor(row: FloorRow): Floor {
-  const { outline, edges, walls, items } = row.geometry
+  const { slabs, walls, items } = geometryOf(row)
   const plain = <T extends { name?: string, hidden?: true, locked?: true }>(layer: T) => {
     const { hidden: _hidden, locked: _locked, ...rest } = layer
     return rest
   }
-  return { id: row.id, name: row.name, height: row.heightCm, hasRoof: row.hasRoof, outline, edges, walls: walls.map(plain), items: items.map(plain) }
+  return { id: row.id, name: row.name, height: row.heightCm, hasRoof: row.hasRoof, slabs: slabs.map(plain), walls: walls.map(plain), items: items.map(plain) }
 }
 
 function toPlacement(row: PlacementRow): Placement {
@@ -71,9 +80,9 @@ function toPlacement(row: PlacementRow): Placement {
 }
 
 function floorRow(floor: Floor, position: number): FloorRow {
-  const { id, name, height, hasRoof, outline, edges, walls, items } = floor
+  const { id, name, height, hasRoof, slabs, walls, items } = floor
   return {
-    id, position, name, heightCm: height, hasRoof, geometry: { outline, edges, walls, items },
+    id, position, name, heightCm: height, hasRoof, geometry: { slabs, walls, items },
     canvasXCm: floor.canvasX ?? null, canvasYCm: floor.canvasY ?? null, pageId: floor.pageId ?? null, hidden: floor.hidden ?? false, locked: floor.locked ?? false,
   }
 }
