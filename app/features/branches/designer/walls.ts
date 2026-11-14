@@ -1,5 +1,5 @@
-import type { DoorHinge, DoorSwing, FinishColor, Floor, Opening, OpeningKind, Point, Slab, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
-import { signedArea, wallKind, wallLength } from '#shared/contracts/shop-layout'
+import type { DoorHinge, DoorSwing, FinishColor, Floor, Opening, OpeningKind, OpeningStyle, Point, Slab, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
+import { DOOR_STYLES, signedArea, WINDOW_STYLES, wallKind, wallLength } from '#shared/contracts/shop-layout'
 import { newLayoutId, pointAlongWall, pointInPolygon, WALL_THICKNESS_CM, wallBand, wallNormal, wallStrip, wallThickness } from './geometry'
 import type { WallSegment } from './geometry'
 
@@ -171,6 +171,10 @@ export interface OpeningShape {
   hinge?: DoorHinge
   /** False: an open doorway, no leaf. */
   leaf?: boolean
+  /** A door's or window's style (D285); null: the first. */
+  style?: OpeningStyle | null
+  /** Its colour (D285); null: its own. */
+  color?: FinishColor | null
 }
 
 /**
@@ -182,14 +186,18 @@ export function setOpeningShape(walls: readonly Wall[], id: string, openingId: s
   return replace(walls, id, wall => tidy(wall, {
     openings: (wall.openings ?? []).map((opening) => {
       if (opening.id !== openingId) return opening
-      const { height: _height, sill: _sill, swing: _swing, hinge: _hinge, leaf: _leaf, ...base } = opening
+      const { height: _height, sill: _sill, swing: _swing, hinge: _hinge, leaf: _leaf, style: _style, color: _color, ...base } = opening
       const pick = <K extends keyof OpeningShape>(key: K, current: OpeningShape[K]) => (change[key] === undefined ? current : change[key])
       const height = pick('height', opening.height)
       const sill = pick('sill', opening.sill)
       const swing = pick('swing', opening.swing)
       const hinge = pick('hinge', opening.hinge)
       const leaf = pick('leaf', opening.leaf)
+      const style = pick('style', opening.style)
+      const color = pick('color', opening.color)
       const door = opening.kind === 'door'
+      const firstStyle = door ? DOOR_STYLES[0] : WINDOW_STYLES[0]
+      const styles: readonly string[] = door ? DOOR_STYLES : WINDOW_STYLES
       return {
         ...base,
         ...(height != null && { height: Math.round(height) }),
@@ -197,6 +205,8 @@ export function setOpeningShape(walls: readonly Wall[], id: string, openingId: s
         ...(door && swing === 'out' && { swing: 'out' as const }),
         ...(door && hinge === 'end' && { hinge: 'end' as const }),
         ...(door && leaf === false && { leaf: false as const }),
+        ...(style && style !== firstStyle && styles.includes(style) && { style }),
+        ...(color && { color }),
       }
     }),
   }))

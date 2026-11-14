@@ -84,7 +84,11 @@ export function buildFloor(context: BuildContext, options: FloorBuildOptions): F
     if (kind === 'railing') railingEdge(context, wallGroup, length, openings, height, wall.color)
     else {
       const thickness = wallThickness(wall)
-      wallEdge(context, wallGroup, { length, height, openings, startExtra: reach.start, endExtra: reach.end, thickness, surface: kind === 'glass' ? 'glass' : 'plaster', color: kind === 'glass' ? undefined : wall.color, leaves: kind === 'wall' })
+      // The group's z axis on the plan, against the wall's outside: where shutters hang (D285).
+      const localZ = new Vector3(0, 0, 1).applyEuler(wallGroup.rotation)
+      const out = wallOutward(wall, floor.slabs)
+      const outside = localZ.x * out.x + localZ.z * out.y >= 0 ? 1 : -1
+      wallEdge(context, wallGroup, { length, height, openings, startExtra: reach.start, endExtra: reach.end, thickness, surface: kind === 'glass' ? 'glass' : 'plaster', color: kind === 'glass' ? undefined : wall.color, leaves: kind === 'wall', outside })
       if (kind === 'glass') {
         // A frame along the top and at each end holds the glass.
         const frame = surfaces.tinted('frame', wall.color)
@@ -189,11 +193,13 @@ interface WallEdgeOptions {
   color?: string
   /** Door leaves in its doorways (a half wall's or glass's doorway is an open gap). */
   leaves?: boolean
+  /** Which way along the group's z is the wall's outside (1 or −1): where shutters hang (D285). */
+  outside?: number
 }
 
 /** One edge's wall as merged solid pieces, plus window glass and frames and door leaves. */
 function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions) {
-  const { length, height, openings, startExtra, endExtra, thickness = WALL_THICKNESS_CM, surface = 'plaster', color, leaves = true } = options
+  const { length, height, openings, startExtra, endExtra, thickness = WALL_THICKNESS_CM, surface = 'plaster', color, leaves = true, outside = 1 } = options
   const pieces = wallPieces(length, height, openings).map(piece => ({
     ...piece,
     from: piece.from === 0 ? -startExtra : piece.from,
@@ -214,36 +220,92 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
     mesh.receiveShadow = true
     group.add(mesh)
   }
-  const frame = context.materials.surface('frame')
   for (const opening of openings) {
     const x = opening.offset + opening.width / 2 - length / 2
+    // A door's or window's colour (D285): a window's frame and shutters, a door's leaf.
+    const frame = context.materials.tinted('frame', opening.kind === 'window' ? opening.color : undefined)
     if (opening.kind === 'window') {
       const { bottom, top } = openingSpan(opening, height)
-      addBox(context, group, opening.width - 4, top - bottom - 4, 2, context.materials.surface('glass'), { x, y: (top + bottom) / 2, z: 0 }, false)
+      const glass = addBox(context, group, opening.width - 4, top - bottom - 4, 2, context.materials.surface('glass'), { x, y: (top + bottom) / 2, z: 0 }, false)
+      glass.userData.windowId = opening.id
       addBox(context, group, opening.width, 4, thickness + 2, frame, { x, y: bottom + 2, z: 0 })
       addBox(context, group, opening.width, 4, 8, frame, { x, y: top - 2, z: 0 })
       addBox(context, group, 4, top - bottom, 8, frame, { x: x - opening.width / 2 + 2, y: (top + bottom) / 2, z: 0 })
       addBox(context, group, 4, top - bottom, 8, frame, { x: x + opening.width / 2 - 2, y: (top + bottom) / 2, z: 0 })
-      const panes = Math.max(1, Math.round(opening.width / 90))
+      // Panes (the default) split it every 90 cm or so; a single pane has none (D285).
+      const panes = opening.style === 'single' ? 1 : Math.max(1, Math.round(opening.width / 90))
       for (let mullion = 1; mullion < panes; mullion++) {
         addBox(context, group, 3, top - bottom, 6, frame, { x: x - opening.width / 2 + (mullion * opening.width) / panes, y: (top + bottom) / 2, z: 0 })
+      }
+      if (opening.style === 'shutters') {
+        // Two louvred shutters, open flat against the outside face either side of the window.
+        const shutter = context.materials.tinted('shutter-green', opening.color)
+        for (const end of [-1, 1]) {
+          const panel = addBox(context, group, opening.width / 2, top - bottom, 2, shutter, { x: x + end * (opening.width * 0.75 + 1), y: (top + bottom) / 2, z: outside * (thickness / 2 + 1) })
+          panel.userData.shutter = opening.id
+        }
       }
     }
     else {
       if (!leaves || opening.leaf === false) continue
       const doorHeight = openingSpan(opening, height).top
+      addBox(context, group, opening.width, 5, thickness + 1, context.materials.surface('frame'), { x, y: doorHeight - 2.5, z: 0 })
       // The leaf and its handle name their door, so Explore (D275) can swing them on a hinge.
-      const leaf = addBox(context, group, opening.width - 6, doorHeight - 3, 4, context.materials.finish('walnut'), { x, y: (doorHeight - 3) / 2, z: -thickness / 2 + 4 })
-      addBox(context, group, opening.width, 5, thickness + 1, frame, { x, y: doorHeight - 2.5, z: 0 })
+      // A glazed or louvred leaf is one merged frame (D285), so Explore still finds it as the
+      // largest part, the whole leaf's size; a glazed leaf's glass swings with it.
+      const leafWidth = opening.width - 6
+      const leafHeight = doorHeight - 3
+      const at = { x, y: leafHeight / 2, z: -thickness / 2 + 4 }
+      const wood = context.materials.finish(opening.color ?? 'walnut', 'wood')
+      const leaf = opening.style === 'glazed' || opening.style === 'louvred'
+        ? addMesh(group, leafFrame(context, group, opening.id, leafWidth, leafHeight, opening.style), wood, at)
+        : addBox(context, group, leafWidth, leafHeight, 4, wood, at)
+      const parts = [leaf]
+      if (opening.style === 'glazed') parts.push(addBox(context, group, leafWidth - 20, leafHeight - 40, 1, context.materials.surface('glass'), { ...at, y: at.y + 6 }, false))
       // The handle at the leaf's free end, away from its hinge (D282).
       const free = opening.hinge === 'end' ? -1 : 1
-      const handle = addBox(context, group, 2, 18, 4, context.materials.finish('brass'), { x: x + free * (opening.width / 2 - 14), y: Math.min(105, doorHeight - 20), z: -thickness / 2 + 1 })
-      leaf.userData.doorId = opening.id
+      parts.push(addBox(context, group, 2, 18, 4, context.materials.finish('brass'), { x: x + free * (opening.width / 2 - 14), y: Math.min(105, doorHeight - 20), z: -thickness / 2 + 1 }))
+      for (const part of parts) part.userData.doorId = opening.id
       leaf.userData.hinge = opening.hinge ?? 'start'
       leaf.userData.swing = opening.swing ?? 'in'
-      handle.userData.doorId = opening.id
     }
   }
+}
+
+/**
+ * A glazed or louvred door's leaf (D285): stiles and rails round a gap for the glass, or round
+ * slats every 8 cm. Centred on its middle, like a box, and owned by its wall's group.
+ */
+function leafFrame(context: BuildContext, group: Group, id: string, width: number, height: number, style: 'glazed' | 'louvred'): BufferGeometry {
+  const parts: BufferGeometry[] = []
+  const add = (w: number, h: number, d: number, x: number, y: number) => {
+    const geometry = new BoxGeometry(cm(w), cm(h), cm(d))
+    geometry.translate(cm(x), cm(y), 0)
+    parts.push(geometry)
+  }
+  const stile = 10
+  const top = 14
+  const bottom = style === 'glazed' ? 26 : 14
+  add(stile, height, 4, -width / 2 + stile / 2, 0)
+  add(stile, height, 4, width / 2 - stile / 2, 0)
+  add(width - stile * 2, top, 4, 0, height / 2 - top / 2)
+  add(width - stile * 2, bottom, 4, 0, -height / 2 + bottom / 2)
+  if (style === 'louvred') {
+    for (let y = -height / 2 + bottom + 4; y < height / 2 - top - 2; y += 8) add(width - stile * 2, 5, 2, 0, y + 2.5)
+  }
+  const merged = mergeGeometries(parts)
+  for (const part of parts) part.dispose()
+  context.geometries.set(`leaf:${group.uuid}:${id}`, merged)
+  return merged
+}
+
+function addMesh(group: Group, geometry: BufferGeometry, material: Material, at: { x: number, y: number, z: number }): Mesh {
+  const mesh = new Mesh(geometry, material)
+  mesh.position.set(cm(at.x), cm(at.y), cm(at.z))
+  mesh.castShadow = true
+  mesh.receiveShadow = true
+  group.add(mesh)
+  return mesh
 }
 
 /** Posts, a top rail and thin balusters, merged per edge. */

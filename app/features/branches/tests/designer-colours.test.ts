@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
-import { createItemLookSchema, createLookSchema, floorSchema, isFinishColor, itemSchema } from '#shared/contracts/shop-layout'
-import type { Floor, LayoutItem, TableLook, Wall } from '#shared/contracts/shop-layout'
+import { createItemLookSchema, createLookSchema, floorSchema, isFinishColor, itemSchema, openingSchema } from '#shared/contracts/shop-layout'
+import type { Floor, LayoutItem, Opening, TableLook, Wall } from '#shared/contracts/shop-layout'
+import type { Mesh } from 'three'
+import { Box3, Vector3 } from 'three'
+import { pointInPolygon } from '../designer/geometry'
 import { BUILT_IN_LOOKS, finishColor, finishSwatch, itemSlotMaterial, lookSlotMaterial } from '../designer/catalog'
 import { buildItem, buildTable, createBuildContext, disposeBuildContext, meshesOf } from '../designer/scene/furniture'
 import { createMaterialLibrary } from '../designer/scene/materials'
 import { buildFloor } from '../designer/scene/building'
 import { setSlabFinish } from '../designer/outline'
-import { copyStructure, setWallKind, setWallStructure } from '../designer/walls'
+import { copyStructure, setOpeningShape, setWallKind, setWallStructure } from '../designer/walls'
 
 /** Free colours (D285, owner D2): a finish is a palette key or `#rrggbb`. */
 describe('free colours', () => {
@@ -121,5 +124,78 @@ describe('wall and floor finishes', () => {
     expect(materials.tinted('plaster', '#336699')).toBe(materials.tinted('plaster', '#336699'))
     expect(materials.tinted('plaster', '#336699')).not.toBe(materials.surface('plaster'))
     materials.dispose()
+  })
+})
+
+/** Door and window styles (D285, the rest of owner D3). */
+describe('door and window styles', () => {
+  const square = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 300 }, { x: 0, y: 300 }]
+  const door: Opening = { id: 'door', kind: 'door', offset: 50, width: 90 }
+  const window: Opening = { id: 'win', kind: 'window', offset: 200, width: 180 }
+  const front = (openings: Opening[]): Wall => ({ id: 'w', from: { x: 0, y: 0 }, to: { x: 400, y: 0 }, side: 'left', thickness: 20, openings })
+  const floorWith = (openings: Opening[]): Floor => ({ id: 'f', name: 'Ground', height: 300, hasRoof: true, items: [], slabs: [{ id: 's', outline: square }], walls: [front(openings)] })
+  const messages = (value: unknown) => (v.safeParse(openingSchema, value).issues ?? []).map(issue => issue.message)
+  const built = (openings: Opening[]) => {
+    const context = createBuildContext(createMaterialLibrary())
+    const floor = buildFloor(context, { floor: floorWith(openings), topmost: true })
+    floor.group.updateMatrixWorld(true)
+    return { context, meshes: meshesOf(floor.group) }
+  }
+
+  it('the contract keeps door styles on doors and window styles on windows', () => {
+    expect(messages({ ...door, style: 'glazed', color: '#123456' })).toEqual([])
+    expect(messages({ ...window, style: 'shutters', color: '#123456' })).toEqual([])
+    expect(messages({ ...door, style: 'shutters' })).toContain('A door\'s style on a window, or a window\'s on a door')
+    expect(messages({ ...window, style: 'louvred' })).toContain('A door\'s style on a window, or a window\'s on a door')
+    expect(messages({ ...door, style: 'arched' }).length).toBeGreaterThan(0)
+  })
+
+  it('sets a style and a colour, leaves the first style out, and clears both', () => {
+    const walls = [front([door, window])]
+    const styled = setOpeningShape(setOpeningShape(walls, 'w', 'door', { style: 'glazed', color: '#123456' }), 'w', 'win', { style: 'shutters' })
+    expect(styled[0]!.openings).toEqual([{ ...door, style: 'glazed', color: '#123456' }, { ...window, style: 'shutters' }])
+    expect(setOpeningShape(styled, 'w', 'door', { style: 'panel' })[0]!.openings![0]).toEqual({ ...door, color: '#123456' })
+    expect(setOpeningShape(styled, 'w', 'door', { color: null })[0]!.openings![0]).toEqual({ ...door, style: 'glazed' })
+    // A door's style is never put on a window.
+    expect(setOpeningShape(walls, 'w', 'win', { style: 'glazed' })[0]!.openings![1]).toEqual(window)
+  })
+
+  it('a glazed door\'s glass and a louvred door swing with the leaf, which is still the largest part', () => {
+    for (const style of ['panel', 'glazed', 'louvred'] as const) {
+      const { context, meshes } = built([{ ...door, style }])
+      const parts = meshes.filter(mesh => mesh.userData.doorId === 'door')
+      const size = (mesh: Mesh) => new Box3().setFromObject(mesh).getSize(new Vector3())
+      const largest = parts.reduce((a, b) => (size(a).x * size(a).y >= size(b).x * size(b).y ? a : b))
+      expect(largest.userData.hinge, style).toBe('start')
+      expect(Math.round(size(largest).x * 100), style).toBe(84)
+      expect(parts.some(mesh => mesh.material === context.materials.surface('glass')), style).toBe(style === 'glazed')
+      disposeBuildContext(context)
+    }
+  })
+
+  it('paints a door\'s leaf in its colour as wood', () => {
+    const { context, meshes } = built([{ ...door, color: '#123456' }])
+    const leaf = meshes.find(mesh => mesh.userData.hinge)!
+    expect(leaf.material).toBe(context.materials.finish('#123456', 'wood'))
+    disposeBuildContext(context)
+  })
+
+  it('a single pane has no mullions; shutters hang outside the floor, either side', () => {
+    const count = (openings: Opening[]) => {
+      const { context, meshes } = built(openings)
+      const frames = meshes.filter(mesh => mesh.material === context.materials.surface('frame')).length
+      disposeBuildContext(context)
+      return frames
+    }
+    expect(count([window]) - count([{ ...window, style: 'single' }])).toBe(1)
+    const { context, meshes } = built([{ ...window, style: 'shutters', color: '#3355aa' }])
+    const shutters = meshes.filter(mesh => mesh.userData.shutter === 'win')
+    expect(shutters).toHaveLength(2)
+    for (const shutter of shutters) {
+      expect(shutter.material).toBe(context.materials.tinted('shutter-green', '#3355aa'))
+      const at = shutter.getWorldPosition(new Vector3())
+      expect(pointInPolygon({ x: at.x * 100, y: at.z * 100 }, square)).toBe(false)
+    }
+    disposeBuildContext(context)
   })
 })

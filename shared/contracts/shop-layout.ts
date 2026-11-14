@@ -225,6 +225,16 @@ export type DoorSwing = typeof DOOR_SWINGS[number]
 /** The end of the doorway a door's leaf hangs from, along the wall: its start or its end. */
 export const DOOR_HINGES = ['start', 'end'] as const
 export type DoorHinge = typeof DOOR_HINGES[number]
+/**
+ * How a door's leaf or a window is made (D285, the rest of owner D3): a door is a solid panel, has
+ * glass or louvres; a window is split in panes, one pane, or has shutters. Left out: the first.
+ */
+export const DOOR_STYLES = ['panel', 'glazed', 'louvred'] as const
+export type DoorStyle = typeof DOOR_STYLES[number]
+export const WINDOW_STYLES = ['panes', 'single', 'shutters'] as const
+export type WindowStyle = typeof WINDOW_STYLES[number]
+export type OpeningStyle = DoorStyle | WindowStyle
+const isDoorStyle = (style: string): style is DoorStyle => (DOOR_STYLES as readonly string[]).includes(style)
 export const OPENING_HEIGHT_MIN_CM = 50
 export const WINDOW_SILL_MAX_CM = 700
 
@@ -245,9 +255,13 @@ export const openingSchema = v.pipe(
     swing: v.optional(v.picklist(DOOR_SWINGS)),
     hinge: v.optional(v.picklist(DOOR_HINGES)),
     leaf: v.optional(v.literal(false)),
+    style: v.optional(v.picklist([...DOOR_STYLES, ...WINDOW_STYLES])),
+    /** Its colour (D285): a door's leaf, a window's frame and shutters. */
+    color: v.optional(colorSchema),
   }),
   v.check(opening => opening.kind === 'window' || opening.sill === undefined, 'Only a window has a sill'),
   v.check(opening => opening.kind === 'door' || (opening.swing === undefined && opening.hinge === undefined && opening.leaf === undefined), 'Only a door has a leaf'),
+  v.check(opening => opening.style === undefined || isDoorStyle(opening.style) === (opening.kind === 'door'), 'A door\'s style on a window, or a window\'s on a door'),
 )
 export type Opening = v.InferOutput<typeof openingSchema>
 
