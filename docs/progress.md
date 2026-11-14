@@ -3,6 +3,13 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### QA standard and retest queue (2026-11-14)
+
+Documentation only. Branch `docs/qa-standard`. Replaces `qa/studio-figma` and `qa/studio-editor-evidence` with a shared [QA standard](qa/STANDARD.md), [templates](qa/_templates/) (issue, check, retest, agent prompt) and a [retest queue](qa/RETEST-QUEUE.md) (owner, 2026-11-14: remove the old folders and keep the template). Links in older entries below to the removed folders point at git history.
+
+- **Status:** every ISS and ED item stays **Fixed, needs retest** until the owner retests on staging; the queue holds the steps. The retest rules in the standard are a draft until the first retest round.
+- **Evidence:** links in `docs/README.md` and `docs/current-state.md` repointed; no code changed.
+
 ### Studio editing follows Figma: handles, shapes, flips (D280, 2026-11-13)
 
 Branch `ccr-37de3d9f-irv8nw`, one PR (owner: all findings together, Claude's recommendations). Builds the [Studio editor QA](qa/studio-editor-evidence/README.md) findings ED-01 to ED-11.
