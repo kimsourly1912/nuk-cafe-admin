@@ -101,19 +101,22 @@ export function moveSide(shape: FloorShape, index: number, distance: number): Fl
 
 /**
  * Removes corner `index`: the edges on either side become one, of the earlier edge's kind, with
- * the openings of both that still fit. A floor keeps at least three corners.
+ * the openings of both that still fit and that kind takes (ISS-037: an open edge takes none, a
+ * railing only doors; owner 2026-11-14: no warning, the drop is one undo step). A floor keeps at
+ * least three corners.
  */
 export function removeCorner(shape: FloorShape, index: number): FloorShape {
   const count = shape.outline.length
   if (count <= 3) return shape
   const before = (index - 1 + count) % count
   const beforeLength = edgeLength(shape.outline, before)
+  const kind = shape.edges[before]!.kind
   const merged: Edge = {
-    kind: shape.edges[before]!.kind,
+    kind,
     openings: [
       ...shape.edges[before]!.openings.map(opening => ({ ...opening })),
       ...shape.edges[index]!.openings.map(opening => ({ ...opening, offset: Math.round(opening.offset + beforeLength) })),
-    ],
+    ].filter(opening => edgeTakes(kind, opening.kind)),
   }
   const outline = shape.outline.filter((_, position) => position !== index).map(point => ({ ...point }))
   const edges = shape.edges.map(cloneEdge)

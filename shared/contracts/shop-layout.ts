@@ -297,6 +297,8 @@ export const itemSchema = v.pipe(
 )
 export type LayoutItem = v.InferOutput<typeof itemSchema>
 
+export const OUTLINE_CROSSES = 'The outline crosses itself'
+
 export const floorSchema = v.pipe(
   v.strictObject({
     id: idSchema,
@@ -328,6 +330,7 @@ export const floorSchema = v.pipe(
   v.check(floor => floor.walls.every(wall => openingsFit({ openings: wall.openings ?? [] }, innerWallLength(wall))), 'A door or window does not fit its wall'),
   v.check(floor => floor.walls.every(wall => innerWallKind(wall) === 'wall' || (wall.openings ?? []).every(opening => opening.kind === 'door')), 'A window needs a full wall'),
   v.check(floor => Math.abs(signedArea(floor.outline)) >= 10_000, 'The outline has no area'),
+  v.check(floor => isSimpleOutline(floor.outline), OUTLINE_CROSSES),
   v.check(floor => jsonBytes(floor) <= LAYOUT_MAX_FLOOR_BYTES, 'This floor holds too much: move some furniture to another floor'),
 )
 export type Floor = v.InferOutput<typeof floorSchema>
@@ -425,6 +428,7 @@ export const layoutSchema = v.pipe(
   v.check(layout => layout.placements.every(placement => layout.floors.some(floor => floor.id === placement.floorId)), 'A table is on a floor that does not exist'),
   v.check(layout => unique(layout.floors.flatMap(floor => [...floor.items.map(item => item.id), ...floor.walls.map(wall => wall.id)])), 'Item ids repeat'),
   v.check(layout => unique((layout.pages ?? []).map(page => page.id)), 'Page ids repeat'),
+  v.check(layout => unique(layout.floors.flatMap(floor => [...floor.edges, ...floor.walls].flatMap(host => (host.openings ?? []).map(opening => opening.id)))), 'Door and window ids repeat'),
   v.check(layout => layout.floors.every(floor => floor.pageId === undefined || (layout.pages ?? [DEFAULT_PAGE]).some(page => page.id === floor.pageId)), 'A floor is on a page that does not exist'),
 )
 export type ShopLayout = v.InferOutput<typeof layoutSchema>
@@ -644,6 +648,47 @@ export function signedArea(outline: readonly Point[]): number {
     twice += from.x * to.y - to.x * from.y
   }
   return twice / 2
+}
+
+/**
+ * Whether an outline is a simple polygon (ISS-039): no side crosses or touches a side that is not
+ * next to it, and no side folds back over the one before. A zero-length side (two equal corners in
+ * a row) is ignored, as the editor keeps them. Whole centimetres, so the test is exact.
+ */
+export function isSimpleOutline(outline: readonly Point[]): boolean {
+  const points = outline.filter((point, index) => {
+    const next = outline[(index + 1) % outline.length]!
+    return point.x !== next.x || point.y !== next.y
+  })
+  const count = points.length
+  if (count < 3) return true
+  const at = (index: number) => points[(index + count) % count]!
+  for (let first = 0; first < count; first++) {
+    // The side after this one shares a corner: it may only fold back onto it, never cross it.
+    const [a, b, c] = [at(first), at(first + 1), at(first + 2)]
+    if (turn(a, b, c) === 0 && (a.x - b.x) * (c.x - b.x) + (a.y - b.y) * (c.y - b.y) > 0) return false
+    for (let second = first + 2; second < count; second++) {
+      if (first === 0 && second === count - 1) continue
+      if (segmentsMeet(at(first), at(first + 1), at(second), at(second + 1))) return false
+    }
+  }
+  return true
+}
+
+/** Which way a → b → c turns: 1 or −1, 0 when they lie on one line. */
+function turn(a: Point, b: Point, c: Point): number {
+  return Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x))
+}
+
+function onSegment(a: Point, b: Point, point: Point): boolean {
+  return Math.min(a.x, b.x) <= point.x && point.x <= Math.max(a.x, b.x) && Math.min(a.y, b.y) <= point.y && point.y <= Math.max(a.y, b.y)
+}
+
+/** Whether segments a–b and c–d share any point, touching included. */
+function segmentsMeet(a: Point, b: Point, c: Point, d: Point): boolean {
+  const [abc, abd, cda, cdb] = [turn(a, b, c), turn(a, b, d), turn(c, d, a), turn(c, d, b)]
+  if (abc * abd < 0 && cda * cdb < 0) return true
+  return (abc === 0 && onSegment(a, b, c)) || (abd === 0 && onSegment(a, b, d)) || (cda === 0 && onSegment(c, d, a)) || (cdb === 0 && onSegment(c, d, b))
 }
 
 function openingsFit(edge: Pick<Edge, 'openings'>, length: number): boolean {

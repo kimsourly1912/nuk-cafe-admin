@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import type { Edge, ShopLayout } from '#shared/contracts/shop-layout'
-import { edgeLength, floorSchema, layoutSchema, LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
+import { edgeLength, floorSchema, isSimpleOutline, layoutSchema, LAYOUT_MAX_FLOORS, OUTLINE_CROSSES } from '#shared/contracts/shop-layout'
 import { describeIssue } from '../composables/useLayoutEditor'
 import { addOpening, areaM2, canClose, closedShape, edgeNames, edgeTakes, fitOpenings, freeSpot, insertCorner, moveCorner, moveSide, openingFits, removeCorner, setEdgeKind, setEdgeLength, updateOpening } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
@@ -91,6 +91,60 @@ describe('adding and removing corners', () => {
   it('never goes below three corners', () => {
     const triangle = closedShape([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 300 }])
     expect(removeCorner(triangle, 0)).toBe(triangle)
+  })
+
+  // ISS-037: the joined edge has the earlier edge's kind, so it keeps only openings that kind takes.
+  function cornerBetween(kind: Edge['kind'], openings: Edge['openings']): FloorShape {
+    const shape = square(500)
+    shape.edges[0] = { kind, openings: [] }
+    shape.edges[1] = { kind: 'wall', openings }
+    return shape
+  }
+
+  it('an open edge joined with a wall drops the wall\'s door, and the floor still saves', () => {
+    const merged = removeCorner(cornerBetween('open', [{ id: 'd1', kind: 'door', offset: 100, width: 90 }]), 1)
+    expect(merged.edges[0]).toEqual({ kind: 'open', openings: [] })
+    expect(valid(merged)).toEqual([])
+  })
+
+  it('a railing joined with a wall drops its windows and keeps its doors as gates', () => {
+    const merged = removeCorner(cornerBetween('railing', [{ id: 'w1', kind: 'window', offset: 50, width: 90 }, { id: 'd1', kind: 'door', offset: 300, width: 90 }]), 1)
+    expect(merged.edges[0]!.kind).toBe('railing')
+    expect(merged.edges[0]!.openings.map(opening => opening.id)).toEqual(['d1'])
+    expect(valid(merged)).toEqual([])
+  })
+
+  it('two walls joined keep every door and window', () => {
+    const merged = removeCorner(cornerBetween('wall', [{ id: 'w1', kind: 'window', offset: 50, width: 90 }, { id: 'd1', kind: 'door', offset: 300, width: 90 }]), 1)
+    expect(merged.edges[0]!.openings.map(opening => opening.id).sort()).toEqual(['d1', 'w1'])
+    expect(valid(merged)).toEqual([])
+  })
+})
+
+describe('an outline that crosses itself (ISS-039)', () => {
+  it('a corner dragged across the far side makes an outline the contract refuses', () => {
+    const crossed = moveCorner(square(500), 2, { x: -300, y: 250 }, false)
+    expect(isSimpleOutline(crossed.outline)).toBe(false)
+    expect(valid(crossed)).toContain(OUTLINE_CROSSES)
+  })
+
+  it('accepts convex, concave and right-angled outlines, and the demo\'s L-shape', () => {
+    expect(isSimpleOutline(square(500).outline)).toBe(true)
+    expect(isSimpleOutline(lShape().outline)).toBe(true)
+    expect(isSimpleOutline([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 200, y: 100 }, { x: 400, y: 400 }, { x: 0, y: 400 }])).toBe(true)
+  })
+
+  it('ignores a zero-length side (two equal corners in a row), as the editor keeps them', () => {
+    expect(isSimpleOutline([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 400 }, { x: 0, y: 400 }])).toBe(true)
+  })
+
+  it('refuses sides that only touch, and a side folding back over the one before', () => {
+    // Two squares meeting at one corner (400, 400).
+    expect(isSimpleOutline([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 400 }, { x: 800, y: 400 }, { x: 800, y: 800 }, { x: 400, y: 800 }, { x: 400, y: 400 }, { x: 0, y: 400 }])).toBe(false)
+    // A corner on the far side's line, touching it.
+    expect(isSimpleOutline([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 0, y: 200 }, { x: 400, y: 400 }, { x: 0, y: 400 }])).toBe(false)
+    // A spike back along the side it came from.
+    expect(isSimpleOutline([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 400 }, { x: 0, y: 400 }])).toBe(false)
   })
 })
 

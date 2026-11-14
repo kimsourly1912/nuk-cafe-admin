@@ -91,7 +91,7 @@ export function duplicateSelected(layout: ShopLayout, floorId: string, targets: 
   const wallCopies: InnerWall[] = floor.walls.filter(wall => walls.has(wall.id)).map((wall) => {
     const id = newLayoutId('wall')
     copies.push({ kind: 'wall', id })
-    return { ...structuredClone(wall), id, from: { x: wall.from.x + offset.x, y: wall.from.y + offset.y }, to: { x: wall.to.x + offset.x, y: wall.to.y + offset.y } }
+    return { ...copyWall(wall), id, from: { x: wall.from.x + offset.x, y: wall.from.y + offset.y }, to: { x: wall.to.x + offset.x, y: wall.to.y + offset.y } }
   })
   floor.items.push(...itemCopies)
   floor.walls.push(...wallCopies)
@@ -142,9 +142,16 @@ export function pasteClipboard(layout: ShopLayout, clipboard: PlanClipboard, flo
   for (const wall of clipboard.walls) {
     const id = newLayoutId('wall')
     copies.push({ kind: 'wall', id })
-    floor.walls.push({ ...structuredClone(wall), id, from: { x: wall.from.x + offset.x, y: wall.from.y + offset.y }, to: { x: wall.to.x + offset.x, y: wall.to.y + offset.y } })
+    floor.walls.push({ ...copyWall(wall), id, from: { x: wall.from.x + offset.x, y: wall.from.y + offset.y }, to: { x: wall.to.x + offset.x, y: wall.to.y + offset.y } })
   }
   return copies
+}
+
+/** A copy of a wall whose doors and windows get ids of their own (ISS-042), as the panels make them. */
+function copyWall(wall: InnerWall): InnerWall {
+  const copy = structuredClone(wall)
+  if (copy.openings) copy.openings = copy.openings.map(opening => ({ ...opening, id: newLayoutId(opening.kind) }))
+  return copy
 }
 
 /**

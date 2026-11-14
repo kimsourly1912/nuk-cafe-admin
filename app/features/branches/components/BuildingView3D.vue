@@ -32,6 +32,11 @@ const props = defineProps<{
   branchId: string
   /** The sidebar's width in px, as last resized in 2D (D277). */
   sidebarWidth?: number
+  /**
+   * Shown (ISS-041): Studio keeps this view mounted behind 2D, so its camera survives a switch.
+   * While hidden it does not rebuild for each 2D edit; it catches up when shown again.
+   */
+  active?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -204,8 +209,8 @@ onMounted(start)
 
 onBeforeUnmount(stopViewer)
 
-watch(() => [props.layout, props.tables, props.looks, props.itemLooks] as const, ([layout, tables, looks, itemLooks]) => {
-  viewer?.setScene({ layout, tables, looks, itemLooks })
+watch(() => [props.layout, props.tables, props.looks, props.itemLooks, props.active !== false] as const, ([layout, tables, looks, itemLooks, active]) => {
+  if (active) viewer?.setScene({ layout, tables, looks, itemLooks })
 })
 watch(dark, value => viewer?.setTheme(value))
 watch([showFigures, animate], ([figures, animateValue]) => viewer?.setPlayback({ figures, animate: animateValue }))

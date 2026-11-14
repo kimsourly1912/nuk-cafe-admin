@@ -3237,3 +3237,15 @@ The [Studio editor QA](qa/studio-editor-evidence/README.md) compared Figma's Rec
 - **Alternatives:** a rounded box from `RoundedBoxGeometry` for the radius (rejected: it also rounds the top edges, unlike the plan); flips as a negative width (rejected: breaks the size limits and every reader of `width`); storing the arc in Figma's sweep percent (rejected: degrees match the plan's turns and Properties).
 - **Consequences:** older layouts read the same (all fields optional). Readers of items that draw them (3D, Explore) use `shapeOutline` and the flip scale; QR codes and orders ignore them.
 
+## D281 Studio guards the floor drawing in the editor and the contract (2026-11-14)
+
+Studio builder QA Phase 0 ([plan](plans/studio-builder.md), ISS-037 to ISS-044). Amends D273's floor rules.
+
+- **New contract rules (server too):** a floor's outline is a simple polygon (`isSimpleOutline`: no side crosses or touches a side that is not next to it, none folds back; zero-length sides allowed, as the editor keeps them), "The outline crosses itself"; door and window ids are unique across the layout's edges and inside walls, "Door and window ids repeat". No migration. The editor gives repeated ids new ones when it loads a layout (`renewRepeatedOpeningIds`; the first keeps its id, so Explore's street door is never renamed). A saved crossing outline would stop autosave until it is dragged straight; saved data is to be checked before deploying (query in the [QA area](qa/studio-builder/README.md)).
+- **Limits before the change:** `useLayoutDraft.change()` refuses a change that takes a floor past 200 pieces, 100 inside walls or 64 KB (`designer/limits.ts`), says why, and returns false. Only growth is refused. One check covers every way of adding.
+- **Street door:** an edit that removes Explore's chosen street door asks first. Agreeing clears the door and turns Explore off in the same undo step (owner, 2026-11-14, over the recommendation to refuse). Moving a floor keeps its refusal.
+- **Corner delete:** the joined edge keeps only the openings its kind takes; no warning (owner).
+- **3D stays mounted** after its first show (ISS-041 step 1) and rebuilds only while shown.
+- **Alternatives:** refuse a street-door edit (the owner chose confirm); check limits at each add path (rejected: easy to miss one); repair crossing outlines on load (rejected: no shape-preserving repair exists).
+- **Consequences:** a layout that breaks a new rule cannot be saved until fixed; repeated ids are fixed for the owner, crossing outlines are not.
+

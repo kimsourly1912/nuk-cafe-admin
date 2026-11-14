@@ -3,6 +3,7 @@ import { layoutSchema, NO_SCENE } from '#shared/contracts/shop-layout'
 import type { BranchLayout, ItemLook, LayoutItem, LayoutTable, Placement, ScenePreset, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, NEW_TABLE_LOOK } from '../designer/catalog'
 import { copySelected } from '../designer/group'
+import { renewRepeatedOpeningIds } from '../designer/walls'
 import type { PlanClipboard } from '../designer/group'
 import type { PlanSelection } from '../designer/plan'
 import { fetchBranchLayout, useBranchLayout, useItemLooks, useLayoutMutations, useLooks } from './useBranches'
@@ -55,7 +56,10 @@ export function useLayoutEditor(branchId: string) {
   const itemLooksQuery = useItemLooks({ immediate: false })
   const { save: saveMutation } = useLayoutMutations()
   const confirm = useConfirm()
-  const draft: LayoutDraft = useLayoutDraft({ floors: [], placements: [], scene: NO_SCENE })
+  const toast = useToast()
+  const draft: LayoutDraft = useLayoutDraft({ floors: [], placements: [], scene: NO_SCENE }, {
+    onRefused: reason => toast.add({ title: 'Not changed', description: reason, color: 'neutral', icon: 'i-lucide-info' }),
+  })
 
   /** The version the draft started from; 0 until the branch's first save. */
   const version = ref(0)
@@ -143,7 +147,7 @@ export function useLayoutEditor(branchId: string) {
   function start(layout: BranchLayout) {
     applied = layout
     version.value = layout.version
-    draft.reset({ floors: cloneFormValue(layout.floors), placements: cloneFormValue(layout.placements), scene: cloneFormValue(layout.scene), ...(layout.pages && { pages: cloneFormValue(layout.pages) }) })
+    draft.reset({ floors: renewRepeatedOpeningIds(cloneFormValue(layout.floors)), placements: cloneFormValue(layout.placements), scene: cloneFormValue(layout.scene), ...(layout.pages && { pages: cloneFormValue(layout.pages) }) })
     unsaved.markClean(draft.layout.value)
     conflict.value = null
     problem.value = null
@@ -262,7 +266,7 @@ export function useLayoutEditor(branchId: string) {
    */
   function restore(snapshot: ShopLayout) {
     draft.change((layout) => {
-      layout.floors = cloneFormValue(snapshot.floors)
+      layout.floors = renewRepeatedOpeningIds(cloneFormValue(snapshot.floors))
       layout.placements = cloneFormValue(snapshot.placements)
       if (snapshot.scene) layout.scene = cloneFormValue(snapshot.scene)
       layout.pages = snapshot.pages && cloneFormValue(snapshot.pages)
@@ -284,7 +288,7 @@ export function useLayoutEditor(branchId: string) {
     applied = latest
     version.value = latest.version
     draft.change((layout) => {
-      layout.floors = cloneFormValue(latest.floors)
+      layout.floors = renewRepeatedOpeningIds(cloneFormValue(latest.floors))
       layout.placements = cloneFormValue(latest.placements)
       layout.scene = cloneFormValue(latest.scene)
       layout.pages = latest.pages && cloneFormValue(latest.pages)

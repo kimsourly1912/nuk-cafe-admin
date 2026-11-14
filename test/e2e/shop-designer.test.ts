@@ -1936,6 +1936,34 @@ describe('the shop designer on saved layouts', () => {
     expect(await published.json()).toMatchObject({ scene: { entrance: 'street-door', explore: true } })
     expect((await fetch(publicPath(seed.secondCafe.slug))).status).toBe(404)
 
+    // ISS-038: deleting the wall that holds the street door asks first. Cancel keeps Explore on;
+    // agreeing turns it off for customers, and Undo brings the door and Explore back.
+    const warning = page.getByRole('alertdialog').or(page.getByRole('dialog')).filter({ hasText: 'Turn off Explore?' })
+    async function deleteStreetWall() {
+      await clickPlan(page, { x: 100, y: 500 })
+      await page.keyboard.press('Delete')
+      await warning.waitFor()
+    }
+    /** Closes the phone's Properties sheet and clears the edge, so Properties shows Explore settings again. */
+    async function deselect() {
+      await page.keyboard.press('Escape')
+      await plan(page).press('Escape')
+    }
+    await deleteStreetWall()
+    await warning.getByRole('button', { name: 'Cancel' }).click()
+    await deselect()
+    await openExplore()
+    expect(await toggle.getAttribute('aria-checked')).toBe('true')
+    await dialog.getByRole('button', { name: 'Done' }).click()
+    await deleteStreetWall()
+    await warning.getByRole('button', { name: 'Turn off Explore' }).click()
+    await save(page)
+    expect((await fetch(publicPath())).status).toBe(404)
+    await deselect()
+    await page.keyboard.press('ControlOrMeta+z')
+    await save(page)
+    expect((await fetch(publicPath())).status).toBe(200)
+
     await openExplore()
     await toggle.click()
     await dialog.getByRole('button', { name: 'Done' }).click()
