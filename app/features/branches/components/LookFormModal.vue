@@ -13,6 +13,7 @@ import type { FinishSlot } from '../designer/catalog'
 import { BUILT_IN_LOOKS, ITEM_SPECS, lookFinish, TABLE_SLOTS } from '../designer/catalog'
 import type { StudioViewer } from '../designer/scene/studio-viewer'
 import { useLookMutations } from '../composables/useBranches'
+import FinishPicker from './FinishPicker.vue'
 
 const props = defineProps<{
   /** The look to edit; omit to add one. */

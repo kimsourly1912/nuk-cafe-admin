@@ -1,4 +1,4 @@
-import type { DoorHinge, DoorSwing, Floor, Opening, OpeningKind, Point, Slab, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
+import type { DoorHinge, DoorSwing, FinishColor, Floor, Opening, OpeningKind, Point, Slab, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
 import { signedArea, wallKind, wallLength } from '#shared/contracts/shop-layout'
 import { newLayoutId, pointAlongWall, pointInPolygon, WALL_THICKNESS_CM, wallBand, wallNormal, wallStrip, wallThickness } from './geometry'
 import type { WallSegment } from './geometry'
@@ -73,7 +73,7 @@ function firstFreeOffset(placed: readonly Opening[], wanted: number, width: numb
  */
 function tidy(wall: Wall, changes: Partial<Wall> = {}): Wall {
   const next = { ...wall, ...changes }
-  const { kind: _kind, openings: _openings, side: _side, thickness: _thickness, height: _height, ...rest } = next
+  const { kind: _kind, openings: _openings, side: _side, thickness: _thickness, height: _height, color: _color, ...rest } = next
   const kind = wallKind(next)
   const openings = next.openings ?? []
   return {
@@ -85,6 +85,7 @@ function tidy(wall: Wall, changes: Partial<Wall> = {}): Wall {
     ...(next.side && { side: next.side }),
     ...(next.thickness && { thickness: next.thickness }),
     ...(next.height && { height: next.height }),
+    ...(next.color && { color: next.color }),
   }
 }
 
@@ -118,12 +119,14 @@ export interface WallStructure {
   thickness?: number | null
   height?: number | null
   side?: WallSide | null
+  /** Its colour (D285); null: the kind's own. */
+  color?: FinishColor | null
 }
 
 export function setWallStructure(walls: readonly Wall[], id: string, change: WallStructure): Wall[] {
   return replace(walls, id, (wall) => {
     const pick = <K extends keyof WallStructure>(key: K) => (change[key] === undefined ? wall[key] : change[key] ?? undefined)
-    return tidy({ ...wall, thickness: pick('thickness') as number | undefined, height: pick('height') as number | undefined, side: pick('side') as WallSide | undefined })
+    return tidy({ ...wall, thickness: pick('thickness') as number | undefined, height: pick('height') as number | undefined, side: pick('side') as WallSide | undefined, color: pick('color') as FinishColor | undefined })
   })
 }
 
@@ -381,7 +384,7 @@ const roundPoint = (point: Point): Point => ({ x: Math.round(point.x), y: Math.r
  */
 export function copyStructure(below: Pick<Floor, 'slabs' | 'walls'>): Pick<Floor, 'slabs' | 'walls'> {
   return {
-    slabs: below.slabs.map(slab => ({ id: newLayoutId('slab'), outline: slab.outline.map(point => ({ ...point })) })),
+    slabs: below.slabs.map(slab => ({ id: newLayoutId('slab'), outline: slab.outline.map(point => ({ ...point })), ...(slab.floor && { floor: slab.floor }), ...(slab.color && { color: slab.color }) })),
     walls: below.walls.map((wall) => {
       const { id: _id, openings: _openings, name: _name, hidden: _hidden, locked: _locked, ...rest } = wall
       return tidy({ ...rest, id: newLayoutId('wall') })

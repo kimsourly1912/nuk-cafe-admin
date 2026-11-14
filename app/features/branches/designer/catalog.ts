@@ -56,6 +56,18 @@ export function finishSwatch(finish: Finish, material: FinishMaterial): FinishSw
   return FINISH_SWATCHES[finish] ?? FINISH_SWATCHES['warm-oak']
 }
 
+/**
+ * The building's own colours (D285), before the owner picks one: a wall's plaster, a railing's or
+ * glass's frame, and each floor surface. The 3D materials are made from these.
+ */
+export const BUILDING_COLORS = {
+  plaster: { color: '#efe4d6', label: 'Plaster' },
+  frame: { color: '#2b2622', label: 'Dark metal' },
+  planks: { color: '#c08a55', label: 'Planks' },
+  tiles: { color: '#a89a8c', label: 'Tiles' },
+  concrete: { color: '#b7b0a6', label: 'Concrete' },
+} as const
+
 /** A finish's base colour, for the plan and the swatches. */
 export const finishColor = (finish: Finish): string => finishSwatch(finish, 'wood').color
 

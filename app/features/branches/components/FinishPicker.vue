@@ -12,22 +12,29 @@ import { FINISH_SWATCHES, finishColor, finishSwatch } from '../designer/catalog'
 
 const props = withDefaults(defineProps<{
   label: string
-  /** The current finish, the slot's default included. */
-  modelValue: Finish
+  /** The current finish, the slot's default included; left out: none picked (a wall's own plaster). */
+  modelValue?: Finish
+  /** Where the colour picker starts when nothing is picked. */
+  startColor?: string
   options?: readonly FinishKey[]
+  /** Names the value instead of its swatch's name (a wall's "Plaster" before a colour is picked). */
+  valueLabel?: string
   /** Studio's inspector: round swatches, a stronger label; the forms' are square and larger. */
   round?: boolean
   disabled?: boolean
-}>(), { options: () => [], round: false, disabled: false })
+}>(), { modelValue: undefined, startColor: '#ffffff', options: () => [], valueLabel: undefined, round: false, disabled: false })
 const emit = defineEmits<{ 'update:modelValue': [finish: Finish] }>()
 
-const custom = computed(() => isFinishColor(props.modelValue))
+/** The colour picked, when the value is one of the owner's own. */
+const customColor = computed(() => (props.modelValue !== undefined && isFinishColor(props.modelValue) ? props.modelValue : undefined))
+const custom = computed(() => customColor.value !== undefined)
+const name = computed(() => props.valueLabel ?? (props.modelValue === undefined ? '' : finishSwatch(props.modelValue, 'wood').label))
 const open = ref(false)
 const draft = ref('#ffffff')
 const typed = ref('')
 watch(open, (isOpen) => {
   if (!isOpen) return
-  draft.value = finishColor(props.modelValue)
+  draft.value = props.modelValue === undefined ? props.startColor : finishColor(props.modelValue)
   typed.value = draft.value
 })
 
@@ -65,7 +72,7 @@ const swatchClass = computed(() => [
     :aria-label="label"
   >
     <p :class="round ? 'text-sm font-medium text-highlighted' : 'text-sm text-toned'">
-      {{ label }} <span :class="round ? 'font-normal text-muted' : 'text-muted'">· {{ finishSwatch(modelValue, 'wood').label }}</span>
+      {{ label }} <span :class="round ? 'font-normal text-muted' : 'text-muted'">· {{ name }}</span>
     </p>
     <div class="flex flex-wrap gap-2">
       <button
@@ -87,8 +94,8 @@ const swatchClass = computed(() => [
           type="button"
           :class="swatchClass"
           class="grid place-items-center"
-          :style="{ background: custom ? modelValue : 'conic-gradient(#e5484d, #f5d90a, #46a758, #0090ff, #8e4ec6, #e5484d)' }"
-          :aria-label="custom ? `Custom colour ${modelValue.toUpperCase()}` : 'Custom colour'"
+          :style="{ background: customColor ?? 'conic-gradient(#e5484d, #f5d90a, #46a758, #0090ff, #8e4ec6, #e5484d)' }"
+          :aria-label="custom ? `Custom colour ${name}` : 'Custom colour'"
           :aria-pressed="custom"
           :disabled="disabled"
           :data-testid="`finish-custom-${label}`"

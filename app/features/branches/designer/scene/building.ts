@@ -1,11 +1,12 @@
 import { BoxGeometry, ExtrudeGeometry, Group, Mesh, Path, PointLight, Shape, Vector2, Vector3 } from 'three'
 import type { BufferGeometry, Material, Object3D } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import type { Floor, Opening, Point } from '#shared/contracts/shop-layout'
+import type { Floor, FloorSurface, Opening, Point } from '#shared/contracts/shop-layout'
 import { edgeLength, wallLength } from '#shared/contracts/shop-layout'
 import { floorInteriorPoint, mainSlab, outwardNormal, pointInPolygon, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, WALL_THICKNESS_CM, wallFacesOut, wallHeight, wallNormal, wallOutward, wallPieces, wallThickness, openingSpan } from '../geometry'
 import { drawWalls } from '../walls'
 import type { BuildContext } from './furniture'
+import type { SurfaceKey } from './materials'
 import { cm, yRotation } from './units'
 
 /**
@@ -32,6 +33,9 @@ export interface FloorBuild {
   lights: PointLight[]
 }
 
+/** The 3D surface a floor surface is laid with (D285). */
+const FLOOR_SURFACE_MATERIAL: Record<FloorSurface, SurfaceKey> = { planks: 'floor-wood', tiles: 'floor-tiles', concrete: 'concrete' }
+
 export interface FloorBuildOptions {
   floor: Floor
   /** For the stairwell: stairs on the floor below come up through this floor's slab. */
@@ -50,8 +54,8 @@ export function buildFloor(context: BuildContext, options: FloorBuildOptions): F
   const surfaces = context.materials
 
   const stairs = (floorBelow?.items ?? []).filter(item => item.kind === 'stairs')
-  const floorMaterial = surfaces.surface(floor.hasRoof ? 'floor-wood' : 'floor-tiles')
   for (const surface of floor.slabs) {
+    const floorMaterial = surfaces.tinted(FLOOR_SURFACE_MATERIAL[surface.floor ?? (floor.hasRoof ? 'planks' : 'tiles')], surface.color)
     const stairwells = stairs.filter(item => pointInPolygon(item, surface.outline)).map(item => rectCorners(item, item.width + 10, item.depth, item.rotation))
     const slab = new Mesh(slabGeometry(context, surface.outline, SLAB_THICKNESS_CM, stairwells), [floorMaterial, surfaces.surface('slab')])
     slab.position.y = -cm(SLAB_THICKNESS_CM)
@@ -76,14 +80,16 @@ export function buildFloor(context: BuildContext, options: FloorBuildOptions): F
     wallGroup.position.set(cm(center.x), 0, cm(center.y))
     const openings = wall.openings ?? []
     const height = wallHeight(wall, floor.height)
-    if (kind === 'railing') railingEdge(context, wallGroup, length, openings, height)
+    // A wall's colour (D285) is its plaster's; a railing's or glass's, its frame's.
+    if (kind === 'railing') railingEdge(context, wallGroup, length, openings, height, wall.color)
     else {
       const thickness = wallThickness(wall)
-      wallEdge(context, wallGroup, { length, height, openings, startExtra: reach.start, endExtra: reach.end, thickness, surface: kind === 'glass' ? 'glass' : 'plaster', leaves: kind === 'wall' })
+      wallEdge(context, wallGroup, { length, height, openings, startExtra: reach.start, endExtra: reach.end, thickness, surface: kind === 'glass' ? 'glass' : 'plaster', color: kind === 'glass' ? undefined : wall.color, leaves: kind === 'wall' })
       if (kind === 'glass') {
         // A frame along the top and at each end holds the glass.
-        addBox(context, wallGroup, length, 4, 6, surfaces.surface('frame'), { x: 0, y: height - 2, z: 0 })
-        for (const end of [-length / 2 + 2, length / 2 - 2]) addBox(context, wallGroup, 4, height, 6, surfaces.surface('frame'), { x: end, y: height / 2, z: 0 })
+        const frame = surfaces.tinted('frame', wall.color)
+        addBox(context, wallGroup, length, 4, 6, frame, { x: 0, y: height - 2, z: 0 })
+        for (const end of [-length / 2 + 2, length / 2 - 2]) addBox(context, wallGroup, 4, height, 6, frame, { x: end, y: height / 2, z: 0 })
       }
     }
     group.add(wallGroup)
@@ -179,13 +185,15 @@ interface WallEdgeOptions {
   /** The wall's own or its kind's (`wallThickness`). */
   thickness?: number
   surface?: 'plaster' | 'glass'
+  /** The plaster's colour (D285); left out: the plaster's own. */
+  color?: string
   /** Door leaves in its doorways (a half wall's or glass's doorway is an open gap). */
   leaves?: boolean
 }
 
 /** One edge's wall as merged solid pieces, plus window glass and frames and door leaves. */
 function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions) {
-  const { length, height, openings, startExtra, endExtra, thickness = WALL_THICKNESS_CM, surface = 'plaster', leaves = true } = options
+  const { length, height, openings, startExtra, endExtra, thickness = WALL_THICKNESS_CM, surface = 'plaster', color, leaves = true } = options
   const pieces = wallPieces(length, height, openings).map(piece => ({
     ...piece,
     from: piece.from === 0 ? -startExtra : piece.from,
@@ -201,7 +209,7 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
     for (const piece of boxes) piece.dispose()
     // Owned by this wall: its size is its own, so it isn't cached.
     context.geometries.set(`wall:${group.uuid}`, merged)
-    const mesh = new Mesh(merged, context.materials.surface(surface))
+    const mesh = new Mesh(merged, context.materials.tinted(surface, color))
     mesh.castShadow = surface !== 'glass'
     mesh.receiveShadow = true
     group.add(mesh)
@@ -240,8 +248,8 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
 
 /** Posts, a top rail and thin balusters, merged per edge. */
 /** `top`: the rail's height (a railing's own, D282, or `RAILING_HEIGHT_CM`). */
-function railingEdge(context: BuildContext, group: Group, length: number, openings: readonly Opening[], top = RAILING_HEIGHT_CM) {
-  const metal = context.materials.surface('frame')
+function railingEdge(context: BuildContext, group: Group, length: number, openings: readonly Opening[], top = RAILING_HEIGHT_CM, color?: string) {
+  const metal = context.materials.tinted('frame', color)
   const parts: BufferGeometry[] = []
   const add = (width: number, height: number, depth: number, x: number, y: number) => {
     const geometry = new BoxGeometry(cm(width), cm(height), cm(depth))

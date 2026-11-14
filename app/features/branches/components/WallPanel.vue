@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import StudioNumberField from './StudioNumberField.vue'
+import FinishPicker from './FinishPicker.vue'
 /**
  * A wall, selected (D278, D282: outer and inside walls alike): what it is (Wall, Railing, Half
  * wall or Glass), its length, how it is built (thickness, height, which side of its line it stands:
  * owner D3), and its doors and windows. Each change is one undo step, emitted as the floor's new
  * list of walls.
  */
-import type { DoorHinge, DoorSwing, Opening, OpeningKind, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
+import type { DoorHinge, DoorSwing, FinishColor, Opening, OpeningKind, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
 import { OPENING_HEIGHT_MIN_CM, WALL_HEIGHT_MIN_CM, WALL_THICKNESS_MAX_CM, WALL_THICKNESS_MIN_CM, WINDOW_SILL_MAX_CM, wallKind, wallLength } from '#shared/contracts/shop-layout'
+import { BUILDING_COLORS } from '../designer/catalog'
 import { newLayoutId, openingSpan, wallHeight, wallThickness } from '../designer/geometry'
 import { addWallOpening, OPENING_MIN_WIDTH, removeWallOpening, setOpeningShape, setWallKind, setWallLength, setWallStructure, updateWallOpening, wallOpeningFits } from '../designer/walls'
 
@@ -37,6 +39,8 @@ const SIDES: { value: WallSide | 'centre', label: string }[] = [
   { value: 'right', label: 'Right' },
 ]
 const side = computed(() => props.wall.side ?? 'centre')
+/** A wall's or half wall's colour is its plaster's; a railing's or glass's, its frame's (D285). */
+const ownColor = computed(() => (kind.value === 'railing' || kind.value === 'glass' ? BUILDING_COLORS.frame : BUILDING_COLORS.plaster))
 /** How a door or window is built (owner D3): its height (a window's from its sill), within the wall's. */
 const openingHeight = (opening: Opening) => {
   const span = openingSpan(opening, height.value)
@@ -185,6 +189,27 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
         />
       </div>
     </UFormField>
+
+    <div class="flex flex-col gap-1">
+      <FinishPicker
+        round
+        :label="kind === 'railing' || kind === 'glass' ? 'Frame colour' : 'Colour'"
+        :model-value="wall.color"
+        :value-label="wall.color ? undefined : ownColor.label"
+        :start-color="ownColor.color"
+        @update:model-value="color => emit('change', setWallStructure(walls, wall.id, { color: color as FinishColor }))"
+      />
+      <UButton
+        v-if="wall.color"
+        :label="`Use ${ownColor.label.toLowerCase()}`"
+        icon="i-lucide-rotate-ccw"
+        color="neutral"
+        variant="link"
+        size="xs"
+        class="self-start px-0"
+        @click="emit('change', setWallStructure(walls, wall.id, { color: null }))"
+      />
+    </div>
 
     <div class="flex flex-col gap-2">
       <p class="text-sm font-medium text-highlighted">

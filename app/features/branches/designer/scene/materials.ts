@@ -1,7 +1,7 @@
 import { CanvasTexture, Color, DoubleSide, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three'
 import type { Material, Texture } from 'three'
 import type { Finish } from '#shared/contracts/shop-layout'
-import { finishSwatch } from '../catalog'
+import { BUILDING_COLORS, finishSwatch } from '../catalog'
 import type { FinishMaterial } from '../catalog'
 
 /**
@@ -30,6 +30,11 @@ export interface MaterialLibrary {
    */
   finish: (finish: Finish, material?: FinishMaterial) => Material
   surface: (key: SurfaceKey) => Material
+  /**
+   * A building surface in a colour of the owner's own (D285: a wall's plaster, a floor's planks, a
+   * frame), keeping its pattern and roughness; without a colour, the surface itself. Cached.
+   */
+  tinted: (key: SurfaceKey, color?: string) => Material
   setTheme: (dark: boolean) => void
   dispose: () => void
 }
@@ -40,6 +45,7 @@ export function createMaterialLibrary(): MaterialLibrary {
   const textures = new Map<Pattern, Texture>()
   const finishes = new Map<string, Material>()
   const surfaces = new Map<SurfaceKey, Material>()
+  const tints = new Map<string, Material>()
 
   function pattern(key: Pattern): Texture | null {
     if (typeof document === 'undefined') return null
@@ -87,32 +93,44 @@ export function createMaterialLibrary(): MaterialLibrary {
     return material
   }
 
+  function tinted(key: SurfaceKey, color?: string): Material {
+    if (!color) return surface(key)
+    const cacheKey = `${key}:${color}`
+    let material = tints.get(cacheKey)
+    if (material) return material
+    material = surface(key).clone()
+    if ('color' in material && material.color instanceof Color) material.color.set(color)
+    tints.set(cacheKey, material)
+    return material
+  }
+
   function setTheme(dark: boolean) {
     const ground = surface('ground') as MeshStandardMaterial
     ground.color.set(dark ? '#2a221d' : '#e4ddd4')
   }
 
   function dispose() {
-    for (const material of [...finishes.values(), ...surfaces.values()]) material.dispose()
+    for (const material of [...finishes.values(), ...surfaces.values(), ...tints.values()]) material.dispose()
     for (const texture of textures.values()) texture.dispose()
     finishes.clear()
     surfaces.clear()
+    tints.clear()
     textures.clear()
   }
 
-  return { finish, surface, setTheme, dispose }
+  return { finish, surface, tinted, setTheme, dispose }
 }
 
 function makeSurface(key: SurfaceKey, pattern: (key: Pattern) => Texture | null): Material {
   switch (key) {
-    case 'plaster': return new MeshStandardMaterial({ color: '#efe4d6', roughness: 0.9, map: pattern('plaster') })
+    case 'plaster': return new MeshStandardMaterial({ color: BUILDING_COLORS.plaster.color, roughness: 0.9, map: pattern('plaster') })
     case 'plaster-outside': return new MeshStandardMaterial({ color: '#e2d3c0', roughness: 0.92, map: pattern('plaster') })
-    case 'floor-wood': return new MeshStandardMaterial({ color: '#c08a55', roughness: 0.5, map: pattern('planks') })
-    case 'floor-tiles': return new MeshStandardMaterial({ color: '#a89a8c', roughness: 0.7, map: pattern('tiles') })
+    case 'floor-wood': return new MeshStandardMaterial({ color: BUILDING_COLORS.planks.color, roughness: 0.5, map: pattern('planks') })
+    case 'floor-tiles': return new MeshStandardMaterial({ color: BUILDING_COLORS.tiles.color, roughness: 0.7, map: pattern('tiles') })
     case 'slab': return new MeshStandardMaterial({ color: '#d8c8b4', roughness: 0.85 })
     case 'roof': return new MeshStandardMaterial({ color: '#4a4542', roughness: 0.9 })
     case 'glass': return new MeshPhysicalMaterial({ color: '#cfe1e6', roughness: 0.05, metalness: 0, transparent: true, opacity: 0.28, depthWrite: false })
-    case 'frame': return new MeshStandardMaterial({ color: '#2b2622', roughness: 0.5, metalness: 0.4 })
+    case 'frame': return new MeshStandardMaterial({ color: BUILDING_COLORS.frame.color, roughness: 0.5, metalness: 0.4 })
     case 'leaf': return new MeshStandardMaterial({ color: '#4f7a3a', roughness: 0.75, flatShading: true })
     case 'leaf-dark': return new MeshStandardMaterial({ color: '#36592a', roughness: 0.8, flatShading: true })
     case 'soil': return new MeshStandardMaterial({ color: '#3b2a1e', roughness: 1 })
@@ -170,7 +188,7 @@ function makeSurface(key: SurfaceKey, pattern: (key: Pattern) => Texture | null)
     case 'chrome': return new MeshStandardMaterial({ color: '#c9c6c0', roughness: 0.2, metalness: 0.9 })
     case 'jar': return new MeshStandardMaterial({ color: '#7d4527', roughness: 0.35 })
     case 'wire': return new MeshStandardMaterial({ color: '#1e1b19', roughness: 0.6 })
-    case 'concrete': return new MeshStandardMaterial({ color: '#b7b0a6', roughness: 0.95, map: pattern('speckle') })
+    case 'concrete': return new MeshStandardMaterial({ color: BUILDING_COLORS.concrete.color, roughness: 0.95, map: pattern('speckle') })
   }
 }
 

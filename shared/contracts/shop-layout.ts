@@ -253,6 +253,10 @@ export type Opening = v.InferOutput<typeof openingSchema>
 
 export const OUTLINE_CROSSES = 'The outline crosses itself'
 
+/** What a floor surface is laid with (D285). */
+export const FLOOR_SURFACES = ['planks', 'tiles', 'concrete'] as const
+export type FloorSurface = typeof FLOOR_SURFACES[number]
+
 /**
  * A floor surface (D282): one simple polygon, at least 1 m². A floor has 0..n of them; the roof
  * covers the same ones. Clockwise or not, as drawn.
@@ -261,6 +265,10 @@ export const slabSchema = v.pipe(
   v.strictObject({
     id: idSchema,
     outline: v.pipe(v.array(pointSchema), v.minLength(3, 'An outline needs 3 corners'), v.maxLength(LAYOUT_MAX_CORNERS)),
+    /** What the floor is laid with (D285); left out: planks under a roof, tiles in the open. */
+    floor: v.optional(v.picklist(FLOOR_SURFACES)),
+    /** Its colour (D285, owner D2); left out: the surface's own. */
+    color: v.optional(colorSchema),
     name: layerNameSchema,
     hidden: flagSchema,
     locked: flagSchema,
@@ -286,6 +294,8 @@ export const wallSchema = v.strictObject({
   side: v.optional(v.picklist(WALL_SIDES)),
   thickness: v.optional(sizeSchema(WALL_THICKNESS_MIN_CM, WALL_THICKNESS_MAX_CM)),
   height: v.optional(sizeSchema(WALL_HEIGHT_MIN_CM, FLOOR_HEIGHT_MAX_CM)),
+  /** Its colour (D285, owner D2): a wall's or half wall's plaster, a railing's or glass's frame. */
+  color: v.optional(colorSchema),
   name: layerNameSchema,
   hidden: flagSchema,
   locked: flagSchema,

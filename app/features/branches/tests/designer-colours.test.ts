@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
-import { createItemLookSchema, createLookSchema, isFinishColor, itemSchema } from '#shared/contracts/shop-layout'
-import type { LayoutItem, TableLook } from '#shared/contracts/shop-layout'
+import { createItemLookSchema, createLookSchema, floorSchema, isFinishColor, itemSchema } from '#shared/contracts/shop-layout'
+import type { Floor, LayoutItem, TableLook, Wall } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, finishColor, finishSwatch, itemSlotMaterial, lookSlotMaterial } from '../designer/catalog'
 import { buildItem, buildTable, createBuildContext, disposeBuildContext, meshesOf } from '../designer/scene/furniture'
 import { createMaterialLibrary } from '../designer/scene/materials'
+import { buildFloor } from '../designer/scene/building'
+import { setSlabFinish } from '../designer/outline'
+import { copyStructure, setWallKind, setWallStructure } from '../designer/walls'
 
 /** Free colours (D285, owner D2): a finish is a palette key or `#rrggbb`. */
 describe('free colours', () => {
@@ -61,5 +64,62 @@ describe('free colours', () => {
     expect(tableMaterials.has(context.materials.finish('#ffffff', 'wood'))).toBe(true)
     expect(tableMaterials.has(context.materials.finish('#123456', 'metal'))).toBe(true)
     disposeBuildContext(context)
+  })
+})
+
+/** Walls and floor surfaces (D285): a wall's colour, a surface's floor and colour. */
+describe('wall and floor finishes', () => {
+  const square = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 300 }, { x: 0, y: 300 }]
+  const wall: Wall = { id: 'w', from: { x: 0, y: 0 }, to: { x: 400, y: 0 } }
+  const floor = (extra: Partial<Floor> = {}): Floor => ({ id: 'f', name: 'Ground', height: 300, hasRoof: true, items: [], slabs: [{ id: 's', outline: square }], walls: [wall], ...extra })
+  const issues = (value: Floor) => (v.safeParse(floorSchema, value).issues ?? []).map(issue => issue.message)
+
+  it('the contract takes a colour on a wall and a floor and colour on a surface', () => {
+    expect(issues(floor({ walls: [{ ...wall, color: '#336699' }], slabs: [{ id: 's', outline: square, floor: 'concrete', color: '#aabbcc' }] }))).toEqual([])
+    expect(issues(floor({ walls: [{ ...wall, color: 'navy' as never }] }))).toContain('A colour is written #rrggbb')
+    expect(issues(floor({ slabs: [{ id: 's', outline: square, floor: 'marble' as never }] })).length).toBeGreaterThan(0)
+  })
+
+  it('sets and clears a wall\'s colour, and keeps it through a change of kind', () => {
+    const painted = setWallStructure([wall], 'w', { color: '#336699' })
+    expect(painted[0]).toEqual({ ...wall, color: '#336699' })
+    expect(setWallKind(painted, 'w', 'half')[0]).toMatchObject({ kind: 'half', color: '#336699' })
+    expect(setWallStructure(painted, 'w', { thickness: 30 })[0]).toMatchObject({ thickness: 30, color: '#336699' })
+    expect(setWallStructure(painted, 'w', { color: null })[0]).toEqual(wall)
+  })
+
+  it('sets and clears a surface\'s floor and colour; Copy walls from floor below keeps them', () => {
+    const slab = { id: 's', outline: square }
+    const laid = setSlabFinish(slab, { floor: 'tiles', color: '#aabbcc' })
+    expect(laid).toEqual({ ...slab, floor: 'tiles', color: '#aabbcc' })
+    expect(setSlabFinish(laid, { color: null })).toEqual({ ...slab, floor: 'tiles' })
+    expect(setSlabFinish(laid, { floor: null, color: null })).toEqual(slab)
+    const copied = copyStructure({ slabs: [laid], walls: [{ ...wall, color: '#336699' }] })
+    expect(copied.slabs[0]).toMatchObject({ floor: 'tiles', color: '#aabbcc' })
+    expect(copied.walls[0]).toMatchObject({ color: '#336699' })
+  })
+
+  it('3D paints the wall\'s plaster, a railing\'s metal and the surface\'s floor', () => {
+    const context = createBuildContext(createMaterialLibrary())
+    const materialsOf = (built: ReturnType<typeof buildFloor>) => new Set(meshesOf(built.group).flatMap(mesh => (Array.isArray(mesh.material) ? mesh.material : [mesh.material])))
+    const plain = materialsOf(buildFloor(context, { floor: floor(), topmost: true }))
+    expect(plain.has(context.materials.surface('plaster'))).toBe(true)
+    expect(plain.has(context.materials.surface('floor-wood'))).toBe(true)
+    const painted = materialsOf(buildFloor(context, { floor: floor({ walls: [{ ...wall, color: '#336699' }, { id: 'r', kind: 'railing', from: { x: 400, y: 0 }, to: { x: 400, y: 300 }, color: '#cc0000' }], slabs: [{ id: 's', outline: square, floor: 'concrete', color: '#aabbcc' }] }), topmost: true }))
+    expect(painted.has(context.materials.tinted('plaster', '#336699'))).toBe(true)
+    expect(painted.has(context.materials.tinted('frame', '#cc0000'))).toBe(true)
+    expect(painted.has(context.materials.tinted('concrete', '#aabbcc'))).toBe(true)
+    expect(painted.has(context.materials.surface('floor-wood'))).toBe(false)
+    const tiled = materialsOf(buildFloor(context, { floor: floor({ hasRoof: false }), topmost: true }))
+    expect(tiled.has(context.materials.surface('floor-tiles'))).toBe(true)
+    disposeBuildContext(context)
+  })
+
+  it('a tint keeps its surface\'s pattern and is shared', () => {
+    const materials = createMaterialLibrary()
+    expect(materials.tinted('plaster')).toBe(materials.surface('plaster'))
+    expect(materials.tinted('plaster', '#336699')).toBe(materials.tinted('plaster', '#336699'))
+    expect(materials.tinted('plaster', '#336699')).not.toBe(materials.surface('plaster'))
+    materials.dispose()
   })
 })

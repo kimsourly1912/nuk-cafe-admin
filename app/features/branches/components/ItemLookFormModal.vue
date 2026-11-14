@@ -14,6 +14,7 @@ import type { LookCategory } from '../designer/catalog'
 import { ITEM_SPECS, itemFinish, LOOK_CATEGORIES } from '../designer/catalog'
 import type { StudioViewer } from '../designer/scene/studio-viewer'
 import { useItemLookMutations } from '../composables/useBranches'
+import FinishPicker from './FinishPicker.vue'
 
 /** What a new look starts from: a built-in piece, a placed one, or another look (never its photo). */
 export interface ItemLookSource {

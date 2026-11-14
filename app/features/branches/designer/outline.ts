@@ -1,4 +1,4 @@
-import type { Floor, Point, Slab, Wall } from '#shared/contracts/shop-layout'
+import type { FinishColor, Floor, FloorSurface, Point, Slab, Wall } from '#shared/contracts/shop-layout'
 import { signedArea } from '#shared/contracts/shop-layout'
 import { newLayoutId, outwardNormal, snap, SNAP_CM, wallOutward } from './geometry'
 import { followPoints, joinWalls, perimeterWalls, splitWall, wallAlong } from './walls'
@@ -177,4 +177,18 @@ export function withShape<T extends Pick<Floor, 'slabs' | 'walls'>>(floor: T, sl
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+/** A floor surface's finish (D285): what it is laid with and its colour; null puts the default back. */
+export interface SlabFinish {
+  floor?: FloorSurface | null
+  color?: FinishColor | null
+}
+
+/** The surface with its finish changed; a field left out keeps its value. */
+export function setSlabFinish(slab: Slab, change: SlabFinish): Slab {
+  const { floor: _floor, color: _color, ...rest } = slab
+  const floor = change.floor === undefined ? slab.floor : change.floor
+  const color = change.color === undefined ? slab.color : change.color
+  return { ...rest, ...(floor && { floor }), ...(color && { color }) }
 }
