@@ -301,10 +301,13 @@ describe('the shop designer on saved layouts', () => {
     await panel.getByRole('button', { name: 'Railing' }).click()
     await panel.getByRole('button', { name: 'Gate' }).click()
     await panel.getByTestId('wall-opening-door').waitFor()
-    expect(await panel.getByRole('button', { name: 'Window' }).isDisabled()).toBe(true)
+    // A railing takes no windows: the wall panel offers none.
+    expect(await panel.getByRole('button', { name: 'Window' }).count()).toBe(0)
     await shot(page, 'edge-railing-gate')
 
-    // Draw wall (9A): two clicks make a wall; Enter ends the chain.
+    // Draw wall (9A): two clicks make a wall; Enter ends the chain. Counted after the copied outer walls.
+    const drawnWalls = async () => (await plan(page).locator('[data-testid^="plan-wall-"]').count()) - copiedWalls
+    const copiedWalls = await plan(page).locator('[data-testid^="plan-wall-"]').count()
     await drawWith(page, 'Draw wall')
     await page.getByTestId('tool-bar').getByText('Draw wall').waitFor()
     await clickPlan(page, { x: 300, y: 100 })
@@ -312,17 +315,17 @@ describe('the shop designer on saved layouts', () => {
     await page.keyboard.press('Enter')
     // Any angle by default; a click on the chain's first point closes the loop and ends it (ISS-018).
     for (const point of [{ x: 500, y: 100 }, { x: 700, y: 175 }, { x: 550, y: 350 }, { x: 500, y: 100 }]) await clickPlan(page, point)
-    await expect.poll(() => plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(4)
+    await expect.poll(drawnWalls).toBe(4)
     await clickPlan(page, { x: 800, y: 400 })
     await clickPlan(page, { x: 800, y: 400 })
-    expect(await plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(4)
+    expect(await drawnWalls()).toBe(4)
     await page.keyboard.press('Control+z')
     await page.keyboard.press('Control+z')
     await page.keyboard.press('Control+z')
     // Escape ends the chain and leaves the tool.
     await page.keyboard.press('Escape')
     await page.getByTestId('tool-bar').waitFor({ state: 'detached' })
-    await expect.poll(() => plan(page).locator('[data-testid^="plan-wall-"]').count()).toBe(1)
+    await expect.poll(drawnWalls).toBe(1)
     await save(page)
 
     const saved = await savedLayout(page)
@@ -340,6 +343,7 @@ describe('the shop designer on saved layouts', () => {
     const dialog = page.getByRole('alertdialog').or(page.getByRole('dialog')).filter({ hasText: 'Remove the Loft floor?' })
     await dialog.getByText('L2 will move to Unplaced tables. Its QR code keeps working.').waitFor()
     await dialog.getByRole('button', { name: 'Remove floor' }).click()
+    await showPanel(page, 'Tables')
     await unplaced(page, 'L2').waitFor()
     await showPanel(page, 'Floors')
     expect(await page.getByTestId('floor-tab-Loft').count()).toBe(0)
