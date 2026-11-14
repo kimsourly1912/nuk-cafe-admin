@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest'
+import * as v from 'valibot'
+import { createItemLookSchema, createLookSchema, isFinishColor, itemSchema } from '#shared/contracts/shop-layout'
+import type { LayoutItem, TableLook } from '#shared/contracts/shop-layout'
+import { BUILT_IN_LOOKS, finishColor, finishSwatch, itemSlotMaterial, lookSlotMaterial } from '../designer/catalog'
+import { buildItem, buildTable, createBuildContext, disposeBuildContext, meshesOf } from '../designer/scene/furniture'
+import { createMaterialLibrary } from '../designer/scene/materials'
+
+/** Free colours (D285, owner D2): a finish is a palette key or `#rrggbb`. */
+describe('free colours', () => {
+  const chair = (finishes: LayoutItem['finishes']): LayoutItem => ({ id: 'chair', kind: 'cafe-chair', x: 0, y: 0, rotation: 0, width: 48, depth: 53, finishes })
+
+  it('the contract takes a palette key or six lowercase hex digits, and nothing else', () => {
+    expect(isFinishColor('#a0522d')).toBe(true)
+    for (const bad of ['#A0522D', '#a0522', 'a0522d', '#a0522dff', 'red', '#ggg000']) expect(isFinishColor(bad), bad).toBe(false)
+    expect(v.safeParse(itemSchema, chair({ frame: '#a0522d', seat: 'olive' })).success).toBe(true)
+    const issues = v.safeParse(itemSchema, chair({ frame: '#A0522D' })).issues ?? []
+    expect(issues.map(issue => issue.message)).toContain('Not a finish or a colour')
+    expect(v.safeParse(itemSchema, chair({ frame: 'gold' as never })).success).toBe(false)
+  })
+
+  it('table looks and piece looks take colours too', () => {
+    const look = { name: 'Painted', shape: 'round', base: 'pedestal', chair: 'cafe-chair', finishes: { top: '#ffffff', base: '#123456', frame: 'walnut', seat: '#c0ffee' }, defaultWidth: 80, defaultDepth: 80 }
+    expect(v.safeParse(createLookSchema, look).success).toBe(true)
+    expect(v.safeParse(createLookSchema, { ...look, finishes: { ...look.finishes, top: '#fff' } }).success).toBe(false)
+    expect(v.safeParse(createItemLookSchema, { name: 'Blue chair', kind: 'cafe-chair', finishes: { frame: '#1d4ed8' }, defaultWidth: 48, defaultDepth: 53 }).success).toBe(true)
+  })
+
+  it('a colour is drawn with its slot\'s material; a palette key keeps its own', () => {
+    expect(finishSwatch('#a0522d', 'fabric')).toEqual({ label: '#A0522D', color: '#a0522d', material: 'fabric' })
+    expect(finishSwatch('walnut', 'fabric').material).toBe('wood')
+    expect(finishColor('navy')).toBe('#2e4057')
+    expect(itemSlotMaterial('cafe-chair', 'frame')).toBe('wood')
+    expect(itemSlotMaterial('cafe-chair', 'seat')).toBe('fabric')
+    expect(itemSlotMaterial('coffee-station', 'machine')).toBe('metal')
+    expect(itemSlotMaterial('block', 'body')).toBe('stone')
+    const look = BUILT_IN_LOOKS[0]! as TableLook
+    expect(lookSlotMaterial(look, 'top')).toBe('wood')
+    expect(lookSlotMaterial(look, 'base')).toBe('metal')
+    expect(lookSlotMaterial(look, 'seat')).toBe('fabric')
+    expect(lookSlotMaterial({ chair: 'none' }, 'seat')).toBe('fabric')
+  })
+
+  it('shares one material per material and colour', () => {
+    const materials = createMaterialLibrary()
+    expect(materials.finish('#a0522d', 'wood')).toBe(materials.finish('#a0522d', 'wood'))
+    expect(materials.finish('#a0522d', 'wood')).not.toBe(materials.finish('#a0522d', 'fabric'))
+    expect(materials.finish('walnut', 'fabric')).toBe(materials.finish('walnut'))
+    materials.dispose()
+  })
+
+  it('the building paints a piece and a table in their colours', () => {
+    const context = createBuildContext(createMaterialLibrary())
+    const piece = buildItem(context, chair({ frame: '#a0522d', seat: '#c0ffee' }))
+    const used = new Set(meshesOf(piece).map(mesh => mesh.material))
+    expect(used.has(context.materials.finish('#a0522d', 'wood'))).toBe(true)
+    expect(used.has(context.materials.finish('#c0ffee', 'fabric'))).toBe(true)
+    const look: TableLook = { ...BUILT_IN_LOOKS[0]!, finishes: { top: '#ffffff', base: '#123456' } }
+    const table = buildTable(context, look, 80, 80, 2)
+    const tableMaterials = new Set(meshesOf(table).map(mesh => mesh.material))
+    expect(tableMaterials.has(context.materials.finish('#ffffff', 'wood'))).toBe(true)
+    expect(tableMaterials.has(context.materials.finish('#123456', 'metal'))).toBe(true)
+    disposeBuildContext(context)
+  })
+})

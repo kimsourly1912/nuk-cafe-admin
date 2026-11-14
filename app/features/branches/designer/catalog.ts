@@ -1,5 +1,5 @@
-import { FIGURE_SIZES, ITEM_HEIGHTS, itemHeightRange, SHAPE_HEIGHT } from '#shared/contracts/shop-layout'
-import type { FigureKind, Finish, ItemKind, ItemLook, LayoutItem, ScenePreset, TableLook } from '#shared/contracts/shop-layout'
+import { FIGURE_SIZES, isFinishColor, ITEM_HEIGHTS, itemHeightRange, SHAPE_HEIGHT } from '#shared/contracts/shop-layout'
+import type { FigureKind, Finish, FinishKey, ItemKind, ItemLook, LayoutItem, ScenePreset, TableLook } from '#shared/contracts/shop-layout'
 
 /**
  * What the shop designer can place and how it looks (D273). The 2D editor and the 3D builders both
@@ -15,7 +15,7 @@ export interface FinishSwatch {
   material: FinishMaterial
 }
 
-export const FINISH_SWATCHES: Record<Finish, FinishSwatch> = {
+export const FINISH_SWATCHES: Record<FinishKey, FinishSwatch> = {
   'warm-oak': { label: 'Warm oak', color: '#b9773e', material: 'wood' },
   'walnut': { label: 'Walnut', color: '#6b4428', material: 'wood' },
   'pale-oak': { label: 'Pale oak', color: '#d9b98c', material: 'wood' },
@@ -34,17 +34,33 @@ export const FINISH_SWATCHES: Record<Finish, FinishSwatch> = {
   'white-marble': { label: 'White marble', color: '#ece8e1', material: 'stone' },
 }
 
-const WOODS: Finish[] = ['warm-oak', 'walnut', 'pale-oak', 'dark-wood']
-const METALS: Finish[] = ['graphite', 'steel', 'brass']
-const FABRICS: Finish[] = ['olive', 'linen', 'chocolate', 'terracotta', 'navy']
-const STONES: Finish[] = ['limestone', 'taupe-stone', 'black-stone', 'white-marble']
+const WOODS: FinishKey[] = ['warm-oak', 'walnut', 'pale-oak', 'dark-wood']
+const METALS: FinishKey[] = ['graphite', 'steel', 'brass']
+const FABRICS: FinishKey[] = ['olive', 'linen', 'chocolate', 'terracotta', 'navy']
+const STONES: FinishKey[] = ['limestone', 'taupe-stone', 'black-stone', 'white-marble']
 
 export interface FinishSlot {
   key: string
   label: string
-  options: Finish[]
-  default: Finish
+  /** The palette's suggestions; any free colour is allowed too (D285). */
+  options: FinishKey[]
+  default: FinishKey
 }
+
+/**
+ * How a finish is drawn (D285): a palette key's own swatch, or a free colour with the material of
+ * the slot it is in (`material`: a chair's frame stays wood, its upholstery fabric).
+ */
+export function finishSwatch(finish: Finish, material: FinishMaterial): FinishSwatch {
+  if (isFinishColor(finish)) return { label: finish.toUpperCase(), color: finish, material }
+  return FINISH_SWATCHES[finish] ?? FINISH_SWATCHES['warm-oak']
+}
+
+/** A finish's base colour, for the plan and the swatches. */
+export const finishColor = (finish: Finish): string => finishSwatch(finish, 'wood').color
+
+/** The material a free colour takes in a slot: its default finish's (D285). */
+export const slotMaterial = (slot: Pick<FinishSlot, 'default'>): FinishMaterial => FINISH_SWATCHES[slot.default].material
 
 export type ItemCategory = 'chairs' | 'lounge' | 'fixtures' | 'service' | 'decor' | 'outdoor' | 'structure' | 'figures'
 
@@ -98,8 +114,8 @@ export type FigureShape = 'person' | 'animal' | 'hammock'
  */
 export const BUILT_IN_PHOTO = (id: string) => `/shop-designer/looks/${id}.webp`
 
-const frame = (fallback: Finish, options: Finish[] = WOODS): FinishSlot => ({ key: 'frame', label: 'Frame', options, default: fallback })
-const seat = (fallback: Finish): FinishSlot => ({ key: 'seat', label: 'Upholstery', options: FABRICS, default: fallback })
+const frame = (fallback: FinishKey, options: FinishKey[] = WOODS): FinishSlot => ({ key: 'frame', label: 'Frame', options, default: fallback })
+const seat = (fallback: FinishKey): FinishSlot => ({ key: 'seat', label: 'Upholstery', options: FABRICS, default: fallback })
 
 const figure = (kind: FigureKind, label: string, shape: FigureShape, height: number): ItemSpec =>
   ({ kind, label, category: 'figures', footprint: 'rect', ...FIGURE_SIZES[kind], height, slots: [], photo: BUILT_IN_PHOTO(kind), figure: shape })
@@ -181,6 +197,18 @@ export function findLook(looks: readonly TableLook[], id: string): TableLook {
 export function itemFinish(kind: ItemKind, finishes: Partial<Record<string, Finish>>, key: string): Finish {
   const slot = ITEM_SPECS[kind].slots.find(candidate => candidate.key === key)
   return finishes[key] ?? slot?.default ?? 'warm-oak'
+}
+
+/** The material a free colour takes in a kind's slot (D285); wood when the kind has no such slot. */
+export function itemSlotMaterial(kind: ItemKind, key: string): FinishMaterial {
+  const slot = ITEM_SPECS[kind].slots.find(candidate => candidate.key === key)
+  return slot ? slotMaterial(slot) : 'wood'
+}
+
+/** The material a free colour takes in a table look's slot: the table's, or its chair kind's. */
+export function lookSlotMaterial(look: Pick<TableLook, 'chair'>, key: string): FinishMaterial {
+  if (key === 'top' || key === 'base') return slotMaterial(TABLE_SLOTS[key])
+  return look.chair === 'none' ? (key === 'seat' ? 'fabric' : 'wood') : itemSlotMaterial(look.chair, key)
 }
 
 /** A look's finish for a slot; chair slots fall back to the chair kind's defaults. */

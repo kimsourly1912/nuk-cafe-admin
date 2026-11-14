@@ -18,7 +18,7 @@ import { useLayoutGroupMutations, useLayoutGroups } from '../composables/useBran
 import { losesStreetDoor } from '../composables/useLayoutDraft'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
 import type { AlignEdge, PlanClipboard } from '../designer/group'
-import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
+import { CATEGORIES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
 import { fittedRadius, maxRadius, polygonShape } from '../designer/shapes'
 import type { ShapeEdit } from '../designer/shapes'
 import { besideOf, boundsOf, floorPoints, newLayoutId, nextSnapStep, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
@@ -1723,8 +1723,6 @@ function setRotation(value: number | null | undefined) {
   if (next !== current.rotation) rotate(target, next)
 }
 
-const swatch = (finish: Finish) => FINISH_SWATCHES[finish]
-
 function chooseStarter(starter: Starter) {
   props.editor.begin(starter.layout())
 }
@@ -2886,30 +2884,15 @@ const pendingLabel = computed(() => {
         v-if="!selectedItemLook && ITEM_SPECS[selectedItem.kind].slots.length"
         label="Finishes"
       />
-      <div
+      <FinishPicker
         v-for="slot in (selectedItemLook ? [] : ITEM_SPECS[selectedItem.kind].slots)"
         :key="slot.key"
-        class="flex flex-col gap-2"
-        role="group"
-        :aria-label="slot.label"
-      >
-        <p class="text-sm font-medium text-highlighted">
-          {{ slot.label }}
-          <span class="font-normal text-muted">· {{ swatch(itemFinish(selectedItem.kind, selectedItem.finishes, slot.key)).label }}</span>
-        </p>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="option in slot.options"
-            :key="option"
-            type="button"
-            class="size-8 rounded-full border border-default ring-offset-2 ring-offset-(--ui-bg) focus-visible:outline-2 focus-visible:outline-primary aria-pressed:ring-2 aria-pressed:ring-primary"
-            :style="{ background: swatch(option).color }"
-            :aria-label="swatch(option).label"
-            :aria-pressed="itemFinish(selectedItem.kind, selectedItem.finishes, slot.key) === option"
-            @click="updateItem(selectedItem!.id, { finishes: { ...selectedItem!.finishes, [slot.key]: option } })"
-          />
-        </div>
-      </div>
+        round
+        :label="slot.label"
+        :options="slot.options"
+        :model-value="itemFinish(selectedItem.kind, selectedItem.finishes, slot.key)"
+        @update:model-value="updateItem(selectedItem!.id, { finishes: { ...selectedItem!.finishes, [slot.key]: $event } })"
+      />
     </div>
 
     <WallPanel

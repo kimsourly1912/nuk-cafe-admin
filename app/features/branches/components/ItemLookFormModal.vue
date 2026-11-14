@@ -11,7 +11,7 @@
 import type { CreateItemLookInput, CustomItemLook, Finish, ItemLookKind } from '#shared/contracts/shop-layout'
 import { heightFits, heightRangeMessage, ITEM_HEIGHTS, ITEM_LOOK_KINDS, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, LOOK_NAME_MAX } from '#shared/contracts/shop-layout'
 import type { LookCategory } from '../designer/catalog'
-import { FINISH_SWATCHES, ITEM_SPECS, itemFinish, LOOK_CATEGORIES } from '../designer/catalog'
+import { ITEM_SPECS, itemFinish, LOOK_CATEGORIES } from '../designer/catalog'
 import type { StudioViewer } from '../designer/scene/studio-viewer'
 import { useItemLookMutations } from '../composables/useBranches'
 
@@ -345,30 +345,15 @@ const noun = computed(() => LOOK_CATEGORIES.find(category => category.key === sp
             <legend class="mb-2 text-sm font-medium text-highlighted">
               Finishes
             </legend>
-            <div
+            <FinishPicker
               v-for="slot in spec.slots"
               :key="slot.key"
-              class="flex flex-col gap-1.5"
-              role="group"
-              :aria-label="slot.label"
-            >
-              <p class="text-sm text-toned">
-                {{ slot.label }} <span class="text-muted">· {{ FINISH_SWATCHES[state.finishes[slot.key] ?? slot.default].label }}</span>
-              </p>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="option in slot.options"
-                  :key="option"
-                  type="button"
-                  class="size-9 rounded-md border border-default ring-offset-2 ring-offset-(--ui-bg) focus-visible:outline-2 focus-visible:outline-primary aria-pressed:ring-2 aria-pressed:ring-primary"
-                  :style="{ background: FINISH_SWATCHES[option].color }"
-                  :aria-label="FINISH_SWATCHES[option].label"
-                  :aria-pressed="(state.finishes[slot.key] ?? slot.default) === option"
-                  :disabled="saving"
-                  @click="state.finishes[slot.key] = option"
-                />
-              </div>
-            </div>
+              :label="slot.label"
+              :options="slot.options"
+              :model-value="state.finishes[slot.key] ?? slot.default"
+              :disabled="saving"
+              @update:model-value="state.finishes[slot.key] = $event"
+            />
           </fieldset>
 
           <UFormField

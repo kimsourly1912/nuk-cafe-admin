@@ -37,14 +37,22 @@ export const LAYOUT_MAX_FLOOR_BYTES = 64 * 1024
 /** The save's body, at most: every floor full, every table placed, with room for the JSON around them. */
 export const LAYOUT_MAX_BODY_BYTES = 768 * 1024
 
-/** The fixed finish palette (D273): looks store keys, never free colors. */
+/**
+ * The finish palette (D273). A finish is one of its keys or, since D285 (owner D2, free colours), a
+ * colour of the owner's own, `#rrggbb` in lowercase: drawn with the material of the slot it is in.
+ */
 export const FINISHES = [
   'warm-oak', 'walnut', 'pale-oak', 'dark-wood',
   'graphite', 'steel', 'brass',
   'olive', 'linen', 'chocolate', 'terracotta', 'navy',
   'limestone', 'taupe-stone', 'black-stone', 'white-marble',
 ] as const
-export type Finish = typeof FINISHES[number]
+export type FinishKey = typeof FINISHES[number]
+/** A colour of the owner's own (D285): `#` and six lowercase hex digits. */
+export type FinishColor = `#${string}`
+export type Finish = FinishKey | FinishColor
+export const FINISH_COLOR_PATTERN = /^#[0-9a-f]{6}$/
+export const isFinishColor = (value: string): value is FinishColor => FINISH_COLOR_PATTERN.test(value)
 
 /**
  * People and pets (step 3g, D274): decoration the owner places like furniture. A figure is a model
@@ -204,7 +212,9 @@ const layerNameSchema = v.optional(v.pipe(v.string(), v.trim(), v.minLength(1, '
 const cmSchema = v.pipe(v.number(), v.integer(), v.minValue(-LAYOUT_MAX_EXTENT_CM), v.maxValue(LAYOUT_MAX_EXTENT_CM))
 const sizeSchema = (min: number, max: number) => v.pipe(v.number(), v.integer(), v.minValue(min), v.maxValue(max))
 const rotationSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(359))
-const finishSchema = v.picklist(FINISHES)
+/** A free colour (D285), for a finish slot, a wall, a floor surface or a door. */
+const colorSchema = v.custom<FinishColor>(value => typeof value === 'string' && isFinishColor(value), 'A colour is written #rrggbb')
+const finishSchema = v.union([v.picklist(FINISHES), colorSchema], 'Not a finish or a colour')
 
 export const pointSchema = v.strictObject({ x: cmSchema, y: cmSchema })
 export type Point = v.InferOutput<typeof pointSchema>

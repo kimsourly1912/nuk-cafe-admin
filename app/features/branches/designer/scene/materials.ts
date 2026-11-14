@@ -1,7 +1,8 @@
 import { CanvasTexture, Color, DoubleSide, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, RepeatWrapping, SRGBColorSpace } from 'three'
 import type { Material, Texture } from 'three'
 import type { Finish } from '#shared/contracts/shop-layout'
-import { FINISH_SWATCHES } from '../catalog'
+import { finishSwatch } from '../catalog'
+import type { FinishMaterial } from '../catalog'
 
 /**
  * The 3D materials (D273): one per finish and per building surface, shared by every mesh that uses
@@ -23,7 +24,11 @@ export type LaneSurface = 'paint-yellow' | 'paint-mint' | 'paint-peach' | 'paint
   | 'bougainvillea' | 'moto-red' | 'rubber' | 'chrome' | 'jar' | 'wire' | 'concrete'
 
 export interface MaterialLibrary {
-  finish: (finish: Finish) => Material
+  /**
+   * A finish's material. A free colour (D285) is drawn as `material` (its slot's: wood keeps its
+   * grain, fabric its weave); a palette key has its own. Cached, so equal finishes share one.
+   */
+  finish: (finish: Finish, material?: FinishMaterial) => Material
   surface: (key: SurfaceKey) => Material
   setTheme: (dark: boolean) => void
   dispose: () => void
@@ -33,7 +38,7 @@ type Pattern = 'grain' | 'weave' | 'speckle' | 'planks' | 'tiles' | 'plaster' | 
 
 export function createMaterialLibrary(): MaterialLibrary {
   const textures = new Map<Pattern, Texture>()
-  const finishes = new Map<Finish, Material>()
+  const finishes = new Map<string, Material>()
   const surfaces = new Map<SurfaceKey, Material>()
 
   function pattern(key: Pattern): Texture | null {
@@ -50,10 +55,11 @@ export function createMaterialLibrary(): MaterialLibrary {
     return texture
   }
 
-  function finish(key: Finish): Material {
-    let material = finishes.get(key)
+  function finish(key: Finish, family: FinishMaterial = 'wood'): Material {
+    const swatch = finishSwatch(key, family)
+    const cacheKey = `${swatch.material}:${swatch.color}`
+    let material = finishes.get(cacheKey)
     if (material) return material
-    const swatch = FINISH_SWATCHES[key]
     const color = new Color(swatch.color)
     switch (swatch.material) {
       case 'wood':
@@ -69,7 +75,7 @@ export function createMaterialLibrary(): MaterialLibrary {
         material = new MeshStandardMaterial({ color, roughness: 0.42, metalness: 0, map: pattern('speckle') })
         break
     }
-    finishes.set(key, material)
+    finishes.set(cacheKey, material)
     return material
   }
 

@@ -3,7 +3,7 @@ import type { BufferGeometry, Material, Object3D } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Finish, ItemKind, TableLook } from '#shared/contracts/shop-layout'
-import { ITEM_SPECS, itemFinish, lookFinish } from '../catalog'
+import { ITEM_SPECS, itemFinish, itemSlotMaterial, lookFinish, lookSlotMaterial } from '../catalog'
 import { BOOTH_BENCH_DEPTH_CM, chairPoses } from '../geometry'
 import { shapeOutline } from '../shapes'
 import type { ShapeFields } from '../shapes'
@@ -137,7 +137,7 @@ function prism(context: BuildContext, outline: NonNullable<ReturnType<typeof sha
 }
 
 export function buildItem(context: BuildContext, item: ItemBuild): Group {
-  const finish = (key: string) => context.materials.finish(itemFinish(item.kind, item.finishes, key))
+  const finish = (key: string) => context.materials.finish(itemFinish(item.kind, item.finishes, key), itemSlotMaterial(item.kind, key))
   const group = new Group()
   const height = item.height ?? ITEM_SPECS[item.kind].height
   switch (item.kind) {
@@ -234,8 +234,8 @@ export function buildItem(context: BuildContext, item: ItemBuild): Group {
  */
 export function buildTable(context: BuildContext, look: TableLook, width: number, depth: number, seats: number): Group {
   const group = new Group()
-  const top = context.materials.finish(lookFinish(look, 'top'))
-  const base = context.materials.finish(lookFinish(look, 'base'))
+  const top = context.materials.finish(lookFinish(look, 'top'), lookSlotMaterial(look, 'top'))
+  const base = context.materials.finish(lookFinish(look, 'base'), lookSlotMaterial(look, 'base'))
   const height = TABLE_HEIGHT_CM
   if (look.shape === 'round') {
     const radius = Math.max(width, depth) / 2
@@ -264,8 +264,8 @@ export function buildTable(context: BuildContext, look: TableLook, width: number
     }
   }
   if (look.shape === 'booth') {
-    const frame = context.materials.finish(lookFinish(look, 'frame'))
-    const seat = context.materials.finish(lookFinish(look, 'seat'))
+    const frame = context.materials.finish(lookFinish(look, 'frame'), lookSlotMaterial(look, 'frame'))
+    const seat = context.materials.finish(lookFinish(look, 'seat'), lookSlotMaterial(look, 'seat'))
     for (const side of [1, -1]) {
       const bench = boothBench(context, width + 10, frame, seat)
       bench.position.z = cm(side * (depth / 2 + BOOTH_BENCH_DEPTH_CM / 2))

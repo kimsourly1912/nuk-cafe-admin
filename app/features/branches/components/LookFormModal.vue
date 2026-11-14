@@ -10,7 +10,7 @@
 import type { CreateLookInput, CustomLook, Finish, LookChair, TableBase, TableLook, TableShape } from '#shared/contracts/shop-layout'
 import { LOOK_NAME_MAX, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import type { FinishSlot } from '../designer/catalog'
-import { BUILT_IN_LOOKS, FINISH_SWATCHES, ITEM_SPECS, lookFinish, TABLE_SLOTS } from '../designer/catalog'
+import { BUILT_IN_LOOKS, ITEM_SPECS, lookFinish, TABLE_SLOTS } from '../designer/catalog'
 import type { StudioViewer } from '../designer/scene/studio-viewer'
 import { useLookMutations } from '../composables/useBranches'
 
@@ -370,30 +370,15 @@ const resetView = () => viewer?.reset()
             <legend class="mb-2 text-sm font-medium text-highlighted">
               Finishes
             </legend>
-            <div
+            <FinishPicker
               v-for="slot in slots"
               :key="slot.key"
-              class="flex flex-col gap-1.5"
-              role="group"
-              :aria-label="slot.label"
-            >
-              <p class="text-sm text-toned">
-                {{ slot.label }} <span class="text-muted">· {{ FINISH_SWATCHES[finishOf(slot)].label }}</span>
-              </p>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="option in slot.options"
-                  :key="option"
-                  type="button"
-                  class="size-9 rounded-md border border-default ring-offset-2 ring-offset-(--ui-bg) focus-visible:outline-2 focus-visible:outline-primary aria-pressed:ring-2 aria-pressed:ring-primary"
-                  :style="{ background: FINISH_SWATCHES[option].color }"
-                  :aria-label="FINISH_SWATCHES[option].label"
-                  :aria-pressed="finishOf(slot) === option"
-                  :disabled="saving"
-                  @click="state.finishes[slot.key as SlotKey] = option"
-                />
-              </div>
-            </div>
+              :label="slot.label"
+              :options="slot.options"
+              :model-value="finishOf(slot)"
+              :disabled="saving"
+              @update:model-value="state.finishes[slot.key as SlotKey] = $event"
+            />
           </fieldset>
 
           <UFormField
