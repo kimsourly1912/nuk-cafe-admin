@@ -22,3 +22,5 @@ docs/qa/<area>/
 ```
 
 History: the first area, "Studio vs Figma" (ISS-001 to ISS-036) and the editor checks (RECT-01, CIRC-01, GUIDE-01, ED-01 to ED-11), was removed from this folder on 2026-11-14 after its rules were extracted here. The full files and images stay in git history before that change. What still needs a retest is in [RETEST-QUEUE.md](RETEST-QUEUE.md).
+
+Areas: [Studio builder](studio-builder/README.md) (ISS-037 to ISS-046, 2026-11-14).
