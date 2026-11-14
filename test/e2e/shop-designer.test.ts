@@ -2024,6 +2024,56 @@ describe('the shop designer on saved layouts', () => {
     await expect.poll(() => page.getByTestId('saved-group-Lab corner').count()).toBe(0)
   })
 
+  it('free colours (D285): a piece\'s own colour, a wall\'s colour, a glazed door and shuttered window, a concrete floor, saved', { timeout: 90_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).waitFor()
+    const properties = page.getByRole('complementary', { name: 'Properties' })
+    async function customColour(group: string, hex: string) {
+      await properties.getByRole('group', { name: group }).getByRole('button', { name: /^Custom colour/ }).click()
+      const picker = page.getByRole('form', { name: `${group}: custom colour` })
+      await picker.getByLabel('Hex').fill(hex)
+      await shot(page, `free-colour-${group}`)
+      await picker.getByRole('button', { name: 'Use colour' }).click()
+      await picker.waitFor({ state: 'detached' })
+    }
+
+    // A piece: any colour, beside the palette's suggestions (owner D2).
+    await showPanel(page, 'Assets')
+    await page.getByTestId('catalog-plant').click()
+    await page.getByRole('button', { name: 'Place at center' }).click()
+    await customColour('Pot', '336699')
+    await expect.poll(() => properties.getByRole('group', { name: 'Pot' }).getByRole('button', { name: 'Custom colour #336699' }).getAttribute('aria-pressed')).toBe('true')
+
+    // A wall's colour; a glazed door and a window with shutters on it.
+    await showPanel(page, 'Floors')
+    await page.getByRole('button', { name: 'Outer wall 1' }).first().click()
+    await properties.getByTestId('selected-wall').waitFor()
+    await customColour('Colour', '#AA5500')
+    await properties.getByRole('button', { name: 'Door', exact: true }).click()
+    const door = properties.getByTestId('wall-opening-door').last()
+    await door.getByRole('button', { name: 'Glazed' }).click()
+    if (await properties.getByRole('button', { name: 'Window', exact: true }).isEnabled()) {
+      await properties.getByRole('button', { name: 'Window', exact: true }).click()
+      await properties.getByTestId('wall-opening-window').last().getByRole('button', { name: 'Shutters' }).click()
+    }
+
+    // A floor surface laid with concrete.
+    await page.getByRole('button', { name: 'Floor surface 1' }).first().click()
+    await properties.getByTestId('selected-slab').waitFor()
+    await properties.getByRole('button', { name: 'Concrete' }).click()
+    await save(page)
+
+    const { floors } = await savedLayout(page)
+    expect(floors.flatMap(floor => floor.items).some(item => item.kind === 'plant' && item.finishes.pot === '#336699')).toBe(true)
+    const wall = floors.flatMap(floor => floor.walls).find(candidate => candidate.color === '#aa5500')
+    expect(wall?.openings?.some(opening => opening.kind === 'door' && opening.style === 'glazed')).toBe(true)
+    expect(floors.flatMap(floor => floor.slabs).some(slab => slab.floor === 'concrete')).toBe(true)
+    await shot(page, 'free-colours')
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(() => properties.getByRole('button', { name: 'Concrete' }).getAttribute('aria-pressed')).toBe('false')
+  })
+
   it('version history (ISS-027): lists kept versions; Restore is one undo step and saves itself', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page)

@@ -37,14 +37,22 @@ export const LAYOUT_MAX_FLOOR_BYTES = 64 * 1024
 /** The save's body, at most: every floor full, every table placed, with room for the JSON around them. */
 export const LAYOUT_MAX_BODY_BYTES = 768 * 1024
 
-/** The fixed finish palette (D273): looks store keys, never free colors. */
+/**
+ * The finish palette (D273). A finish is one of its keys or, since D285 (owner D2, free colours), a
+ * colour of the owner's own, `#rrggbb` in lowercase: drawn with the material of the slot it is in.
+ */
 export const FINISHES = [
   'warm-oak', 'walnut', 'pale-oak', 'dark-wood',
   'graphite', 'steel', 'brass',
   'olive', 'linen', 'chocolate', 'terracotta', 'navy',
   'limestone', 'taupe-stone', 'black-stone', 'white-marble',
 ] as const
-export type Finish = typeof FINISHES[number]
+export type FinishKey = typeof FINISHES[number]
+/** A colour of the owner's own (D285): `#` and six lowercase hex digits. */
+export type FinishColor = `#${string}`
+export type Finish = FinishKey | FinishColor
+export const FINISH_COLOR_PATTERN = /^#[0-9a-f]{6}$/
+export const isFinishColor = (value: string): value is FinishColor => FINISH_COLOR_PATTERN.test(value)
 
 /**
  * People and pets (step 3g, D274): decoration the owner places like furniture. A figure is a model
@@ -204,7 +212,9 @@ const layerNameSchema = v.optional(v.pipe(v.string(), v.trim(), v.minLength(1, '
 const cmSchema = v.pipe(v.number(), v.integer(), v.minValue(-LAYOUT_MAX_EXTENT_CM), v.maxValue(LAYOUT_MAX_EXTENT_CM))
 const sizeSchema = (min: number, max: number) => v.pipe(v.number(), v.integer(), v.minValue(min), v.maxValue(max))
 const rotationSchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(359))
-const finishSchema = v.picklist(FINISHES)
+/** A free colour (D285), for a finish slot, a wall, a floor surface or a door. */
+const colorSchema = v.custom<FinishColor>(value => typeof value === 'string' && isFinishColor(value), 'A colour is written #rrggbb')
+const finishSchema = v.union([v.picklist(FINISHES), colorSchema], 'Not a finish or a colour')
 
 export const pointSchema = v.strictObject({ x: cmSchema, y: cmSchema })
 export type Point = v.InferOutput<typeof pointSchema>
@@ -215,6 +225,16 @@ export type DoorSwing = typeof DOOR_SWINGS[number]
 /** The end of the doorway a door's leaf hangs from, along the wall: its start or its end. */
 export const DOOR_HINGES = ['start', 'end'] as const
 export type DoorHinge = typeof DOOR_HINGES[number]
+/**
+ * How a door's leaf or a window is made (D285, the rest of owner D3): a door is a solid panel, has
+ * glass or louvres; a window is split in panes, one pane, or has shutters. Left out: the first.
+ */
+export const DOOR_STYLES = ['panel', 'glazed', 'louvred'] as const
+export type DoorStyle = typeof DOOR_STYLES[number]
+export const WINDOW_STYLES = ['panes', 'single', 'shutters'] as const
+export type WindowStyle = typeof WINDOW_STYLES[number]
+export type OpeningStyle = DoorStyle | WindowStyle
+const isDoorStyle = (style: string): style is DoorStyle => (DOOR_STYLES as readonly string[]).includes(style)
 export const OPENING_HEIGHT_MIN_CM = 50
 export const WINDOW_SILL_MAX_CM = 700
 
@@ -235,13 +255,21 @@ export const openingSchema = v.pipe(
     swing: v.optional(v.picklist(DOOR_SWINGS)),
     hinge: v.optional(v.picklist(DOOR_HINGES)),
     leaf: v.optional(v.literal(false)),
+    style: v.optional(v.picklist([...DOOR_STYLES, ...WINDOW_STYLES])),
+    /** Its colour (D285): a door's leaf, a window's frame and shutters. */
+    color: v.optional(colorSchema),
   }),
   v.check(opening => opening.kind === 'window' || opening.sill === undefined, 'Only a window has a sill'),
   v.check(opening => opening.kind === 'door' || (opening.swing === undefined && opening.hinge === undefined && opening.leaf === undefined), 'Only a door has a leaf'),
+  v.check(opening => opening.style === undefined || isDoorStyle(opening.style) === (opening.kind === 'door'), 'A door\'s style on a window, or a window\'s on a door'),
 )
 export type Opening = v.InferOutput<typeof openingSchema>
 
 export const OUTLINE_CROSSES = 'The outline crosses itself'
+
+/** What a floor surface is laid with (D285). */
+export const FLOOR_SURFACES = ['planks', 'tiles', 'concrete'] as const
+export type FloorSurface = typeof FLOOR_SURFACES[number]
 
 /**
  * A floor surface (D282): one simple polygon, at least 1 m². A floor has 0..n of them; the roof
@@ -251,6 +279,10 @@ export const slabSchema = v.pipe(
   v.strictObject({
     id: idSchema,
     outline: v.pipe(v.array(pointSchema), v.minLength(3, 'An outline needs 3 corners'), v.maxLength(LAYOUT_MAX_CORNERS)),
+    /** What the floor is laid with (D285); left out: planks under a roof, tiles in the open. */
+    floor: v.optional(v.picklist(FLOOR_SURFACES)),
+    /** Its colour (D285, owner D2); left out: the surface's own. */
+    color: v.optional(colorSchema),
     name: layerNameSchema,
     hidden: flagSchema,
     locked: flagSchema,
@@ -276,6 +308,8 @@ export const wallSchema = v.strictObject({
   side: v.optional(v.picklist(WALL_SIDES)),
   thickness: v.optional(sizeSchema(WALL_THICKNESS_MIN_CM, WALL_THICKNESS_MAX_CM)),
   height: v.optional(sizeSchema(WALL_HEIGHT_MIN_CM, FLOOR_HEIGHT_MAX_CM)),
+  /** Its colour (D285, owner D2): a wall's or half wall's plaster, a railing's or glass's frame. */
+  color: v.optional(colorSchema),
   name: layerNameSchema,
   hidden: flagSchema,
   locked: flagSchema,

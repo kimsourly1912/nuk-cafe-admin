@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import StudioNumberField from './StudioNumberField.vue'
+import FinishPicker from './FinishPicker.vue'
 /**
  * A wall, selected (D278, D282: outer and inside walls alike): what it is (Wall, Railing, Half
  * wall or Glass), its length, how it is built (thickness, height, which side of its line it stands:
  * owner D3), and its doors and windows. Each change is one undo step, emitted as the floor's new
  * list of walls.
  */
-import type { DoorHinge, DoorSwing, Opening, OpeningKind, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
+import type { DoorHinge, DoorSwing, FinishColor, Opening, OpeningKind, OpeningStyle, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
 import { OPENING_HEIGHT_MIN_CM, WALL_HEIGHT_MIN_CM, WALL_THICKNESS_MAX_CM, WALL_THICKNESS_MIN_CM, WINDOW_SILL_MAX_CM, wallKind, wallLength } from '#shared/contracts/shop-layout'
+import { BUILDING_COLORS, FINISH_SWATCHES } from '../designer/catalog'
 import { newLayoutId, openingSpan, wallHeight, wallThickness } from '../designer/geometry'
 import { addWallOpening, OPENING_MIN_WIDTH, removeWallOpening, setOpeningShape, setWallKind, setWallLength, setWallStructure, updateWallOpening, wallOpeningFits } from '../designer/walls'
 
@@ -37,11 +39,21 @@ const SIDES: { value: WallSide | 'centre', label: string }[] = [
   { value: 'right', label: 'Right' },
 ]
 const side = computed(() => props.wall.side ?? 'centre')
+/** A wall's or half wall's colour is its plaster's; a railing's or glass's, its frame's (D285). */
+const ownColor = computed(() => (kind.value === 'railing' || kind.value === 'glass' ? BUILDING_COLORS.frame : BUILDING_COLORS.plaster))
 /** How a door or window is built (owner D3): its height (a window's from its sill), within the wall's. */
 const openingHeight = (opening: Opening) => {
   const span = openingSpan(opening, height.value)
   return span.top - span.bottom
 }
+/** How a door's leaf or a window is made (D285). */
+const STYLES: Record<OpeningKind, { value: OpeningStyle, label: string }[]> = {
+  door: [{ value: 'panel', label: 'Panel' }, { value: 'glazed', label: 'Glazed' }, { value: 'louvred', label: 'Louvred' }],
+  window: [{ value: 'panes', label: 'Panes' }, { value: 'single', label: 'Single' }, { value: 'shutters', label: 'Shutters' }],
+}
+const styleOf = (opening: Opening): OpeningStyle => opening.style ?? STYLES[opening.kind][0]!.value
+/** A door's leaf is walnut, a window's frame dark metal, until a colour is picked. */
+const openingOwnColor = (opening: Opening) => (opening.kind === 'door' ? { color: FINISH_SWATCHES.walnut.color, label: FINISH_SWATCHES.walnut.label } : BUILDING_COLORS.frame)
 const SWINGS: { value: DoorSwing, label: string }[] = [{ value: 'in', label: 'In' }, { value: 'out', label: 'Out' }]
 const HINGES: { value: DoorHinge, label: string }[] = [{ value: 'start', label: 'Start' }, { value: 'end', label: 'End' }]
 /** A door in a railing is a gate; in a half wall or glass it is a gap to walk through. */
@@ -186,6 +198,27 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
       </div>
     </UFormField>
 
+    <div class="flex flex-col gap-1">
+      <FinishPicker
+        round
+        :label="kind === 'railing' || kind === 'glass' ? 'Frame colour' : 'Colour'"
+        :model-value="wall.color"
+        :value-label="wall.color ? undefined : ownColor.label"
+        :start-color="ownColor.color"
+        @update:model-value="color => emit('change', setWallStructure(walls, wall.id, { color: color as FinishColor }))"
+      />
+      <UButton
+        v-if="wall.color"
+        :label="`Use ${ownColor.label.toLowerCase()}`"
+        icon="i-lucide-rotate-ccw"
+        color="neutral"
+        variant="link"
+        size="xs"
+        class="self-start px-0"
+        @click="emit('change', setWallStructure(walls, wall.id, { color: null }))"
+      />
+    </div>
+
     <div class="flex flex-col gap-2">
       <p class="text-sm font-medium text-highlighted">
         Add on this wall
@@ -274,6 +307,49 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
             @update:model-value="value => setNumber(value, openingSpan(opening, height).bottom, sill => setOpeningShape(walls, wall.id, opening.id, { sill }))"
           />
         </UFormField>
+      </div>
+      <UFormField
+        v-if="opening.kind === 'window' || (kind === 'wall' && opening.leaf !== false)"
+        label="Style"
+      >
+        <UFieldGroup
+          size="sm"
+          class="w-full"
+        >
+          <UButton
+            v-for="option in STYLES[opening.kind]"
+            :key="option.value"
+            :label="option.label"
+            :color="styleOf(opening) === option.value ? 'primary' : 'neutral'"
+            :variant="styleOf(opening) === option.value ? 'soft' : 'outline'"
+            :aria-pressed="styleOf(opening) === option.value"
+            class="flex-1 justify-center"
+            @click="emit('change', setOpeningShape(walls, wall.id, opening.id, { style: option.value }))"
+          />
+        </UFieldGroup>
+      </UFormField>
+      <div
+        v-if="opening.kind === 'window' || (kind === 'wall' && opening.leaf !== false)"
+        class="flex flex-col gap-1"
+      >
+        <FinishPicker
+          round
+          :label="opening.kind === 'door' ? 'Leaf colour' : 'Frame colour'"
+          :model-value="opening.color"
+          :value-label="opening.color ? undefined : openingOwnColor(opening).label"
+          :start-color="openingOwnColor(opening).color"
+          @update:model-value="color => emit('change', setOpeningShape(walls, wall.id, opening.id, { color: color as FinishColor }))"
+        />
+        <UButton
+          v-if="opening.color"
+          :label="`Use ${openingOwnColor(opening).label.toLowerCase()}`"
+          icon="i-lucide-rotate-ccw"
+          color="neutral"
+          variant="link"
+          size="xs"
+          class="self-start px-0"
+          @click="emit('change', setOpeningShape(walls, wall.id, opening.id, { color: null }))"
+        />
       </div>
       <template v-if="opening.kind === 'door'">
         <USwitch

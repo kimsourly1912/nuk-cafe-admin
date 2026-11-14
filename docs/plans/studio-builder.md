@@ -1,6 +1,6 @@
 # Studio flexible builder plan
 
-Status: Phases 0–3 built on 2026-11-14 (D281–D284), with the snap step, `z`, polygon shapes and saved groups; left: free colours and custom door shapes (one PR), the per-floor 3D rebuild (after measuring). Owner decisions D1–D7 below were all decided on 2026-11-14. When accepted, record the architecture change in [decisions](../decisions.md) (it amends D273's floor model) and refresh the index. Bugs and gaps found with this plan: [Studio builder QA](../qa/studio-builder/README.md) (ISS-037 to ISS-046).
+Status: built on 2026-11-14 (D281–D285): Phases 0–4 and saved groups, with free colours, wall and floor finishes and door and window styles (D285); left: the per-floor 3D rebuild (ISS-041 step 3, after measuring on a real device). The split view is dropped (owner D4). Owner decisions D1–D7 below were all decided on 2026-11-14. When accepted, record the architecture change in [decisions](../decisions.md) (it amends D273's floor model) and refresh the index. Bugs and gaps found with this plan: [Studio builder QA](../qa/studio-builder/README.md) (ISS-037 to ISS-046).
 
 ## Goal
 

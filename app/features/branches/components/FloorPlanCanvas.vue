@@ -24,7 +24,7 @@
 import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { Floor, Wall, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { edgeLength, floorPageId, isSimpleOutline, layoutPages, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
-import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
+import { findLook, finishColor, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
 import { handleLayout, SMALL_PIECE_PX } from '../designer/handles'
 import { arcFromDrag, arcHandles, arcOf, polygonShape as polygonOf, radiusDot, radiusFromDrag, shapeLabelSize, shapeOutline, shapePath } from '../designer/shapes'
 import type { ArcHandle, ShapeEdit } from '../designer/shapes'
@@ -1798,7 +1798,7 @@ const sizeBadge = computed(() => {
               v-if="shapeOutline(item)"
               :d="shapePath(shapeOutline(item)!)"
               fill-rule="evenodd"
-              :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+              :fill="`color-mix(in oklab, ${finishColor(itemFinish(item.kind, item.finishes, 'body'))} 45%, var(--ui-bg))`"
               stroke="var(--ui-text-muted)"
               stroke-width="3"
               stroke-linejoin="round"
@@ -1807,7 +1807,7 @@ const sizeBadge = computed(() => {
               v-else-if="item.kind === 'block-round'"
               :rx="item.width / 2"
               :ry="item.depth / 2"
-              :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+              :fill="`color-mix(in oklab, ${finishColor(itemFinish(item.kind, item.finishes, 'body'))} 45%, var(--ui-bg))`"
               stroke="var(--ui-text-muted)"
               stroke-width="3"
             />
@@ -1818,7 +1818,7 @@ const sizeBadge = computed(() => {
               :width="item.width"
               :height="item.depth"
               rx="4"
-              :fill="`color-mix(in oklab, ${FINISH_SWATCHES[itemFinish(item.kind, item.finishes, 'body')].color} 45%, var(--ui-bg))`"
+              :fill="`color-mix(in oklab, ${finishColor(itemFinish(item.kind, item.finishes, 'body'))} 45%, var(--ui-bg))`"
               stroke="var(--ui-text-muted)"
               stroke-width="3"
             />

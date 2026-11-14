@@ -44,7 +44,7 @@ function makeViewer(extra: Partial<BuildingViewerOptions> = {}) {
   const scene = new Scene()
   const material = new MeshBasicMaterial()
   const highlight = new MeshBasicMaterial({ name: 'highlight' })
-  const materials = { finish: () => material, surface: (key: string) => (key === 'highlight' ? highlight : material), setTheme: vi.fn(), dispose: () => material.dispose() }
+  const materials = { finish: () => material, surface: (key: string) => (key === 'highlight' ? highlight : material), tinted: () => material, setTheme: vi.fn(), dispose: () => material.dispose() }
   const context = createBuildContext(materials)
   const frames = new Map<(now: number) => boolean, () => void>()
   const stage: Stage = {
