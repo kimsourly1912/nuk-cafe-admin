@@ -206,7 +206,8 @@ export function buildItem(context: BuildContext, item: ItemBuild): Group {
       break
     // Shapes (D278): a solid block or round block of one finish, slightly rounded at its edges.
     case 'block':
-    case 'block-round': {
+    case 'block-round':
+    case 'block-poly': {
       const outline = shapeOutline({ kind: item.kind, width: item.width, depth: item.depth, ...item.shape })
       if (outline) {
         group.add(part(prism(context, outline, height), finish('body'), { x: 0, y: 0, z: 0 }))

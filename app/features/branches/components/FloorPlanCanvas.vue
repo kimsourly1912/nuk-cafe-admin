@@ -26,7 +26,7 @@ import type { Floor, Wall, LayoutItem, LayoutTable, Point, ShopLayout, TableLook
 import { edgeLength, floorPageId, isSimpleOutline, layoutPages, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
 import { handleLayout, SMALL_PIECE_PX } from '../designer/handles'
-import { arcFromDrag, arcHandles, arcOf, radiusDot, radiusFromDrag, shapeLabelSize, shapeOutline, shapePath } from '../designer/shapes'
+import { arcFromDrag, arcHandles, arcOf, polygonShape as polygonOf, radiusDot, radiusFromDrag, shapeLabelSize, shapeOutline, shapePath } from '../designer/shapes'
 import type { ArcHandle, ShapeEdit } from '../designer/shapes'
 import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, floorPoints, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeCursor, resizeFromCorner, rotatePoint, rotationFromDrag, snap, WALL_THICKNESS_CM, wallBand, wallStrip } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
@@ -58,6 +58,8 @@ const props = defineProps<{
   frameOffsets?: Record<string, Point>
   /** The Shape tool draws a circle (a round block) rather than a rectangle (D278). */
   roundShape?: boolean
+  /** The Shape tool draws a polygon corner by corner (plan Phase 4) instead of dragging a box. */
+  polygonShape?: boolean
   /** Room cuts the rectangle out instead of adding it (the tool bar's Cut, owner: Alt is Figma's "from the middle"). */
   roomCut?: boolean
   /** Everything selected (D278 multi-select): two or more pieces and walls moved and drawn together. */
@@ -85,6 +87,8 @@ const emit = defineEmits<{
   shape: [slabId: string, shape: FloorShape]
   /** A new floor surface drawn (Draw outline on an empty floor), with its new walls around it. */
   newSlab: [shape: FloorShape]
+  /** A polygon shape's corners, drawn with the Shape tool's Polygon (plan Phase 4). */
+  polygon: [corners: Point[]]
   addWall: [wall: Omit<Wall, 'id'>]
   /** An inside wall's end or the whole wall was dragged (D278): the floor's walls after it. */
   walls: [walls: Wall[]]
@@ -375,8 +379,8 @@ function snapToChainStart(point: Point): Point {
 /** What a click would pick, under the pointer in the select tool (D278). */
 const hovered = shallowRef<PlanSelection | null>(null)
 
-const drawing = computed(() => props.mode === 'outline' && !slab.value)
-watch(() => [props.mode, props.floorId], () => {
+const drawing = computed(() => (props.mode === 'outline' && !slab.value) || (props.mode === 'shape' && !!props.polygonShape))
+watch(() => [props.mode, props.floorId, props.polygonShape], () => {
   drawn.value = []
   hover.value = null
   corner.value = null
@@ -789,7 +793,7 @@ function onPointerDown(event: PointerEvent) {
   const startPan = () => {
     gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan, event: { shiftKey: event.shiftKey, fine: fineSnap(event) } }
   }
-  if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
+  if ((props.mode === 'room' || (props.mode === 'shape' && !props.polygonShape)) && plan && !props.placing) {
     const step = snapStep.value
     gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) }, startClient: { x: event.clientX, y: event.clientY } }
     return
@@ -1216,8 +1220,13 @@ function tap(plan: Point | null, keys: { shiftKey: boolean, fine: boolean }) {
 }
 
 function closeDrawing() {
-  if (!canClose(drawn.value)) return
-  emit('newSlab', closedShape(drawn.value))
+  // A polygon shape may be small (a pillar); a floor surface is at least 1 m².
+  if (props.mode === 'shape') {
+    if (!polygonOf(drawn.value) || !isSimpleOutline(drawn.value)) return
+    emit('polygon', drawn.value)
+  }
+  else if (canClose(drawn.value)) emit('newSlab', closedShape(drawn.value))
+  else return
   drawn.value = []
   hover.value = null
 }
@@ -1383,7 +1392,7 @@ const drawingPreview = computed(() => (hover.value ? [...drawn.value, hover.valu
 const wallPreview = computed(() => (wallStart.value && hover.value ? { from: wallStart.value, to: hover.value, length: Math.round(Math.hypot(hover.value.x - wallStart.value.x, hover.value.y - wallStart.value.y)) } : null))
 
 const ariaLabel = computed(() => {
-  if (drawing.value) return `Draw outline, ${floor.value.name} floor. Click on the grid to add corners; Enter closes the shape, Backspace removes the last corner.`
+  if (drawing.value) return `${props.mode === 'shape' ? 'Polygon shape' : 'Draw outline'}, ${floor.value.name} floor. Click on the grid to add corners; Enter closes the shape, Backspace removes the last corner.`
   if (props.mode === 'outline') return `Edit points, ${floor.value.name} floor. Drag a corner or a side to move it; double-click a side to add a corner; with a corner picked, arrow keys move it and Delete removes it.`
   if (props.mode === 'shape') return `Shape, ${floor.value.name} floor. Drag to draw a ${props.roundShape ? 'round block' : 'block'} for anything the library doesn't have.`
   if (props.mode === 'room') return `Room, ${floor.value.name} floor. Drag a rectangle to ${props.roomCut ? 'cut it out of the floor' : 'add a room to the floor'}; hold Alt to draw from the middle.`

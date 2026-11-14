@@ -11,14 +11,14 @@ import StudioNumberField from './StudioNumberField.vue'
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, FLOOR_HEIGHT_MAX_CM, floorPageId, isSimpleOutline, SHAPE_ARC, wallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
+import { edgeLength, FLOOR_HEIGHT_MAX_CM, floorPageId, isSimpleOutline, SHAPE_ARC, wallKind, isFigureKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, Wall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import { losesStreetDoor } from '../composables/useLayoutDraft'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
 import type { AlignEdge, PlanClipboard } from '../designer/group'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
-import { fittedRadius, maxRadius } from '../designer/shapes'
+import { fittedRadius, maxRadius, polygonShape } from '../designer/shapes'
 import type { ShapeEdit } from '../designer/shapes'
 import { besideOf, boundsOf, floorPoints, newLayoutId, nextSnapStep, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
@@ -311,9 +311,11 @@ const ITEM_ICONS: Record<ItemKind, string> = {
   'dog': 'i-lucide-dog',
   'block': 'i-lucide-box',
   'block-round': 'i-lucide-cylinder',
+  'block-poly': 'i-lucide-pentagon',
 }
 const LOOK_ICONS = { round: 'i-lucide-circle', rect: 'i-lucide-rectangle-horizontal', booth: 'i-lucide-sofa' } as const
-const catalog = CATEGORIES.map(category => ({ ...category, specs: Object.values(ITEM_SPECS).filter(spec => spec.category === category.key) }))
+// A polygon block is drawn with the Shape tool, never placed from the library (it needs its corners).
+const catalog = CATEGORIES.map(category => ({ ...category, specs: Object.values(ITEM_SPECS).filter(spec => spec.category === category.key && spec.kind !== 'block-poly') }))
 /** The cafe's own chair and fixture looks (step 3d), by category: shown after the built-in pieces. */
 const itemLooks = computed(() => props.editor.itemLooks.value)
 const itemLooksIn = (category: ItemCategory) => itemLooks.value.filter(look => ITEM_SPECS[look.kind].category === category)
@@ -674,6 +676,18 @@ function placeShape(bounds: Bounds) {
   if (added) selection.value = { kind: 'item', id }
 }
 const SHAPE_MIN_CM = 20
+
+/** The Shape tool's Polygon (plan Phase 4): the corners drawn become a polygon block there, selected; then Select again. */
+function placePolygon(corners: Point[]) {
+  const shape = polygonShape(corners)
+  if (!shape) return
+  const id = newLayoutId('item')
+  const width = Math.min(ITEM_SIZE_MAX_CM, Math.max(ITEM_SIZE_MIN_CM, shape.width))
+  const depth = Math.min(ITEM_SIZE_MAX_CM, Math.max(ITEM_SIZE_MIN_CM, shape.depth))
+  const added = changeFloor(target => target.items.push({ id, kind: 'block-poly', x: shape.x, y: shape.y, rotation: 0, width, depth, finishes: {}, points: shape.points }))
+  finishTool()
+  if (added) selection.value = { kind: 'item', id }
+}
 
 function addWall(wall: Omit<Wall, 'id'>) {
   changeFloor(target => target.walls.push({ id: newLayoutId('wall'), ...wall }))
@@ -1512,7 +1526,10 @@ function onStudioKey(event: KeyboardEvent) {
   const tools: Record<string, PlanMode> = { v: 'select', h: 'hand', r: 'room', s: 'shape', o: 'shape', p: 'outline', w: 'wall' }
   const key = event.key.toLowerCase()
   if (key === 'g') return run(cycleSnap)
-  if (key === 's' || key === 'o') roundShape.value = key === 'o'
+  if (key === 's' || key === 'o') {
+    roundShape.value = key === 'o'
+    polygonShapeOn.value = false
+  }
   const tool = tools[key]
   if (tool && floor.value) return run(() => (tool === mode.value ? undefined : startTool(tool)))
 }
@@ -1690,6 +1707,8 @@ const planTools = [
 const drawing = computed(() => mode.value === 'outline' || mode.value === 'wall' || mode.value === 'room' || mode.value === 'shape')
 /** The Shape tool draws a round block (O) rather than a block (S) (D278). */
 const roundShape = ref(false)
+/** The Shape tool draws a polygon corner by corner (plan Phase 4). */
+const polygonShapeOn = ref(false)
 /** Room adds by default; the tool bar's Cut cuts the rectangle out (owner: Alt draws from the middle, like Figma). */
 const roomCut = ref(false)
 const pendingLabel = computed(() => {
@@ -3255,6 +3274,8 @@ const pendingLabel = computed(() => {
                 :placing="!!pending"
                 :slab-id="activeSlab?.id ?? null"
                 :snap-step="snapStep"
+                :polygon-shape="polygonShapeOn"
+                @polygon="placePolygon"
                 @open-floor="selectFloor"
                 @place="placePending"
                 @cancel-place="pending = null"
@@ -3442,14 +3463,14 @@ const pendingLabel = computed(() => {
                       aria-label="Shape"
                     >
                       <UButton
-                        v-for="option in [{ round: false, label: 'Rectangle', icon: 'i-lucide-square' }, { round: true, label: 'Ellipse', icon: 'i-lucide-circle' }]"
+                        v-for="option in [{ round: false, polygon: false, label: 'Rectangle', icon: 'i-lucide-square' }, { round: true, polygon: false, label: 'Ellipse', icon: 'i-lucide-circle' }, { round: false, polygon: true, label: 'Polygon', icon: 'i-lucide-pentagon' }]"
                         :key="option.label"
                         :icon="option.icon"
                         :label="option.label"
-                        :color="roundShape === option.round ? 'primary' : 'neutral'"
-                        :variant="roundShape === option.round ? 'soft' : 'ghost'"
-                        :aria-pressed="roundShape === option.round"
-                        @click="roundShape = option.round"
+                        :color="roundShape === option.round && polygonShapeOn === option.polygon ? 'primary' : 'neutral'"
+                        :variant="roundShape === option.round && polygonShapeOn === option.polygon ? 'soft' : 'ghost'"
+                        :aria-pressed="roundShape === option.round && polygonShapeOn === option.polygon"
+                        @click="roundShape = option.round; polygonShapeOn = option.polygon"
                       />
                     </UFieldGroup>
                     <UFieldGroup
@@ -3553,7 +3574,8 @@ const pendingLabel = computed(() => {
               <span>Walls on a corner move with it. Select a wall to change it or add doors and windows. Escape or Enter when done.</span>
             </template>
             <template v-else-if="mode === 'shape'">
-              <span>Drag to draw a {{ roundShape ? 'round block' : 'block' }} for anything the library doesn't have: a stage, a planter box, a platform. A click makes one 100 × 100 cm.</span>
+              <span v-if="polygonShapeOn">Click on the grid to add corners; click the first corner, double-click or press Enter to close the polygon. Backspace removes the last corner.</span>
+              <span v-else>Drag to draw a {{ roundShape ? 'round block' : 'block' }} for anything the library doesn't have: a stage, a planter box, a platform. A click makes one 100 × 100 cm.</span>
               <span>Name it, set its height and finish in Properties. S draws rectangles, O ellipses; Shift keeps the sides equal, Alt draws from the middle.</span>
             </template>
             <template v-else-if="mode === 'room'">

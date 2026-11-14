@@ -30,6 +30,8 @@ export interface ShapeFields {
   arcStart?: number
   arcSweep?: number
   arcInner?: number
+  /** A polygon shape's corners, in thousandths of its width and depth (plan Phase 4). */
+  points?: readonly { x: number, y: number }[]
 }
 
 /** A round shape's arc (ED-06), filled in: start and sweep in degrees, inner as a 0–0.95 ratio. */
@@ -84,6 +86,8 @@ export function shapeOutline(shape: ShapeFields): { outer: { x: number, y: numbe
       hole: null,
     }
   }
+  // A polygon (plan Phase 4): its corners stretched to its size.
+  if (shape.kind === 'block-poly') return shape.points ? { outer: shape.points.map(point => ({ x: point.x / 1000 * shape.width, y: point.y / 1000 * shape.depth })), hole: null } : null
   if (shape.kind !== 'block-round') return null
   const { start, sweep, inner } = arcOf(shape)
   if (sweep >= 360 && !inner) return null
@@ -180,4 +184,22 @@ export function arcHandles(shape: ShapeFields) {
     start: sweep >= 360 ? null : onEllipse(rx * 0.92, ry * 0.92, start),
     ratio: onEllipse(rx * Math.max(inner, 0.12), ry * Math.max(inner, 0.12), sweep >= 360 ? 0 : middle),
   }
+}
+
+/**
+ * A polygon shape from corners drawn on the plan (plan Phase 4): its middle, size and corners in
+ * thousandths of that size, as the contract stores them. Null for fewer than 3 corners or no area.
+ */
+export function polygonShape(corners: readonly { x: number, y: number }[]): { x: number, y: number, width: number, depth: number, points: { x: number, y: number }[] } | null {
+  if (corners.length < 3) return null
+  const xs = corners.map(point => point.x)
+  const ys = corners.map(point => point.y)
+  const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+  const width = Math.round(maxX - minX)
+  const depth = Math.round(maxY - minY)
+  if (width < 1 || depth < 1) return null
+  const x = Math.round((minX + maxX) / 2)
+  const y = Math.round((minY + maxY) / 2)
+  const clamp = (value: number) => Math.max(-500, Math.min(500, Math.round(value)))
+  return { x, y, width, depth, points: corners.map(point => ({ x: clamp((point.x - x) / width * 1000), y: clamp((point.y - y) / depth * 1000) })) }
 }
