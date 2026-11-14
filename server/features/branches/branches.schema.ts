@@ -3,7 +3,7 @@ import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text,
 import { schema as authSchema } from '#auth/schema'
 import { DINING_TABLE_STATUSES } from '#shared/contracts/branches'
 import { BUILT_IN_LOOK_IDS, ITEM_LOOK_KINDS, LOOK_CHAIRS, TABLE_BASES, TABLE_SHAPES } from '#shared/contracts/shop-layout'
-import type { Finish, FloorGeometry, LayoutPage, LayoutScene, LookFinishes, ShopLayout } from '#shared/contracts/shop-layout'
+import type { Finish, FloorGeometry, LayoutItem, LayoutPage, LayoutScene, LookFinishes, ShopLayout, Wall } from '#shared/contracts/shop-layout'
 import { BRANCH_ROLES } from '#shared/contracts/staff'
 import { newId } from '#server/utils/ids'
 
@@ -313,4 +313,21 @@ export const branchLayoutItemLooks = sqliteTable('branch_layout_item_looks', {
   // Where a look is used: its piece count, and the restrict check when it is deleted.
   index('branch_layout_item_looks_look_idx').on(t.tenantId, t.lookId),
   check('branch_layout_item_looks_check', sql`${t.pieces} between 1 and 200`),
+])
+
+/**
+ * A cafe's saved groups (plan Phase 5, D284): pieces and walls under a name, placed again as new
+ * copies on any floor of any branch. The pieces are one JSON value checked by the shared
+ * `createLayoutGroupSchema`; nothing points at a group, so deleting one changes no layout.
+ */
+export const layoutGroups = sqliteTable('layout_groups', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  tenantId: tenantId(),
+  name: text().notNull(),
+  pieces: text({ mode: 'json' }).$type<{ items: LayoutItem[], walls: Wall[] }>().notNull(),
+  version: integer().notNull().default(1),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  uniqueIndex('layout_groups_name_idx').on(t.tenantId, sql`lower(${t.name})`),
 ])

@@ -3,6 +3,13 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio builder: snap step, polygon shapes, saved groups (D284, 2026-11-14)
+
+Branch `ccr-e78bff39-u70ma7`, with D283 in the same PR: one commit per step (doors and windows, snap step, polygon, saved groups).
+
+- **Status:** **Fixed, needs retest**: [RETEST-QUEUE.md](qa/RETEST-QUEUE.md) sections D and E. Left in the plan: free colours and custom door shapes (next PR); the per-floor 3D rebuild after a benchmark on a real device.
+- **Evidence:** `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` (200 files, 3072 tests; groups: two-cafe isolation, name, version, and the limit's race, which fails without its batch guard); e2e `shop-designer` 32 of 32 with a new saved-groups test; full `pnpm test:e2e` 977 of 979, the 2 failures (Explore walk timeout, Google sign-up popup) passed when their files ran again (80 of 80). The Explore walk timed out under full-suite load in both runs this day: worth watching in CI. Migration 0066 hand-written (see D284). No manual browser check.
+
 ### Studio builder: doors, windows and pieces built as wanted (D283, 2026-11-14)
 
 Branch `ccr-e78bff39-u70ma7` (after PR #317). Plan Phase 3 and Phase 4's `z` (owner D3).

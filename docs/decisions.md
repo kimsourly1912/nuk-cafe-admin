@@ -3269,3 +3269,13 @@ Studio builder plan Phase 3 and part of Phase 4 (owner D3, "also structure"), on
 - **Explore:** a door's leaf carries its hinge and swing, and swings from that end, in or out; an open doorway has no door to push.
 - **Not built:** custom door and window shapes (the owner's "also structure" beyond sizes and swing): next, with free colours (D2), as they change the looks contract.
 
+## D284 Studio snap step, polygon shapes and saved groups (2026-11-14)
+
+The rest of the Studio builder plan's Phases 2, 4 and 5 except free colours, custom door shapes and the per-floor 3D rebuild.
+
+- **Snap step:** G cycles 1, 5, 10 and 25 cm; moves, drawing, resizing and library drops land on it; the arrow keys keep 1 and 10 cm; the grid only shows the scale. Per editor session, not saved.
+- **Polygon shape:** `block-poly`, drawn corner by corner with the Shape tool's Polygon. Its `points` are thousandths of its own width and depth from its middle (−500 to 500), so a resize stretches it like any shape; 3 to 64 corners, simple, only on that kind. `shapeOutline` gives the plan and the 3D prism the same corners. Not in the library (it needs corners).
+- **Saved groups:** a cafe-wide library (`layout_groups`, migration 0066): pieces and walls under a unique name (any capitals), at most 50, created and deleted at a version, audited; `furniture: ['manage']` like looks. Placing one copies it into the floor shown with new ids, as a paste does; a custom look the cafe no longer has is dropped from the copy. Nothing references a group, so deleting one changes no layout. Tables are never in a group (each has its own QR code). Two-cafe isolation and the limit's race are tested.
+- **Alternatives:** a group per branch (rejected: looks are cafe-wide, and a cafe's branches share furniture); a group as a live link that edits every copy (rejected: needs references in the floor JSON and use tracking like looks; copies are what owners expect from a library); the snap step saved per person (not needed yet).
+- **Migration:** hand-written in the agent's container (the NuxtHub generator could not resolve the auth schema there), in drizzle-kit's form with its snapshot; expand only.
+

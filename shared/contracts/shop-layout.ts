@@ -70,7 +70,7 @@ export const isFigureKind = (kind: string): kind is FigureKind => Object.hasOwn(
  * Shapes (D278): a piece the owner draws for anything the catalog lacks (a stage, a planter box, a
  * raised platform): a rectangle or a circle of any size, with a name, a height and one finish.
  */
-export const SHAPE_KINDS = ['block', 'block-round'] as const
+export const SHAPE_KINDS = ['block', 'block-round', 'block-poly'] as const
 export type ShapeKind = typeof SHAPE_KINDS[number]
 export const isShapeKind = (kind: string): kind is ShapeKind => (SHAPE_KINDS as readonly string[]).includes(kind)
 export const SHAPE_HEIGHT = { default: 90, min: 20, max: 300 } as const
@@ -83,6 +83,12 @@ export const SHAPE_NAME_MAX = 40
 export const SHAPE_ARC = { sweepMin: 1, sweepMax: 359, innerMax: 95 } as const
 /** A rectangle shape's corner radius (ED-05): at most half its shorter side. */
 export const SHAPE_RADIUS_MAX_CM = 1_000
+/**
+ * A polygon shape's corners (plan Phase 4): in thousandths of its width and depth from its middle
+ * (−500 to 500), so resizing it stretches it like any shape. At least 3, at most 64.
+ */
+export const SHAPE_POINT_MAX = 500
+export const SHAPE_POINTS_MAX = 64
 
 /** Furniture, fixtures and figures that are not dining tables: they carry no QR. */
 export const ITEM_KINDS = [
@@ -336,10 +342,18 @@ export const itemSchema = v.pipe(
     arcStart: v.optional(rotationSchema),
     arcSweep: v.optional(sizeSchema(SHAPE_ARC.sweepMin, SHAPE_ARC.sweepMax)),
     arcInner: v.optional(sizeSchema(1, SHAPE_ARC.innerMax)),
+    /** A polygon shape's corners (`SHAPE_POINT_MAX`); only it has them, and it needs them. */
+    points: v.optional(v.pipe(
+      v.array(v.strictObject({ x: sizeSchema(-SHAPE_POINT_MAX, SHAPE_POINT_MAX), y: sizeSchema(-SHAPE_POINT_MAX, SHAPE_POINT_MAX) })),
+      v.minLength(3, 'An outline needs 3 corners'),
+      v.maxLength(SHAPE_POINTS_MAX),
+    )),
   }),
   v.forward(v.check(item => item.radius === undefined || item.kind === 'block', 'Only a rectangle shape has a corner radius'), ['radius']),
   v.forward(v.check(item => item.radius === undefined || item.radius * 2 <= Math.min(item.width, item.depth), 'The radius is more than half the shorter side'), ['radius']),
   v.check(item => item.kind === 'block-round' || (item.arcStart === undefined && item.arcSweep === undefined && item.arcInner === undefined), 'Only a round shape has an arc'),
+  v.check(item => (item.kind === 'block-poly') === (item.points !== undefined), 'A polygon shape needs its corners, and only it has them'),
+  v.check(item => item.points === undefined || (Math.abs(signedArea(item.points)) > 0 && isSimpleOutline(item.points)), OUTLINE_CROSSES),
   v.check(item => item.lookId === undefined || isItemLookKind(item.kind), 'Stairs, people and pets have no custom look'),
   v.forward(v.check(item => item.height === undefined || itemHeightRange(item.kind) !== undefined, 'Stairs, people and pets keep their own height'), ['height']),
   v.forward(v.check(item => item.height === undefined || itemHeightRange(item.kind) === undefined || heightFits(item.kind, item.height), 'Out of this kind\'s height range'), ['height']),
@@ -667,6 +681,34 @@ export interface CustomItemLook extends ItemLook {
   version: number
   /** How many placed pieces use it, in every branch's saved layout. It can't be deleted while any does. */
   pieces: number
+}
+
+/**
+ * A saved group (plan Phase 5): pieces and walls saved under a name for the whole cafe, placed
+ * again on any floor of any branch as new copies. Positions are around the group's middle. Tables
+ * are never in one: each has its own QR code.
+ */
+export const MAX_LAYOUT_GROUPS = 50
+export const LAYOUT_GROUP_NAME_MAX = 40
+export const createLayoutGroupSchema = v.pipe(
+  v.strictObject({
+    name: v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(LAYOUT_GROUP_NAME_MAX)),
+    items: v.pipe(v.array(itemSchema), v.maxLength(LAYOUT_MAX_ITEMS_PER_FLOOR)),
+    walls: v.pipe(v.array(wallSchema), v.maxLength(LAYOUT_MAX_WALLS_PER_FLOOR)),
+  }),
+  v.check(group => group.items.length + group.walls.length > 0, 'Select pieces or walls to save'),
+  v.check(group => unique([...group.items.map(item => item.id), ...group.walls.map(wall => wall.id)]), 'Item ids repeat'),
+  v.check(group => jsonBytes({ items: group.items, walls: group.walls }) <= LAYOUT_MAX_FLOOR_BYTES, 'This group holds too much'),
+)
+export type CreateLayoutGroupInput = v.InferOutput<typeof createLayoutGroupSchema>
+
+/** `GET …/layout-groups`: the cafe's saved groups by name. */
+export interface LayoutGroup {
+  id: string
+  name: string
+  items: LayoutItem[]
+  walls: Wall[]
+  version: number
 }
 
 /** What the layout needs to know about a dining table: the record stays the branches feature's. */

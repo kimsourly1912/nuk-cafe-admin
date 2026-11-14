@@ -1,5 +1,5 @@
 import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
-import { MAX_CUSTOM_ITEM_LOOKS, MAX_CUSTOM_LOOKS } from '#shared/contracts/shop-layout'
+import { MAX_CUSTOM_ITEM_LOOKS, MAX_CUSTOM_LOOKS, MAX_LAYOUT_GROUPS } from '#shared/contracts/shop-layout'
 import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const BranchErrorCodes = {
@@ -17,6 +17,8 @@ export const BranchErrorCodes = {
   LOOK_NAME_TAKEN: 'LOOK_NAME_TAKEN',
   LOOK_LIMIT: 'LOOK_LIMIT',
   LOOK_IN_USE: 'LOOK_IN_USE',
+  GROUP_NAME_TAKEN: 'GROUP_NAME_TAKEN',
+  GROUP_LIMIT: 'GROUP_LIMIT',
 } as const
 
 export const branchNotFound = () => notFound('This branch')
@@ -148,3 +150,15 @@ export function itemLookInUse(places: { floor: string, branch: string, pieces: n
 /** A deployed server without `NUXT_QR_SECRET` (docs/server/operations.md → Configuration). */
 export const qrNotConfigured = () =>
   apiError(500, BranchErrorCodes.QR_NOT_CONFIGURED, 'Table QR codes aren\'t set up on this server yet.')
+
+export const groupNotFound = () => notFound('This group')
+
+export const groupChanged = () => versionConflict('This group')
+
+export const groupNameTaken = (name: string) =>
+  apiError(409, BranchErrorCodes.GROUP_NAME_TAKEN, `There is already a saved group named "${name}".`, {
+    fieldErrors: { name: ['Already used by another group'] },
+  })
+
+export const groupLimit = () =>
+  apiError(409, BranchErrorCodes.GROUP_LIMIT, `A cafe can have at most ${MAX_LAYOUT_GROUPS} saved groups. Delete one you don't use first.`)

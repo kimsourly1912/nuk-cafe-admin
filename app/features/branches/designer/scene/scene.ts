@@ -110,7 +110,7 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
         figures.push({ itemId: item.id, kind: item.kind, floorId: floor.id, anchor: object, body: figure.body, idle: figure.idle })
       }
       else {
-        const shape = { radius: item.radius, arcStart: item.arcStart, arcSweep: item.arcSweep, arcInner: item.arcInner }
+        const shape = { radius: item.radius, arcStart: item.arcStart, arcSweep: item.arcSweep, arcInner: item.arcInner, points: item.points }
         object = buildItem(context, { kind: item.kind, width: item.width, depth: item.depth, height: item.height, finishes: pieceFinishes(item, itemLooks), floorHeight: floor.height, shape })
       }
       // Above its floor when it has a height off it (D282: `z`).

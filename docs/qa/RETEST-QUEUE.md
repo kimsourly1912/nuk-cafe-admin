@@ -105,3 +105,11 @@ Owner decisions D1–D6 (2026-11-14) in the [plan](plans/studio-builder.md). Rea
 | Window shape | Set Sill 30 and Height 200: the 3D window runs from 30 to 230 cm (cut at the wall's top). |
 | Above the floor | Select a shelf, Above the floor 150: in 3D it hangs 1.5 m up; in Explore you walk under it. Stairs and people have no such field. |
 
+## E. Snap step, polygon shapes and saved groups (D284, branch `ccr-e78bff39-u70ma7`)
+
+| What | Steps and expected result |
+|---|---|
+| Snap step | Press G: a toast says 5 cm; dragging a piece moves it in 5 cm steps; G again 10, 25, then 1. The arrow keys still move 1 cm (Shift 10). |
+| Polygon shape | Shape tool → Polygon: click 5 corners, click the first: a pentagon block, selected. Resize it: it stretches. 3D shows the same outline. A crossing outline does not close. |
+| Saved groups | Select pieces and walls (with a table), Save as group, name it: saved without the table. Another branch: Assets → Saved groups → click: copies appear in the middle, one Undo removes them. Delete the group: copies already placed stay. A second group with the same name is refused in the dialog. |
+

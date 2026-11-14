@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { arcFromDrag, arcHandles, fittedRadius, radiusDot, radiusFromDrag, shapeLabelSize, shapeOutline, shapePath } from '../designer/shapes'
+import * as v from 'valibot'
+import { itemSchema, OUTLINE_CROSSES } from '#shared/contracts/shop-layout'
+import { arcFromDrag, arcHandles, fittedRadius, polygonShape, radiusDot, radiusFromDrag, shapeLabelSize, shapeOutline, shapePath } from '../designer/shapes'
 
 describe('shape names (ED-09)', () => {
   it('fit inside the shape, smaller on a round one, and stop at 22 cm', () => {
@@ -80,5 +82,28 @@ describe('arcs and rings (ED-06)', () => {
   it('shows the start dot only once there is an opening', () => {
     expect(arcHandles(round).start).toBeNull()
     expect(arcHandles({ ...round, arcSweep: 180 }).start).not.toBeNull()
+  })
+})
+
+describe('a polygon shape (plan Phase 4)', () => {
+  const triangle = [{ x: 100, y: 100 }, { x: 300, y: 100 }, { x: 200, y: 300 }]
+
+  it('stores drawn corners in thousandths of its size around its middle', () => {
+    expect(polygonShape(triangle)).toEqual({ x: 200, y: 200, width: 200, depth: 200, points: [{ x: -500, y: -500 }, { x: 500, y: -500 }, { x: 0, y: 500 }] })
+    expect(polygonShape(triangle.slice(0, 2))).toBeNull()
+    expect(polygonShape([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 200, y: 0 }])).toBeNull()
+  })
+
+  it('stretches with its size: the plan and 3D draw the same corners', () => {
+    const { points } = polygonShape(triangle)!
+    expect(shapeOutline({ kind: 'block-poly', width: 400, depth: 100, points })).toEqual({ outer: [{ x: -200, y: -50 }, { x: 200, y: -50 }, { x: 0, y: 50 }], hole: null })
+  })
+
+  it('the contract wants corners on a polygon only, and refuses a crossing one', () => {
+    const item = (extra: Record<string, unknown>) => (v.safeParse(itemSchema, { id: 'p', kind: 'block-poly', x: 0, y: 0, rotation: 0, width: 200, depth: 200, finishes: {}, ...extra }).issues ?? []).map(issue => issue.message)
+    expect(item({ points: polygonShape(triangle)!.points })).toEqual([])
+    expect(item({})).toContain('A polygon shape needs its corners, and only it has them')
+    expect(item({ kind: 'block', points: polygonShape(triangle)!.points })).toContain('A polygon shape needs its corners, and only it has them')
+    expect(item({ points: [{ x: -500, y: -500 }, { x: 500, y: 500 }, { x: 500, y: -500 }, { x: -500, y: 500 }] })).toContain(OUTLINE_CROSSES)
   })
 })

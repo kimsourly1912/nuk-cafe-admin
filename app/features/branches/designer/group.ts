@@ -147,6 +147,55 @@ export function pasteClipboard(layout: ShopLayout, clipboard: PlanClipboard, flo
   return copies
 }
 
+/**
+ * A saved group from the selected pieces and walls (plan Phase 5, D284): their copies around the
+ * selection's middle, as `createLayoutGroupSchema` stores them. Tables are left out (each has its
+ * own QR code). Null when nothing but tables is selected.
+ */
+export function groupFromSelection(layout: ShopLayout, floorId: string, targets: readonly PlanSelection[]): { items: LayoutItem[], walls: Wall[] } | null {
+  const floor = layout.floors.find(candidate => candidate.id === floorId)
+  if (!floor) return null
+  const items = floor.items.filter(item => ids(targets, 'item').has(item.id))
+  const walls = floor.walls.filter(wall => ids(targets, 'wall').has(wall.id))
+  const points = [...items, ...walls.flatMap(wall => [wall.from, wall.to])]
+  if (!points.length) return null
+  const middle = { x: Math.round((Math.min(...points.map(point => point.x)) + Math.max(...points.map(point => point.x))) / 2), y: Math.round((Math.min(...points.map(point => point.y)) + Math.max(...points.map(point => point.y))) / 2) }
+  const shift = (point: Point) => ({ x: point.x - middle.x, y: point.y - middle.y })
+  return {
+    items: items.map(item => ({ ...structuredClone(item), ...shift(item), hidden: undefined, locked: undefined })).map(withoutUndefined),
+    walls: walls.map(wall => ({ ...structuredClone(wall), from: shift(wall.from), to: shift(wall.to), hidden: undefined, locked: undefined })).map(withoutUndefined),
+  }
+}
+
+/**
+ * A saved group's pieces and walls placed on floor `floorId` around `at` (plan Phase 5, D284):
+ * new copies with new ids, their doors and windows too, as a paste makes them. A piece whose
+ * custom look the cafe no longer has (`knownLookIds`) keeps its own finishes. Returns the copies
+ * (to select).
+ */
+export function placeGroup(layout: ShopLayout, floorId: string, group: { items: readonly LayoutItem[], walls: readonly Wall[] }, at: Point, knownLookIds: ReadonlySet<string>): PlanSelection[] {
+  const floor = layout.floors.find(candidate => candidate.id === floorId)
+  if (!floor) return []
+  const copies: PlanSelection[] = []
+  for (const item of group.items) {
+    const id = newLayoutId('item')
+    copies.push({ kind: 'item', id })
+    const { lookId, ...rest } = structuredClone(item)
+    floor.items.push({ ...rest, ...(lookId && knownLookIds.has(lookId) && { lookId }), id, x: item.x + at.x, y: item.y + at.y })
+  }
+  for (const wall of group.walls) {
+    const id = newLayoutId('wall')
+    copies.push({ kind: 'wall', id })
+    floor.walls.push({ ...copyWall(wall), id, from: { x: wall.from.x + at.x, y: wall.from.y + at.y }, to: { x: wall.to.x + at.x, y: wall.to.y + at.y } })
+  }
+  return copies
+}
+
+/** The object without its `undefined` fields: the contract's optional flags are left out, not set. */
+function withoutUndefined<T extends object>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, field]) => field !== undefined)) as T
+}
+
 /** A copy of a wall whose doors and windows get ids of their own (ISS-042), as the panels make them. */
 function copyWall(wall: Wall): Wall {
   const copy = structuredClone(wall)

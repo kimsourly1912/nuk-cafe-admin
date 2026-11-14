@@ -133,6 +133,8 @@ export const ITEM_SPECS: Record<ItemKind, ItemSpec> = {
   // Shapes (D278): drawn with the Shape tool or placed from Structure, any size, one finish.
   'block': { kind: 'block', label: 'Block', category: 'structure', footprint: 'rect', width: 120, depth: 80, height: SHAPE_HEIGHT.default, slots: [{ key: 'body', label: 'Finish', options: [...STONES, ...WOODS, ...METALS, ...FABRICS], default: 'limestone' }], photo: null },
   'block-round': { kind: 'block-round', label: 'Round block', category: 'structure', footprint: 'round', width: 100, depth: 100, height: SHAPE_HEIGHT.default, slots: [{ key: 'body', label: 'Finish', options: [...STONES, ...WOODS, ...METALS, ...FABRICS], default: 'limestone' }], photo: null },
+  // Drawn corner by corner with the Shape tool's Polygon (plan Phase 4); never placed from the library.
+  'block-poly': { kind: 'block-poly', label: 'Polygon block', category: 'structure', footprint: 'rect', width: 100, depth: 100, height: SHAPE_HEIGHT.default, slots: [{ key: 'body', label: 'Finish', options: [...STONES, ...WOODS, ...METALS, ...FABRICS], default: 'limestone' }], photo: null },
   // People and pets (step 3g, D274): a fixed size (the contract's), no finishes. A seated customer
   // sits at chair height, so it goes on a chair; someone lazing lies in a hammock on its stand.
   'person': figure('person', 'Person', 'person', 168),

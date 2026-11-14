@@ -1993,6 +1993,37 @@ describe('the shop designer on saved layouts', () => {
     expect((await fetch(publicPath())).status).toBe(404)
   })
 
+  it('saved groups (D284): the floor\'s pieces saved as a group, placed again from Assets, undone; tables stay out', { timeout: 60_000 }, async () => {
+    const page = await signedIn()
+    await openDesign(page)
+    await plan(page).getByTestId('plan-table-L1').waitFor()
+    const pieces = () => plan(page).locator('[data-testid^="plan-item-"]').count()
+    const before = await pieces()
+    expect(before).toBeGreaterThan(0)
+    await plan(page).click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('ControlOrMeta+a')
+    const properties = page.getByRole('complementary', { name: 'Properties' })
+    await properties.getByRole('button', { name: 'Save as group' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Save as group' })
+    await dialog.getByLabel('Name').fill('Lab corner')
+    await dialog.getByRole('button', { name: 'Save group' }).click()
+    await dialog.waitFor({ state: 'detached' })
+
+    await showPanel(page, 'Assets')
+    await page.getByTestId('saved-group-Lab corner').click()
+    await expect.poll(pieces).toBe(before * 2)
+    // No table was copied: each has its own QR code.
+    expect(await plan(page).getByTestId('plan-table-L1').count()).toBe(1)
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect.poll(pieces).toBe(before)
+    await save(page)
+
+    // Deleted: copies already placed would stay; the library no longer lists it.
+    await page.getByRole('button', { name: 'Delete the group Lab corner' }).click()
+    await page.getByRole('alertdialog').or(page.getByRole('dialog')).getByRole('button', { name: 'Delete group' }).click()
+    await expect.poll(() => page.getByTestId('saved-group-Lab corner').count()).toBe(0)
+  })
+
   it('version history (ISS-027): lists kept versions; Restore is one undo step and saves itself', { timeout: 60_000 }, async () => {
     const page = await signedIn()
     await openDesign(page)
