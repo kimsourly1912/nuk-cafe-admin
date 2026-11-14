@@ -113,3 +113,14 @@ Owner decisions D1–D6 (2026-11-14) in the [plan](plans/studio-builder.md). Rea
 | Polygon shape | Shape tool → Polygon: click 5 corners, click the first: a pentagon block, selected. Resize it: it stretches. 3D shows the same outline. A crossing outline does not close. |
 | Saved groups | Select pieces and walls (with a table), Save as group, name it: saved without the table. Another branch: Assets → Saved groups → click: copies appear in the middle, one Undo removes them. Delete the group: copies already placed stay. A second group with the same name is refused in the dialog. |
 
+## F. Free colours, wall and floor finishes, door and window styles (D285, branch `ccr-e78bff39-u70ma7`)
+
+| What | Steps and expected result |
+|---|---|
+| A piece's colour | Select a chair: under Frame, the last swatch (**Custom colour**) opens a picker. Drag it, then Cancel: nothing changes. Type `a0522d`, **Use colour**: the frame is that colour in the plan and in 3D, still with wood grain; one Undo puts the old finish back. Upholstery in a colour keeps its weave. |
+| Looks in colour | New table look and New chair look: each part offers Custom colour; save; the look's preview and every table or piece using it show the colour. |
+| A wall's colour | Select a wall, Colour → a blue: 3D shows the plaster blue. A railing's or glass's is its frame's (Frame colour). **Use plaster** puts it back. |
+| A floor surface | Layers → Floor surface 1: **Floor** Planks, Tiles or Concrete, and a Colour: 3D's floor changes, its pattern kept. Copy walls from floor below on a new floor keeps both. |
+| Door styles | A door: Style **Glazed** (glass in a frame) and **Louvred** (slats); Leaf colour. In Explore, a glazed street door swings with its glass. |
+| Window styles | A window: **Single** (no mullions), **Shutters** (two shutters open flat outside, either side), Frame colour tints frame and shutters. |
+

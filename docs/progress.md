@@ -3,11 +3,18 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Studio builder: free colours, wall and floor finishes, door and window styles (D285, 2026-11-14)
+
+Branch `ccr-e78bff39-u70ma7` (after PR #319): one commit per step (free colours, walls and floors, doors and windows). Owner D2 (free colours, for everything) and the rest of D3.
+
+- **Status:** **Fixed, needs retest**: [RETEST-QUEUE.md](qa/RETEST-QUEUE.md) section F. Left in the plan: the per-floor 3D rebuild (ISS-041 step 3) after a benchmark on a real device. Not built (see D285): arched or round windows, double or sliding doors.
+- **Evidence:** EVIDENCE_PLACEHOLDER
+
 ### Studio builder: snap step, polygon shapes, saved groups (D284, 2026-11-14)
 
 Branch `ccr-e78bff39-u70ma7`, with D283 in the same PR: one commit per step (doors and windows, snap step, polygon, saved groups).
 
-- **Status:** **Fixed, needs retest**: [RETEST-QUEUE.md](qa/RETEST-QUEUE.md) sections D and E. Left in the plan: free colours and custom door shapes (next PR); the per-floor 3D rebuild after a benchmark on a real device.
+- **Status:** **Merged (PR #319), needs retest**: [RETEST-QUEUE.md](qa/RETEST-QUEUE.md) sections D and E. Free colours and door styles followed in D285.
 - **Evidence:** `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` (200 files, 3072 tests; groups: two-cafe isolation, name, version, and the limit's race, which fails without its batch guard); e2e `shop-designer` 32 of 32 with a new saved-groups test; full `pnpm test:e2e` 977 of 979, the 2 failures (Explore walk timeout, Google sign-up popup) passed when their files ran again (80 of 80). The Explore walk timed out under full-suite load in both runs this day: worth watching in CI. Migration 0066 hand-written (see D284). No manual browser check.
 
 ### Studio builder: doors, windows and pieces built as wanted (D283, 2026-11-14)
