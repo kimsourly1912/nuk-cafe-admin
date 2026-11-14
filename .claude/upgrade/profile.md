@@ -1,6 +1,6 @@
 # Upgrade profile — this project
 
-> Project-specific facts the generic `/upgrade-*` commands need.
+> Project-specific facts the generic `/upgrade` command and its agents need.
 > Edit this file when the stack changes. Keep it short and factual.
 
 ## Stack
@@ -82,7 +82,7 @@ and how migrations are applied, every import from `drizzle-orm/*`.
 - Anything else: the package's own repo releases and CHANGELOG
 - When the notes don't say whether a fix or change reaches this app: compare the published code, `npm pack <pkg>@<old> <pkg>@<new>` into an empty scratch folder, then `diff -r` and read only (never run it). The `nuxt-4-6-2` run settled its main unknown this way (`docs/upgrades/2026-10-29-nuxt-4-6-2.md`).
 
-## High-risk areas (always `risk: high`, reviewed first in Phase 5)
+## High-risk areas (always `risk: high`, run on `upgrade-executor-deep`, reviewed first by `upgrade-reviewer`)
 
 1. Authentication: Better Auth handler mounting, session lookup, cookie options
    (HttpOnly, Secure, SameSite, path, domain), refresh-token rotation and reuse detection,
@@ -96,9 +96,10 @@ and how migrations are applied, every import from `drizzle-orm/*`.
 7. Database: bindings, migrations, query behavior changes.
 8. Cloudflare entry (custom entry/error handler via Nitro hooks): before merge, `pnpm build:staging`,
    diff `.output/server/wrangler.json` against the pre-upgrade copy, `wrangler deploy --dry-run`, and a local
-   `wrangler dev` smoke test. Do not downgrade this to optional.
+   `wrangler dev` smoke test (`scripts/upgrade-smoke.sh`). `/upgrade` runs all four as release checks,
+   before and after. Do not downgrade this to optional.
 
-## Manual smoke test (after every upgrade)
+## Test checklist (after every upgrade: goes into the PR, tried on staging)
 
 login, logout, session refresh, expired session, one protected route as an
 unauthorized user, one CRUD flow, one stale edit (expect 409), main dashboard
