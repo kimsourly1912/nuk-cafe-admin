@@ -29,7 +29,7 @@ import { arcFromDrag, arcHandles, arcOf, radiusDot, radiusFromDrag, shapeLabelSi
 import type { ArcHandle, ShapeEdit } from '../designer/shapes'
 import { BIG_NUDGE_CM, BOOTH_BENCH_DEPTH_CM, boundsOf, chairPoses, NUDGE_CM, normalizeRotation, SNAP_CM, outwardNormal, constrainAngle, drawBounds, pointInPolygon, placementExtent, pointOnEdge, rectCorners, resizeCursor, resizeFromCorner, rotatePoint, rotationFromDrag, snap, WALL_THICKNESS_CM, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, outlineWallBands, wallStrip } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
-import { fitBounds, followCanvas, GRID_MAJOR_CM, GRID_MINOR_CM, majorGridOpacity, minorGridOpacity, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
+import { fitBounds, followCanvas, gridLines, panBy, planToScreen, visibleRect, wheelZoomFactor, zoomAt } from '../designer/camera'
 import type { Camera, ScreenSize } from '../designer/camera'
 import { canClose, CLOSE_DISTANCE_CM, closedShape, insertCorner, moveCorner, moveSide, removeCorner } from '../designer/outline'
 import { moveWall, moveWallEnd, moveWalls } from '../designer/walls'
@@ -129,9 +129,6 @@ const viewBox = computed(() => `${view.value.x} ${view.value.y} ${view.value.wid
 const perPixel = computed(() => 1 / scale.value)
 /** The canvas's size to fit to: none while hidden (3D), nor while the splitter lays out its first frame (a few pixels wide). */
 const MEASURED_MIN_PX = 100
-/** The fine grid fades out when its lines get close on screen (ISS-031). */
-const minorOpacity = computed(() => minorGridOpacity(scale.value))
-const majorOpacity = computed(() => majorGridOpacity(scale.value))
 const measured = computed(() => screenWidth.value >= MEASURED_MIN_PX && screenHeight.value >= MEASURED_MIN_PX)
 
 // The canvas moved on the page (the sidebar hid, showed or was resized): every plan point stays
@@ -211,6 +208,12 @@ watch(() => props.floorId, (id, old) => {
  */
 const offsetOf = (target: Pick<Floor, 'id' | 'canvasX' | 'canvasY'>): Point => props.frameOffsets?.[target.id] ?? { x: target.canvasX ?? 0, y: target.canvasY ?? 0 }
 const frameOffset = computed(() => offsetOf(floor.value))
+/** The grid's lines on screen (ISS-040), from the floor frame's own (0, 0). */
+const grid = computed(() => gridLines(camera.value, screenSize.value, { x: -frameOffset.value.x, y: -frameOffset.value.y }))
+function gridPath(xs: readonly number[], ys: readonly number[]): string {
+  const { width, height } = screenSize.value
+  return [...xs.map(x => `M${x} 0V${height}`), ...ys.map(y => `M0 ${y}H${width}`)].join('')
+}
 /** The frame being dragged by its name: drawn moved by this until let go. */
 const frameDrag = shallowRef<Point | null>(null)
 // The frame moved (a drag, a typed X or Y, an undo): the canvas around it stays where it is on the
@@ -1489,54 +1492,35 @@ const sizeBadge = computed(() => {
     @contextmenu="onContextMenu"
     @wheel.prevent="onWheel"
   >
-    <defs>
-      <pattern
-        id="plan-grid-minor"
-        :width="GRID_MINOR_CM"
-        :height="GRID_MINOR_CM"
-        patternUnits="userSpaceOnUse"
-        :patternTransform="`translate(${-frameOffset.x} ${-frameOffset.y})`"
-      >
-        <path
-          :d="`M${GRID_MINOR_CM} 0H0V${GRID_MINOR_CM}`"
-          fill="none"
-          stroke="var(--ui-border)"
-          :stroke-opacity="minorOpacity"
-          stroke-width="1"
-          vector-effect="non-scaling-stroke"
-        />
-      </pattern>
-      <pattern
-        id="plan-grid"
-        :width="GRID_MAJOR_CM"
-        :height="GRID_MAJOR_CM"
-        patternUnits="userSpaceOnUse"
-        :patternTransform="`translate(${-frameOffset.x} ${-frameOffset.y})`"
-      >
-        <rect
-          v-if="minorOpacity > 0"
-          :width="GRID_MAJOR_CM"
-          :height="GRID_MAJOR_CM"
-          fill="url(#plan-grid-minor)"
-        />
-        <path
-          :d="`M${GRID_MAJOR_CM} 0H0V${GRID_MAJOR_CM}`"
-          fill="none"
-          stroke="var(--ui-border-accented)"
-          :stroke-opacity="majorOpacity"
-          stroke-width="1"
-          vector-effect="non-scaling-stroke"
-        />
-      </pattern>
-    </defs>
     <rect
       :x="view.x - view.width"
       :y="view.y - view.height"
       :width="view.width * 3"
       :height="view.height * 3"
-      fill="url(#plan-grid)"
-      style="background: var(--ui-bg-muted)"
+      fill="transparent"
     />
+    <!-- The grid in screen pixels (ISS-040): one unit here is one pixel, so lines are sharp. -->
+    <g
+      :transform="`translate(${view.x} ${view.y}) scale(${perPixel})`"
+      fill="none"
+      stroke-width="1"
+      shape-rendering="crispEdges"
+      pointer-events="none"
+      data-testid="plan-grid"
+      :data-minor="grid.minor"
+      :data-major="grid.major"
+    >
+      <path
+        v-if="grid.minorOpacity > 0"
+        :d="gridPath(grid.minorX, grid.minorY)"
+        stroke="var(--ui-border)"
+        :stroke-opacity="grid.minorOpacity"
+      />
+      <path
+        :d="gridPath(grid.majorX, grid.majorY)"
+        stroke="var(--ui-border-accented)"
+      />
+    </g>
 
     <!-- The page's other floors (ISS-036): frames beside this one, read only; a click opens one. -->
     <g
