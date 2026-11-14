@@ -1,8 +1,8 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import { layoutSchema } from '#shared/contracts/shop-layout'
+import { createLayoutGroupSchema, layoutSchema } from '#shared/contracts/shop-layout'
 import type { ShopLayout } from '#shared/contracts/shop-layout'
-import { alignOffsets, copySelected, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, copySelected, groupFromSelection, placeGroup, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
 import type { PlanSelection } from '../designer/plan'
 import { renewRepeatedOpeningIds } from '../designer/walls'
@@ -231,5 +231,36 @@ describe('copied doors and windows get ids of their own (ISS-042)', () => {
     // Nothing repeats: the same floors back, untouched.
     const clean = withDoor()
     expect(renewRepeatedOpeningIds(clean.floors)).toBe(clean.floors)
+  })
+})
+
+describe('saved groups (plan Phase 5, D284)', () => {
+  const pieces: PlanSelection[] = [{ kind: 'item', id: 'plant' }, { kind: 'wall', id: 'w1' }, { kind: 'table', id: 't1' }]
+
+  it('makes a group around the selection\'s middle, without tables or layer flags', () => {
+    const next = layout()
+    next.floors[0]!.items[0]!.locked = true
+    const group = groupFromSelection(next, 'g', pieces)!
+    // The plant at (100, 100) and the wall from (600, 400) to (900, 400): middle (500, 250).
+    expect(group.items).toEqual([{ id: 'plant', kind: 'plant', x: -400, y: -150, rotation: 0, width: 50, depth: 50, finishes: {} }])
+    expect(group.walls).toEqual([{ id: 'w1', from: { x: 100, y: 150 }, to: { x: 400, y: 150 } }])
+    expect(v.safeParse(createLayoutGroupSchema, { name: 'Corner', ...group }).success).toBe(true)
+    expect(groupFromSelection(next, 'g', [{ kind: 'table', id: 't1' }])).toBeNull()
+  })
+
+  it('places new copies around a point, with new ids, and drops a look the cafe no longer has', () => {
+    const next = layout()
+    const group = { items: [{ id: 'plant', kind: 'plant' as const, x: -50, y: 0, rotation: 0, width: 50, depth: 50, finishes: {}, lookId: 'gone' }], walls: [{ id: 'w', from: { x: 0, y: 0 }, to: { x: 200, y: 0 }, openings: [{ id: 'd', kind: 'door' as const, offset: 0, width: 90 }] }] }
+    const copies = placeGroup(next, 'g', group, { x: 300, y: 300 }, new Set())
+    expect(copies.map(copy => copy.kind)).toEqual(['item', 'wall'])
+    const item = next.floors[0]!.items.find(candidate => candidate.id === copies[0]!.id)!
+    expect(item).toMatchObject({ x: 250, y: 300 })
+    expect(item.lookId).toBeUndefined()
+    const wall = next.floors[0]!.walls.find(candidate => candidate.id === copies[1]!.id)!
+    expect(wall).toMatchObject({ from: { x: 300, y: 300 }, to: { x: 500, y: 300 } })
+    expect(wall.openings![0]!.id).not.toBe('d')
+    // Twice: no id repeats, so the layout saves.
+    placeGroup(next, 'g', group, { x: 300, y: 500 }, new Set(['gone']))
+    expect(v.safeParse(layoutSchema, next).issues?.map(issue => issue.message)).toBeUndefined()
   })
 })

@@ -12,8 +12,9 @@ import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery
 import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
 import { edgeLength, FLOOR_HEIGHT_MAX_CM, floorPageId, isSimpleOutline, SHAPE_ARC, wallKind, isFigureKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
-import type { CustomItemLook, CustomLook, Finish, Floor, Wall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import type { CustomItemLook, CustomLook, Finish, Floor, LayoutGroup, Wall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
+import { useLayoutGroupMutations, useLayoutGroups } from '../composables/useBranches'
 import { losesStreetDoor } from '../composables/useLayoutDraft'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
 import type { AlignEdge, PlanClipboard } from '../designer/group'
@@ -25,13 +26,14 @@ import type { Bounds, Sized } from '../designer/geometry'
 import { areaM2, edgeNames, setEdgeLength, shapeOf, withShape } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
-import { alignOffsets, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
+import { alignOffsets, cycleSelection, distributeOffsets, duplicateSelected, groupFromSelection, pasteClipboard, placeGroup, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
 import { addPage, besideFrames, effectiveFrames, floorsOnPage, framePlace, removePage, renamePage, setFloorPage } from '../designer/pages'
 import { addWallOpening, copyStructure, setWallKind, wallOpeningFits } from '../designer/walls'
 import type { Starter } from '../designer/starters'
 import WallPanel from './WallPanel.vue'
+import SaveGroupModal from './SaveGroupModal.vue'
 import ExploreLayoutSettings from './ExploreLayoutSettings.vue'
 import ItemLookFormModal from './ItemLookFormModal.vue'
 import type { ItemLookSource } from './ItemLookFormModal.vue'
@@ -837,7 +839,39 @@ function editGroup(targets: PlanSelection[]): ContextMenuItem[][] {
     : []), [
     { label: 'Hide', icon: 'i-lucide-eye-off', onSelect: () => draft.change(next => layers.forEach(entry => setFlag(layerIn(next, entry.target, current.id), 'hidden', true))) },
     { label: allLocked ? 'Unlock' : 'Lock', icon: allLocked ? 'i-lucide-lock-open' : 'i-lucide-lock', onSelect: () => draft.change(next => layers.forEach(entry => setFlag(layerIn(next, entry.target, current.id), 'locked', !allLocked))) },
-  ]]
+  ], ...(targets.some(target => target.kind !== 'table')
+    ? [[{ label: 'Save as group…', icon: 'i-lucide-boxes', onSelect: () => void saveAsGroup(targets) }]]
+    : [])]
+}
+
+// --- Saved groups (plan Phase 5, D284): the cafe's pieces and walls to place again ---
+
+const groupsQuery = useLayoutGroups()
+const groupMutations = useLayoutGroupMutations()
+const savedGroups = computed(() => groupsQuery.data.value ?? [])
+const saveGroupModal = useOverlay().create(SaveGroupModal)
+
+/** The selected pieces and walls as a group for the cafe; tables stay out (each has its own QR code). */
+async function saveAsGroup(targets: readonly PlanSelection[]) {
+  const current = floor.value
+  const pieces = current ? groupFromSelection(layout.value, current.id, targets) : null
+  if (!pieces) {
+    toast.add({ title: 'Nothing to save', description: 'Tables are never in a group: select pieces or walls.', color: 'neutral', icon: 'i-lucide-info' })
+    return
+  }
+  await saveGroupModal.open(pieces).result
+}
+
+/** A saved group's copies in the middle of the plan shown, selected, as one undo step. */
+function placeSavedGroup(saved: LayoutGroup) {
+  const current = floor.value
+  if (!current) return
+  const at = canvas.value?.viewCenter() ?? { x: 0, y: 0 }
+  const known = new Set(itemLooks.value.map(look => look.id))
+  let copies: PlanSelection[] = []
+  if (!draft.change(next => void (copies = placeGroup(next, current.id, saved, { x: Math.round(at.x), y: Math.round(at.y) }, known)))) return
+  props.editor.selectMany(copies)
+  sheet.value = null
 }
 
 // --- Layers (ISS-021, like Figma's): hide, lock, rename, range select, hover ---
@@ -2128,6 +2162,39 @@ const pendingLabel = computed(() => {
         </div>
       </section>
 
+      <!-- Saved groups (plan Phase 5, D284): the cafe's own, placed in the middle of the plan. -->
+      <section
+        v-if="panel === 'assets' && savedGroups.some(saved => matches(saved.name))"
+        class="flex flex-col gap-2"
+        data-testid="saved-groups"
+      >
+        <h2 class="text-xs font-semibold tracking-wide text-muted uppercase">
+          Saved groups
+        </h2>
+        <div
+          v-for="saved in savedGroups.filter(candidate => matches(candidate.name))"
+          :key="saved.id"
+          class="flex items-center gap-1"
+        >
+          <UButton
+            :label="saved.name"
+            icon="i-lucide-boxes"
+            color="neutral"
+            variant="outline"
+            class="min-w-0 flex-1"
+            :data-testid="`saved-group-${saved.name}`"
+            @click="placeSavedGroup(saved)"
+          />
+          <UButton
+            icon="i-lucide-trash-2"
+            color="neutral"
+            variant="ghost"
+            :aria-label="`Delete the group ${saved.name}`"
+            @click="groupMutations.remove.execute({ group: saved })"
+          />
+        </div>
+      </section>
+
       <section
         v-for="category in (panel === 'assets' ? catalog.filter(category => category.specs.some(spec => matches(spec.label)) || itemLooksIn(category.key).some(look => matches(look.name))) : [])"
         :key="category.key"
@@ -2336,6 +2403,15 @@ const pendingLabel = computed(() => {
       <p class="text-sm text-muted">
         Drag any of them, or use the arrow keys, to move them together. Shift+click adds or removes one.
       </p>
+      <UButton
+        v-if="group.some(member => member.kind !== 'table')"
+        label="Save as group"
+        icon="i-lucide-boxes"
+        color="neutral"
+        variant="outline"
+        class="self-start"
+        @click="saveAsGroup(group)"
+      />
       <!-- Figma's align row (ISS-026): to the set's own edges. -->
       <div
         role="group"

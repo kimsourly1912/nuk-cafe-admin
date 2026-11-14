@@ -1,5 +1,5 @@
 import type { BranchPause, BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
-import type { BranchLayout, CreateItemLookInput, CreateLookInput, CustomItemLook, CustomLook, LayoutHistoryEntry, SaveLayoutInput, ShopLayout, UpdateItemLookInput } from '#shared/contracts/shop-layout'
+import type { BranchLayout, CreateItemLookInput, CreateLayoutGroupInput, CreateLookInput, CustomItemLook, CustomLook, LayoutGroup, LayoutHistoryEntry, SaveLayoutInput, ShopLayout, UpdateItemLookInput } from '#shared/contracts/shop-layout'
 
 const base = (branchId: string) => `/admin/branches/${branchId}`
 
@@ -335,4 +335,48 @@ export function useItemLookMutations() {
   )
 
   return { create, update, remove }
+}
+
+/**
+ * The cafe's saved groups (plan Phase 5, D284): pieces and walls to place again on any floor,
+ * `layout-groups:list`. Placing one copies it into the layout; nothing else reads them.
+ */
+export function useLayoutGroups(options: { immediate?: boolean } = {}) {
+  return useApiQuery('layout-groups:list', () => apiFetch<LayoutGroup[]>('/admin/layout-groups'), options)
+}
+
+const groupLock = (input: { group: LayoutGroup }) => `layout-group:${input.group.id}`
+
+export function useLayoutGroupMutations() {
+  const create = useMutation(
+    (input: CreateLayoutGroupInput) => apiFetch<LayoutGroup>('/admin/layout-groups', { method: 'POST', body: input }),
+    {
+      id: 'branches:layout-group-create',
+      key: input => input.name.toLowerCase(),
+      successMessage: group => `Group "${group.name}" saved`,
+      errorMessage: input => `Could not save "${input.name}"`,
+      invalidate: ['layout-groups'],
+    },
+  )
+
+  /** Deletes a saved group; the layouts holding its copies keep them. */
+  const remove = useMutation(
+    (input: { group: LayoutGroup }) => apiFetch<null>(`/admin/layout-groups/${input.group.id}`, { method: 'DELETE', query: { version: input.group.version } }),
+    {
+      id: 'branches:layout-group-delete',
+      key: groupLock,
+      lock: groupLock,
+      confirm: input => ({
+        title: `Delete the group "${input.group.name}"?`,
+        description: 'Copies already placed stay where they are. It can\'t be restored.',
+        confirmLabel: 'Delete group',
+        danger: true,
+      }),
+      successMessage: (_, input) => `Group "${input.group.name}" deleted`,
+      errorMessage: input => `Could not delete "${input.group.name}"`,
+      invalidate: ['layout-groups'],
+    },
+  )
+
+  return { create, remove }
 }

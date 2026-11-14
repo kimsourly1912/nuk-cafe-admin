@@ -173,6 +173,8 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /admin/furniture-looks': () => [],
   // No chair or fixture looks (step 3d): the built-in pieces only.
   'GET /admin/item-looks': () => [],
+  // No saved groups (plan Phase 5, D284).
+  'GET /admin/layout-groups': () => [],
   'GET /admin/menu/items': () => pageOf([]),
   'GET /admin/exchange-rates': () => ({ current: null, history: [] }),
   'GET /admin/khqr': () => ({ version: 1, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: ['USD'], updatedAt: null, updatedBy: null, automaticCheck: false, token: null, tokenStorage: false }),

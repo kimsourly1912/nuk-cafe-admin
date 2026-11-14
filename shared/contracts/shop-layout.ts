@@ -683,6 +683,34 @@ export interface CustomItemLook extends ItemLook {
   pieces: number
 }
 
+/**
+ * A saved group (plan Phase 5): pieces and walls saved under a name for the whole cafe, placed
+ * again on any floor of any branch as new copies. Positions are around the group's middle. Tables
+ * are never in one: each has its own QR code.
+ */
+export const MAX_LAYOUT_GROUPS = 50
+export const LAYOUT_GROUP_NAME_MAX = 40
+export const createLayoutGroupSchema = v.pipe(
+  v.strictObject({
+    name: v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(LAYOUT_GROUP_NAME_MAX)),
+    items: v.pipe(v.array(itemSchema), v.maxLength(LAYOUT_MAX_ITEMS_PER_FLOOR)),
+    walls: v.pipe(v.array(wallSchema), v.maxLength(LAYOUT_MAX_WALLS_PER_FLOOR)),
+  }),
+  v.check(group => group.items.length + group.walls.length > 0, 'Select pieces or walls to save'),
+  v.check(group => unique([...group.items.map(item => item.id), ...group.walls.map(wall => wall.id)]), 'Item ids repeat'),
+  v.check(group => jsonBytes({ items: group.items, walls: group.walls }) <= LAYOUT_MAX_FLOOR_BYTES, 'This group holds too much'),
+)
+export type CreateLayoutGroupInput = v.InferOutput<typeof createLayoutGroupSchema>
+
+/** `GET …/layout-groups`: the cafe's saved groups by name. */
+export interface LayoutGroup {
+  id: string
+  name: string
+  items: LayoutItem[]
+  walls: Wall[]
+  version: number
+}
+
 /** What the layout needs to know about a dining table: the record stays the branches feature's. */
 export interface LayoutTable {
   id: string
