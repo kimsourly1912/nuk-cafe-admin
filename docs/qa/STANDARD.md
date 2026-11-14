@@ -1,6 +1,6 @@
 # QA standard
 
-The rules for finding, recording, fixing and retesting problems in this project. Every QA agent and every fixer reads this file first.
+The rules for finding, recording, fixing and retesting problems in this project. Every QA agent and every fixer reads this file first. People: read [GUIDE.md](GUIDE.md) instead.
 
 Status of these rules: sections 1 to 4 and 6 to 12 were used in practice (Studio vs Figma QA, 2026-11). Section 5 (retest and Verified) is not proven yet. After the first retest round, confirm or change it and remove this note.
 

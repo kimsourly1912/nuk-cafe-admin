@@ -4,6 +4,7 @@ How we find, record, fix and retest bugs and improvements. Testers can be a pers
 
 | File | Use |
 |---|---|
+| [GUIDE.md](GUIDE.md) | How QA works, in plain words, for people. Start here if you are new. |
 | [STANDARD.md](STANDARD.md) | The rules: roles, flow, status, severity, evidence. Read first. |
 | [RETEST-QUEUE.md](RETEST-QUEUE.md) | Everything built and waiting for a retest, with who can test it and the steps. |
 | [VERIFIED.md](VERIFIED.md) | Items that passed a retest, with date, commit and evidence. |
