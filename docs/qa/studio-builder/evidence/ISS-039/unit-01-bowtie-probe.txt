@@ -1,0 +1,5 @@
+Probe run 2026-11-14 with vitest 5.0.1 on main 06bf118 (temporary test file, not committed).
+
+moveCorner(square 500 x 500, corner 2, to (-300, 250), square = false)
+  outline: [{"x":0,"y":0},{"x":500,"y":0},{"x":-300,"y":250},{"x":0,"y":500}]
+  floorSchema: VALID (self-intersecting outline accepted)

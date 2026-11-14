@@ -1,0 +1,5 @@
+Probe run 2026-11-14 with vitest 5.0.1 on main 06bf118 (temporary test file, not committed).
+
+duplicateSelected(layout, 'f1', [{ kind: 'wall', id: 'w' }], { x: 0, y: 50 })
+  wall w had one door with id 'o1'
+  opening ids after duplicate: [ 'o1', 'o1' ]

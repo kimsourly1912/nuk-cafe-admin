@@ -1,0 +1,9 @@
+Probe run 2026-11-14 with vitest 5.0.1 on main 06bf118 (temporary test file, not committed).
+
+removeCorner(square, 1) where side 0 is 'open' and side 1 is a wall with a door:
+  merged edge: {"kind":"open","openings":[{"id":"d1","kind":"door","offset":600,"width":90}]}
+  floorSchema: An open edge has no doors or windows
+
+removeCorner(square, 1) where side 0 is a 'railing' and side 1 is a wall with a window:
+  merged edge: {"kind":"railing","openings":[{"id":"w1","kind":"window","offset":600,"width":90}]}
+  floorSchema: A window needs a wall
