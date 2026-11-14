@@ -8,7 +8,7 @@
 Branch `ccr-e78bff39-u70ma7`, one PR with one commit per step: grid (ISS-040, plan Phase 2 grid part), street rebuild (ISS-041 step 2), contract v2 (ISS-045, ISS-046, plan Phase 1) in five commits. Owner decisions D1–D6 recorded in the plan; the owner chose the full contract v2 over a smaller variant Claude offered.
 
 - **Status:** **Fixed, needs retest**; steps in [RETEST-QUEUE.md](qa/RETEST-QUEUE.md) section C. Not done here: ISS-041 step 3 (per-floor rebuild), plan Phase 3 (door and window height, sill, swing: owner D3 "also structure"), Phase 4 (free colours for everything, owner D2: changes the looks contract) and saved groups.
-- **Evidence:** see the PR. Unit and server: contract v2 upgrade (v1 rows, bodies, snapshots), walls, surfaces, Room, grid, street key; e2e `shop-designer`, `shop-layout-api` updated for walls and empty floors.
+- **Evidence:** `pnpm lint`, `pnpm typecheck` (with `NODE_OPTIONS=--max-old-space-size=6144` here), `pnpm test:unit` (199 files, 3044 tests: contract v2 upgrade of v1 rows, bodies and snapshots; walls, surfaces, Room, grid, street key). Full `pnpm test:e2e` locally with Chromium: 975 of 978; the 3 failures (Explore walk timeout, a look photo dialog, a menu animation) passed when their files ran again (70 of 70), so load timing, not this change. `shop-designer` and `shop-layout-api` e2e updated for walls, empty floors and an old tab's v1 body. No manual browser check.
 - **Deploy note:** a v2 layout cannot be read by an app built before it; the read upgrade needs no migration.
 
 ### Studio builder Phase 0: quick fixes (D281, 2026-11-14)
