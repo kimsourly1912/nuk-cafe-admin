@@ -30,6 +30,8 @@ Pick the template you need from `_templates/`:
 
 The repo file is the only source of truth. Do not keep a second tracker (a sheet, a board). A spreadsheet may be used as a personal worksheet, but nothing counts until the file says it.
 
+History: the first QA area (Studio vs Figma, 2026-11) was also tracked in a Claude Sheet, "Figma vs Studio — Behavior Audit" (Audit, Issues, Test log tabs). It was only the tester's working index and is retired. It is not a source of truth and no agent needs to read or update it. Its content is in the repo's git history (`docs/qa/studio-figma/`, before the 2026-11-14 clean-up). Do not recreate it; new areas use the area README table.
+
 ## 2. Two kinds of QA
 
 - **Compare with a reference** (for example Figma). Run the same steps in the reference and in our app from the same start state. Differences become issues.
