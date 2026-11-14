@@ -5,7 +5,7 @@ import { pointInPolygon, rotatePoint } from '../designer/geometry'
 import { createBuildContext, disposeBuildContext, meshesOf } from '../designer/scene/furniture'
 import { createMaterialLibrary } from '../designer/scene/materials'
 import { buildScene } from '../designer/scene/scene'
-import { buildSurroundings } from '../designer/scene/surroundings'
+import { buildSurroundings, surroundingsKey } from '../designer/scene/surroundings'
 import { frontFrame, LANE, planLane, planSpans, toFrame, toPlan } from '../designer/surroundings'
 import type { Span } from '../designer/surroundings'
 import { demoLayout } from './demo-layout'
@@ -183,5 +183,20 @@ describe('the Neighborhood lane in 3D', () => {
     expect(lane.context.geometries.size).toBeGreaterThan(10)
     disposeBuildContext(lane.context)
     expect(lane.context.geometries.size).toBe(0)
+  })
+})
+
+describe('building the street again (ISS-041)', () => {
+  it('only when the footprint, street door, scene or seed change, not for furniture', () => {
+    const layout = demoLayout()
+    const key = surroundingsKey(layout, 'neighborhood-lane', 'b1')
+    const moved = structuredClone(layout)
+    moved.floors[0]!.items.push({ id: 'new-plant', kind: 'plant', x: 300, y: 300, rotation: 0, width: 50, depth: 50, finishes: {} })
+    expect(surroundingsKey(moved, 'neighborhood-lane', 'b1')).toBe(key)
+    const wider = structuredClone(layout)
+    wider.floors[0]!.outline = wider.floors[0]!.outline.map(point => ({ x: point.x * 2, y: point.y }))
+    expect(surroundingsKey(wider, 'neighborhood-lane', 'b1')).not.toBe(key)
+    expect(surroundingsKey(layout, 'neighborhood-lane', 'b2')).not.toBe(key)
+    expect(surroundingsKey(layout, 'none', 'b1')).toBe('none')
   })
 })

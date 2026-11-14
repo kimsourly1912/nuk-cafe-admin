@@ -8,7 +8,7 @@ import type { ScenePreset } from '#shared/contracts/shop-layout'
 import { disposeBuildContext, meshesOf } from './furniture'
 import { createModelLibrary } from './models'
 import type { BuiltSurroundings } from './surroundings'
-import { buildSurroundings } from './surroundings'
+import { buildSurroundings, surroundingsKey } from './surroundings'
 import type { BuiltScene, FigureNode, SceneInput } from './scene'
 import { buildGround, buildScene } from './scene'
 import type { StageDetails, StageOptions } from './stage'
@@ -92,6 +92,8 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
   let animators = new Map<FigureNode | 'surroundings', (delta: number) => void>()
   let surroundings: BuiltSurroundings | null = null
   let surroundingsChoice: { preset: ScenePreset, seed: string } = { preset: 'none', seed: '' }
+  /** What the street shown was planned from (`surroundingsKey`). */
+  let builtSurroundingsKey: string | null = null
   let ground: Mesh | null = null
   /** The model loops, stopped when their scene goes. */
   let mixers: AnimationMixer[] = []
@@ -126,7 +128,7 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
     applyVisibility()
     attachFigures(built)
     // The street fits this layout: built again with it (clearContent took the old one off).
-    placeSurroundings(layoutChanged || first)
+    placeSurroundings(first)
     if (selection && (selection.kind === 'table' ? built.tables : built.items).has(selection.id)) select(selection)
     else selection = null
     if (first) {
@@ -264,9 +266,15 @@ export function createBuildingViewer(options: BuildingViewerOptions): BuildingVi
    * street). `rebuild` builds them again (a new layout, a new choice); otherwise the current ones go
    * back into the scene a rebuild of the building emptied.
    */
+  /**
+   * The street around the café. Built again only when what it is planned from changed (ISS-041):
+   * the scene, its seed, or the building's footprint and street door, not on every edit inside.
+   */
   function placeSurroundings(rebuild: boolean) {
     if (!built) return
-    if (rebuild || !surroundings) {
+    const key = surroundingsKey(input!.layout, surroundingsChoice.preset, surroundingsChoice.seed)
+    if (rebuild || key !== builtSurroundingsKey) {
+      builtSurroundingsKey = key
       disposeSurroundings()
       surroundings = buildSurroundings(stage.materials, input!.layout, surroundingsChoice.preset, surroundingsChoice.seed)
     }
