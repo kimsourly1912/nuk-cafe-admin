@@ -64,6 +64,8 @@ const props = defineProps<{
   group?: readonly PlanSelection[]
   /** The floor surface Edit points works on (D282); the floor's first when left out. */
   slabId?: string | null
+  /** Where moves, drawing and resizing land, in cm (G cycles it, plan Phase 2); `SNAP_CM` when left out. */
+  snapStep?: number
 }>()
 
 const emit = defineEmits<{
@@ -111,6 +113,7 @@ const svg = useTemplateRef<SVGSVGElement>('svg')
 const { left: screenLeft, top: screenTop, width: screenWidth, height: screenHeight } = useElementBounding(svg)
 const floorIndex = computed(() => props.layout.floors.findIndex(floor => floor.id === props.floorId))
 const floor = computed(() => props.layout.floors[floorIndex.value] ?? props.layout.floors[0]!)
+const snapStep = computed(() => props.snapStep ?? SNAP_CM)
 const below = computed(() => (props.showBelow ? props.layout.floors[floorIndex.value - 1] : undefined))
 
 /** The smallest plan span Fit and Zoom to selection show, in centimetres. */
@@ -644,15 +647,15 @@ function toPlan(clientX: number, clientY: number, inside = false): Point | null 
 
 /** The middle of what's on screen, on the grid: where Place on map puts a piece. */
 function viewCenter(): Point {
-  return { x: snap(view.value.x + view.value.width / 2, SNAP_CM), y: snap(view.value.y + view.value.height / 2, SNAP_CM) }
+  return { x: snap(view.value.x + view.value.width / 2, snapStep.value), y: snap(view.value.y + view.value.height / 2, snapStep.value) }
 }
 
 /** Ctrl or ⌘ held while dragging: no smart guides (D278; moves are on whole centimetres either way, ISS-004). */
 const fineSnap = (event: { ctrlKey: boolean, metaKey: boolean }) => event.ctrlKey || event.metaKey
 
-/** On whole centimetres (SNAP_CM); any angle from `from`, or 45° steps when `constrain` (Shift, like Figma: ISS-018). */
+/** On the snap step (`snapStep`, whole centimetres); any angle from `from`, or 45° steps when `constrain` (Shift, like Figma: ISS-018). */
 function drawPoint(plan: Point, from: Point | undefined, constrain: boolean): Point {
-  const step = SNAP_CM
+  const step = snapStep.value
   const point = { x: snap(plan.x, step), y: snap(plan.y, step) }
   return from && constrain ? constrainAngle(from, point, step) : point
 }
@@ -787,7 +790,7 @@ function onPointerDown(event: PointerEvent) {
     gesture = { type: 'pan', startClient: { x: event.clientX, y: event.clientY }, startCamera: { ...camera.value }, moved: false, plan, event: { shiftKey: event.shiftKey, fine: fineSnap(event) } }
   }
   if ((props.mode === 'room' || props.mode === 'shape') && plan && !props.placing) {
-    const step = SNAP_CM
+    const step = snapStep.value
     gesture = { type: 'room', start: { x: snap(plan.x, step), y: snap(plan.y, step) }, startClient: { x: event.clientX, y: event.clientY } }
     return
   }
@@ -940,7 +943,7 @@ function followPointer(event: PointerMove) {
   if (gesture.type === 'room') {
     // A few pixels are still a click (ISS-016): no rectangle yet.
     if (!roomPreview.value && Math.hypot(event.clientX - gesture.startClient.x, event.clientY - gesture.startClient.y) < DRAG_SLOP_PX) return
-    const step = SNAP_CM
+    const step = snapStep.value
     const end = { x: snap(plan.x, step), y: snap(plan.y, step) }
     // Like Figma (ISS-017): Shift keeps both sides equal while held (a round block too); Alt
     // draws from the middle, in Room too. Cutting is the tool bar's choice.
@@ -975,7 +978,7 @@ function followPointer(event: PointerMove) {
   gesture.moved = true
   if (gesture.type === 'frame') {
     if (floor.value.locked) return
-    frameDrag.value = { x: snap(plan.x - gesture.startPlan.x, SNAP_CM), y: snap(plan.y - gesture.startPlan.y, SNAP_CM) }
+    frameDrag.value = { x: snap(plan.x - gesture.startPlan.x, snapStep.value), y: snap(plan.y - gesture.startPlan.y, snapStep.value) }
     return
   }
   if (gesture.type === 'join') {
@@ -990,7 +993,7 @@ function followPointer(event: PointerMove) {
     return
   }
   if (gesture.type === 'group') {
-    const step = SNAP_CM
+    const step = snapStep.value
     const delta = { x: snap(plan.x - gesture.startPlan.x, step), y: snap(plan.y - gesture.startPlan.y, step) }
     if (event.shiftKey) {
       if (Math.abs(delta.x) >= Math.abs(delta.y)) delta.y = 0
@@ -1008,7 +1011,7 @@ function followPointer(event: PointerMove) {
     return
   }
   if (gesture.type === 'side') {
-    const step = SNAP_CM
+    const step = snapStep.value
     if (!slab.value) return
     const base = shapeOf(floor.value, slab.value)
     const normal = outwardNormal(base.outline, gesture.index)
@@ -1025,7 +1028,7 @@ function followPointer(event: PointerMove) {
     return
   }
   if (gesture.type === 'wall') {
-    const step = SNAP_CM
+    const step = snapStep.value
     const delta = { x: snap(plan.x - gesture.startPlan.x, step), y: snap(plan.y - gesture.startPlan.y, step) }
     if (event.shiftKey) {
       if (Math.abs(delta.x) >= Math.abs(delta.y)) delta.y = 0
@@ -1034,7 +1037,7 @@ function followPointer(event: PointerMove) {
     liveWalls.value = moveWall(floor.value.walls, gesture.id, delta)
     return
   }
-  const step = SNAP_CM
+  const step = snapStep.value
   const to = { x: snap(gesture.origin.x + plan.x - gesture.startPlan.x, step), y: snap(gesture.origin.y + plan.y - gesture.startPlan.y, step) }
   // Shift keeps a piece's move straight across or down, like Figma (D278).
   if (gesture.type === 'drag' && event.shiftKey) {

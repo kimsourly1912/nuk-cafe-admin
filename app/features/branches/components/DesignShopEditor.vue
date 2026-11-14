@@ -20,7 +20,7 @@ import type { AlignEdge, PlanClipboard } from '../designer/group'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
 import { fittedRadius, maxRadius } from '../designer/shapes'
 import type { ShapeEdit } from '../designer/shapes'
-import { besideOf, boundsOf, floorPoints, newLayoutId, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
+import { besideOf, boundsOf, floorPoints, newLayoutId, nextSnapStep, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
 import { areaM2, edgeNames, setEdgeLength, shapeOf, withShape } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
@@ -1336,7 +1336,7 @@ function onLibraryMove(event: PointerEvent) {
   if (!libraryDrag.dragging && Math.hypot(event.clientX - libraryDrag.start.x, event.clientY - libraryDrag.start.y) < 6) return
   libraryDrag.dragging = true
   const at = canvas.value?.toPlan(event.clientX, event.clientY, true)
-  ghost.value = at ? ghostOf(libraryDrag.piece, { x: snap(at.x, SNAP_CM), y: snap(at.y, SNAP_CM) }) : null
+  ghost.value = at ? ghostOf(libraryDrag.piece, { x: snap(at.x, snapStep.value), y: snap(at.y, snapStep.value) }) : null
 }
 
 function clearLibraryDrag() {
@@ -1511,11 +1511,23 @@ function onStudioKey(event: KeyboardEvent) {
   if (event.shiftKey) return
   const tools: Record<string, PlanMode> = { v: 'select', h: 'hand', r: 'room', s: 'shape', o: 'shape', p: 'outline', w: 'wall' }
   const key = event.key.toLowerCase()
+  if (key === 'g') return run(cycleSnap)
   if (key === 's' || key === 'o') roundShape.value = key === 'o'
   const tool = tools[key]
   if (tool && floor.value) return run(() => (tool === mode.value ? undefined : startTool(tool)))
 }
 useEventListener('keydown', onStudioKey)
+
+/**
+ * The snap step (plan Phase 2): G cycles 1, 5, 10 and 25 cm, and a toast says which. Moves,
+ * drawing and resizing land on it; the arrow keys keep their 1 and 10 cm. Kept while the editor is
+ * open, not saved.
+ */
+const snapStep = ref<number>(SNAP_CM)
+function cycleSnap() {
+  snapStep.value = nextSnapStep(snapStep.value)
+  toast.add({ id: 'snap-step', title: `Snap to ${snapStep.value} cm`, color: 'neutral', icon: 'i-lucide-grid-2x2' })
+}
 
 // --- The right-click menu (D278) ---
 
@@ -3242,6 +3254,7 @@ const pendingLabel = computed(() => {
                 :group="group"
                 :placing="!!pending"
                 :slab-id="activeSlab?.id ?? null"
+                :snap-step="snapStep"
                 @open-floor="selectFloor"
                 @place="placePending"
                 @cancel-place="pending = null"

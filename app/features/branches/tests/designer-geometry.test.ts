@@ -4,7 +4,7 @@ import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook, keepsCircle } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { besideOf, chairPoses, constrainAngle, resizeCursor, wallStrip, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, constrainAngle, resizeCursor, wallStrip, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces, nextSnapStep, SNAP_STEPS_CM } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import { fitDistance } from '../designer/scene/units'
@@ -398,5 +398,13 @@ describe('resize cursors (ISS-030)', () => {
   it('sides show the arrow across them (ED-01)', () => {
     expect([4, 5, 6, 7].map(side => resizeCursor(side, 0))).toEqual(['ns-resize', 'ew-resize', 'ns-resize', 'ew-resize'])
     expect(resizeCursor(5, 90)).toBe('ns-resize')
+  })
+})
+
+describe('the snap step (plan Phase 2)', () => {
+  it('G cycles 1, 5, 10 and 25 cm, round the list', () => {
+    expect(SNAP_STEPS_CM).toEqual([1, 5, 10, 25])
+    expect([1, 5, 10, 25].map(nextSnapStep)).toEqual([5, 10, 25, 1])
+    expect(snap(37, 5)).toBe(35)
   })
 })

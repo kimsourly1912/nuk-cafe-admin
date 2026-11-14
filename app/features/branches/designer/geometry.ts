@@ -13,6 +13,17 @@ export const FINE_GRID_CM = 5
  * whole centimetre, which is one screen pixel at 100 %. Smart guides do the lining up.
  */
 export const SNAP_CM = 1
+/**
+ * The snap steps G cycles through (plan Phase 2): moves, drawing and resizing land on multiples of
+ * the step chosen, apart from the grid's lines, which only show the scale. The first is `SNAP_CM`.
+ */
+export const SNAP_STEPS_CM = [1, 5, 10, 25] as const
+
+/** The snap step after `current`, round the list. */
+export function nextSnapStep(current: number): number {
+  const at = SNAP_STEPS_CM.findIndex(step => step === current)
+  return SNAP_STEPS_CM[(at + 1) % SNAP_STEPS_CM.length]!
+}
 /** The arrow keys' nudge, and with Shift (Figma's 1 and 10). */
 export const NUDGE_CM = 1
 export const BIG_NUDGE_CM = 10
