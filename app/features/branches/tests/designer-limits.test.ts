@@ -11,8 +11,7 @@ function floor(items = 0, walls = 0): Floor {
     name: 'Ground',
     height: 300,
     hasRoof: true,
-    outline: [{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 800 }, { x: 0, y: 800 }],
-    edges: [{ kind: 'wall', openings: [{ id: 'street', kind: 'door', offset: 100, width: 90 }] }, { kind: 'wall', openings: [] }, { kind: 'wall', openings: [] }, { kind: 'wall', openings: [] }],
+    slabs: [{ id: 's', outline: [{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 800 }, { x: 0, y: 800 }] }],
     walls: Array.from({ length: walls }, (_, index) => ({ id: `w${index}`, from: { x: 10, y: 10 }, to: { x: 100, y: 10 } })),
     items: Array.from({ length: items }, (_, index) => piece(`i${index}`)),
   }
@@ -66,22 +65,27 @@ describe('a floor\'s limits in the editor (ISS-043)', () => {
 })
 
 describe('Explore\'s street door (ISS-038)', () => {
-  const explored = (): ShopLayout => ({ ...layout(floor()), scene: { preset: 'neighborhood-lane', entrance: 'street', explore: true } })
+  // The ground floor's front wall holds the street door (D282: walls hold the doors).
+  const explored = (): ShopLayout => {
+    const ground = floor()
+    ground.walls = [{ id: 'front', from: { x: 0, y: 0 }, to: { x: 1000, y: 0 }, side: 'left', thickness: 20, openings: [{ id: 'street', kind: 'door', offset: 100, width: 90 }] }]
+    return { ...layout(ground), scene: { preset: 'neighborhood-lane', entrance: 'street', explore: true } }
+  }
 
   it('notices a change that removes the street door, and only that', () => {
     const before = explored()
     const removed = structuredClone(before)
-    removed.floors[0]!.edges[0]!.openings = []
+    removed.floors[0]!.walls[0]!.openings = []
     expect(losesStreetDoor(before, removed)).toBe(true)
     const moved = structuredClone(before)
-    moved.floors[0]!.edges[0]!.openings[0]!.offset = 300
+    moved.floors[0]!.walls[0]!.openings![0]!.offset = 300
     expect(losesStreetDoor(before, moved)).toBe(false)
     expect(losesStreetDoor(layout(floor()), removed)).toBe(false)
   })
 
   it('the draft clears the door and turns Explore off with the change; undo brings both back', () => {
     const draft = useLayoutDraft(explored())
-    draft.change(next => void (next.floors[0]!.edges[0]!.openings = []))
+    draft.change(next => void (next.floors[0]!.walls[0]!.openings = []))
     expect(draft.layout.value.scene).toMatchObject({ entrance: null, explore: false })
     draft.undo()
     expect(draft.layout.value.scene).toMatchObject({ entrance: 'street', explore: true })

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Floor, Point } from '#shared/contracts/shop-layout'
+import { floorFromV1 } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS } from '../designer/catalog'
 import { pointInPolygon, rotatePoint } from '../designer/geometry'
 import { createBuildContext, disposeBuildContext, meshesOf } from '../designer/scene/furniture'
@@ -14,7 +15,8 @@ import { demoLayout } from './demo-layout'
 // the same for everyone who opens the branch.
 
 function floor(outline: Point[], door?: { edge: number, offset: number }): Floor {
-  return {
+  // Written as an outline with edges and upgraded (D282): a wall per side, the door on `edge`'s.
+  return floorFromV1({
     id: `floor-${outline.length}-${outline[0]!.x}`,
     name: 'Ground',
     height: 300,
@@ -23,7 +25,7 @@ function floor(outline: Point[], door?: { edge: number, offset: number }): Floor
     edges: outline.map((_, index) => ({ kind: 'wall' as const, openings: door?.edge === index ? [{ id: 'door', kind: 'door' as const, offset: door.offset, width: 100 }] : [] })),
     walls: [],
     items: [],
-  }
+  })
 }
 
 const rectangle = (width: number, depth: number): Point[] => [{ x: 0, y: 0 }, { x: width, y: 0 }, { x: width, y: depth }, { x: 0, y: depth }]
@@ -64,7 +66,7 @@ describe('the café\'s front', () => {
 
   it('uses the saved street door when the ground floor has several doors', () => {
     const ground = floor(rectangle(600, 400), { edge: 0, offset: 100 })
-    ground.edges[2]!.openings = [{ id: 'street', kind: 'door', offset: 200, width: 100 }]
+    ground.walls[2]!.openings = [{ id: 'street', kind: 'door', offset: 200, width: 100 }]
     expect(frontFrame({ floors: [ground] })?.origin).toEqual({ x: 150, y: 0 })
     expect(frontFrame({ floors: [ground], scene: { preset: 'neighborhood-lane', entrance: 'street' } })?.origin).toEqual({ x: 350, y: 400 })
   })
@@ -81,7 +83,7 @@ describe('the Neighborhood lane', () => {
   it.each(Object.keys(SHAPES))('around %s: nothing stands in the café, the lane is in front of it', (shape) => {
     const floors = SHAPES[shape]!
     const plan = planLane({ floors }, 'branch-1')!
-    const outlines = floors.map(entry => entry.outline)
+    const outlines = floors.flatMap(entry => entry.slabs.map(slab => slab.outline))
     // Every floor of the café is inside its box, and only the café is.
     for (const outline of outlines) {
       for (const point of outline) {
@@ -194,7 +196,7 @@ describe('building the street again (ISS-041)', () => {
     moved.floors[0]!.items.push({ id: 'new-plant', kind: 'plant', x: 300, y: 300, rotation: 0, width: 50, depth: 50, finishes: {} })
     expect(surroundingsKey(moved, 'neighborhood-lane', 'b1')).toBe(key)
     const wider = structuredClone(layout)
-    wider.floors[0]!.outline = wider.floors[0]!.outline.map(point => ({ x: point.x * 2, y: point.y }))
+    wider.floors[0]!.slabs[0]!.outline = wider.floors[0]!.slabs[0]!.outline.map(point => ({ x: point.x * 2, y: point.y }))
     expect(surroundingsKey(wider, 'neighborhood-lane', 'b1')).not.toBe(key)
     expect(surroundingsKey(layout, 'neighborhood-lane', 'b2')).not.toBe(key)
     expect(surroundingsKey(layout, 'none', 'b1')).toBe('none')

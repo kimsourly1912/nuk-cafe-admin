@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
-import { addPage, besideFrames, effectiveFrames, floorsOnPage, removePage, renamePage, setFloorPage } from '../designer/pages'
+import { addPage, besideFrames, effectiveFrames, floorsOnPage, framePlace, removePage, renamePage, setFloorPage } from '../designer/pages'
 
 const square = [{ x: 0, y: 0 }, { x: 600, y: 0 }, { x: 600, y: 400 }, { x: 0, y: 400 }]
-const floor = (id: string, extra: Partial<Floor> = {}): Floor => ({ id, name: id, height: 300, hasRoof: true, outline: square, edges: square.map(() => ({ kind: 'wall' as const, openings: [] })), walls: [], items: [], ...extra })
+const floor = (id: string, extra: Partial<Floor> = {}): Floor => ({ id, name: id, height: 300, hasRoof: true, slabs: [{ id: `${id}-slab`, outline: square }], walls: [], items: [], ...extra })
 const layout = (): ShopLayout => ({ floors: [floor('ground'), floor('up')], placements: [] })
 
 describe('Studio pages (ISS-036)', () => {
@@ -38,7 +38,7 @@ describe('Studio pages (ISS-036)', () => {
 
   it('places a new frame to the right of the others, top-aligned', () => {
     expect(besideFrames([], square)).toEqual({ x: 0, y: 0 })
-    expect(besideFrames([floor('a'), floor('b', { canvasX: 1000, canvasY: 50 })], square)).toEqual({ x: 2000, y: 0 })
+    expect(besideFrames([floor('a'), floor('b', { canvasX: 1000, canvasY: 50 })].map(framePlace), square)).toEqual({ x: 2000, y: 0 })
   })
 
   it('lays out floors never placed side by side, keeping saved offsets (floors saved before frames)', () => {

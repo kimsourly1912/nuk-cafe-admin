@@ -4,10 +4,11 @@ import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
 import { FIGURE_KINDS, FIGURE_SIZES, layoutSchema } from '#shared/contracts/shop-layout'
 import { BUILT_IN_LOOKS, findLook, keepsCircle } from '../designer/catalog'
 import { demoLayout, DEMO_TABLES } from './demo-layout'
-import { besideOf, chairPoses, constrainAngle, resizeCursor, outlineWallBands, wallStrip, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
+import { besideOf, chairPoses, constrainAngle, resizeCursor, wallStrip, drawBounds, floorViewpoints, outwardNormal, pointInPolygon, rectCorners, resizeFromCorner, rotatePoint, rotationFromDrag, snap, wallPieces } from '../designer/geometry'
 import type { Sized } from '../designer/geometry'
 import { itemFootprint, placementWarnings, tableFootprint } from '../designer/placement-warnings'
 import { fitDistance } from '../designer/scene/units'
+import { drawWalls, perimeterWalls } from '../designer/walls'
 
 const messages = (layout: unknown) => (v.safeParse(layoutSchema, layout).issues ?? []).map(issue => issue.message)
 const round = { shape: 'round', chair: 'cafe-chair' } as const
@@ -27,19 +28,19 @@ describe('the layout contract', () => {
     expect(messages(missing)).toContain('A table is on a floor that does not exist')
   })
 
-  it('refuses openings that overlap, run past their edge, or sit on the wrong kind of edge', () => {
-    const withEdge = (edge: Floor['edges'][number]): ShopLayout => {
+  it('refuses openings that overlap, run past their wall, or sit on the wrong kind of wall', () => {
+    const withWall = (change: Partial<Floor['walls'][number]>): ShopLayout => {
       const layout = demoLayout()
-      layout.floors[0]!.edges[0] = edge
+      // The ground floor's first wall runs 1000 cm along the top (D282: upgraded from its edge).
+      layout.floors[0]!.walls[0] = { ...layout.floors[0]!.walls[0]!, ...change }
       return layout
     }
-    expect(messages(withEdge({ kind: 'wall', openings: [{ id: 'a', kind: 'door', offset: 950, width: 100 }] }))).toContain('A door or window does not fit its edge')
-    expect(messages(withEdge({ kind: 'wall', openings: [{ id: 'a', kind: 'door', offset: 100, width: 100 }, { id: 'b', kind: 'window', offset: 150, width: 100 }] }))).toContain('A door or window does not fit its edge')
-    expect(messages(withEdge({ kind: 'railing', openings: [{ id: 'a', kind: 'window', offset: 100, width: 100 }] }))).toContain('A window needs a wall')
-    expect(messages(withEdge({ kind: 'open', openings: [{ id: 'a', kind: 'door', offset: 100, width: 100 }] }))).toContain('An open edge has no doors or windows')
+    expect(messages(withWall({ openings: [{ id: 'a', kind: 'door', offset: 950, width: 100 }] }))).toContain('A door or window does not fit its wall')
+    expect(messages(withWall({ openings: [{ id: 'a', kind: 'door', offset: 100, width: 100 }, { id: 'b', kind: 'window', offset: 150, width: 100 }] }))).toContain('A door or window does not fit its wall')
+    expect(messages(withWall({ kind: 'railing', openings: [{ id: 'a', kind: 'window', offset: 100, width: 100 }] }))).toContain('A window needs a full wall')
   })
 
-  it('refuses fractional centimetres, angles past 359 and an outline without its edges', () => {
+  it('refuses fractional centimetres, angles past 359 and a surface of two corners', () => {
     const fractional = demoLayout()
     fractional.placements[0]!.x = 10.5
     expect(messages(fractional).length).toBeGreaterThan(0)
@@ -47,8 +48,8 @@ describe('the layout contract', () => {
     turned.placements[0]!.rotation = 360
     expect(messages(turned).length).toBeGreaterThan(0)
     const short = demoLayout()
-    short.floors[0]!.edges.pop()
-    expect(messages(short)).toContain('Every outline edge needs its kind')
+    short.floors[0]!.slabs[0]!.outline.splice(2)
+    expect(messages(short)).toContain('An outline needs 3 corners')
   })
 
   it('keeps people and pets at their own size, without finishes or a look (step 3g)', () => {
@@ -136,15 +137,15 @@ describe('the plan', () => {
 
   it('knows inside from outside an L-shaped floor', () => {
     const floor = demoLayout().floors[0]!
-    expect(pointInPolygon({ x: 300, y: 700 }, floor.outline)).toBe(true)
-    expect(pointInPolygon({ x: 800, y: 700 }, floor.outline)).toBe(false)
+    expect(pointInPolygon({ x: 300, y: 700 }, floor.slabs[0]!.outline)).toBe(true)
+    expect(pointInPolygon({ x: 800, y: 700 }, floor.slabs[0]!.outline)).toBe(false)
   })
 
   it('flags a rotated table crossing a concave cutout even when all four corners are inside', () => {
     const floor = { ...demoLayout().floors[0]!, walls: [] }
     const table = { tableId: 'table', x: 570, y: 420, width: 380, depth: 380, rotation: 45 }
     const piece = tableFootprint(table, { shape: 'rect', chair: 'none' }, [])
-    expect(piece.parts[0]!.every(point => pointInPolygon(point, floor.outline))).toBe(true)
+    expect(piece.parts[0]!.every(point => pointInPolygon(point, floor.slabs[0]!.outline))).toBe(true)
     expect(placementWarnings(floor, [piece]).get('table')?.outside).toBe(true)
     const within = tableFootprint({ ...table, width: 100, depth: 100 }, { shape: 'rect', chair: 'none' }, [])
     expect(placementWarnings(floor, [within]).has('table')).toBe(false)
@@ -188,24 +189,24 @@ describe('the plan', () => {
 
   it('uses a point inside a U-shaped floor and skips a door viewpoint outside a narrow room', () => {
     const floor = demoLayout().floors[0]!
-    floor.outline = [
+    const u = [
       { x: 0, y: 0 }, { x: 900, y: 0 }, { x: 900, y: 900 }, { x: 600, y: 900 },
       { x: 600, y: 300 }, { x: 300, y: 300 }, { x: 300, y: 900 }, { x: 0, y: 900 },
     ]
-    floor.edges = floor.outline.map(() => ({ kind: 'open', openings: [] }))
+    floor.slabs = [{ id: 'u', outline: u }]
+    floor.walls = []
     floor.items = []
     const [middle] = floorViewpoints(floor)
     expect(middle?.id).toBe('centre')
-    expect(pointInPolygon(middle!.eye, floor.outline)).toBe(true)
+    expect(pointInPolygon(middle!.eye, u)).toBe(true)
 
-    floor.outline = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 100 }, { x: 0, y: 100 }]
-    floor.edges = [
-      { kind: 'wall', openings: [{ id: 'door', kind: 'door', offset: 80, width: 100 }] },
-      ...floor.outline.slice(1).map(() => ({ kind: 'wall' as const, openings: [] })),
-    ]
+    const narrow = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 100 }, { x: 0, y: 100 }]
+    floor.slabs = [{ id: 'narrow', outline: narrow }]
+    floor.walls = perimeterWalls(narrow)
+    floor.walls[0] = { ...floor.walls[0]!, openings: [{ id: 'door', kind: 'door', offset: 80, width: 100 }] }
     const points = floorViewpoints(floor)
     expect(points.map(point => point.id)).toEqual(['centre'])
-    expect(pointInPolygon(points[0]!.eye, floor.outline)).toBe(true)
+    expect(pointInPolygon(points[0]!.eye, narrow)).toBe(true)
   })
 
   it('works out viewpoints from the layout: no Entrance where there is no door', () => {
@@ -355,19 +356,22 @@ describe('wall corners (ISS-034)', () => {
   const square = [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 300 }, { x: 0, y: 300 }]
   const close = (points: { x: number, y: number }[] | null | undefined) => points?.map(point => ({ x: Math.round(point.x * 1000) / 1000, y: Math.round(point.y * 1000) / 1000 }))
 
+  // The outer walls around a surface (D282): one per side, beside it, outside.
+  const bands = (outline: typeof square, kinds = ['wall', 'wall', 'wall', 'wall']) => drawWalls(perimeterWalls(outline).map((wall, index) => (kinds[index] === 'wall' ? wall : { ...wall, kind: 'railing' as const }))).map(drawing => drawing.bands[0])
+
   it('meets at a clean outside corner, the band outside the floor', () => {
-    const bands = outlineWallBands(square, [true, true, true, true], 20)
-    expect(close(bands[0])).toEqual([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 420, y: -20 }, { x: -20, y: -20 }])
-    expect(close(bands[1])).toEqual([{ x: 400, y: 0 }, { x: 400, y: 300 }, { x: 420, y: 320 }, { x: 420, y: -20 }])
+    const drawn = bands(square)
+    expect(close(drawn[0])).toEqual([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 420, y: -20 }, { x: -20, y: -20 }])
+    expect(close(drawn[1])).toEqual([{ x: 400, y: 0 }, { x: 400, y: 300 }, { x: 420, y: 320 }, { x: 420, y: -20 }])
     // The same, drawn the other way round.
-    const reversed = outlineWallBands([...square].reverse(), [true, true, true, true], 20)
+    const reversed = bands([...square].reverse())
     expect(close(reversed[0])!.map(point => point.y).filter(y => y > 300)).toEqual([320, 320])
   })
 
-  it('ends square where the next edge is open or a railing', () => {
-    const bands = outlineWallBands(square, [true, false, true, true], 20)
-    expect(bands[1]).toBeNull()
-    expect(close(bands[0])).toEqual([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: -20 }, { x: -20, y: -20 }])
+  it('ends square where the next wall is a railing', () => {
+    const drawn = bands(square, ['wall', 'railing', 'wall', 'wall'])
+    expect(drawn[1]).toBeUndefined()
+    expect(close(drawn[0])).toEqual([{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: -20 }, { x: -20, y: -20 }])
   })
 
   it('mitres at 45° and squares a corner too sharp to mitre', () => {
