@@ -22,7 +22,7 @@
  */
 import { useElementBounding, useEventListener } from '@vueuse/core'
 import type { Floor, InnerWall, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength, floorPageId, innerWallKind, layoutPages, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
+import { edgeLength, floorPageId, innerWallKind, isSimpleOutline, layoutPages, innerWallLength, isFigureKind, isShapeKind, ITEM_SIZE_MAX_CM, ITEM_SIZE_MIN_CM, TABLE_SIZE_MAX_CM, TABLE_SIZE_MIN_CM } from '#shared/contracts/shop-layout'
 import { findLook, FINISH_SWATCHES, ITEM_SPECS, itemFinish, keepsCircle } from '../designer/catalog'
 import { handleLayout, SMALL_PIECE_PX } from '../designer/handles'
 import { arcFromDrag, arcHandles, arcOf, radiusDot, radiusFromDrag, shapeLabelSize, shapeOutline, shapePath } from '../designer/shapes'
@@ -359,6 +359,14 @@ const innerWalls = computed(() => shownWalls.value.map((wall) => {
 /** The outline while a corner is dragged. */
 const liveShape = shallowRef<FloorShape | null>(null)
 const shape = computed<FloorShape>(() => liveShape.value ?? { outline: floor.value.outline, edges: floor.value.edges })
+/**
+ * A corner or side drag's shape: an outline that would cross itself is not shown (ISS-039), so
+ * the drag stays at its last good place and drops there. A floor that already crossed itself
+ * follows freely, so it can be dragged straight again.
+ */
+function showLiveShape(next: FloorShape) {
+  if (isSimpleOutline(next.outline) || !isSimpleOutline(floor.value.outline)) liveShape.value = next
+}
 
 // --- Draw outline and Draw wall state ---
 // Shallow: these points go into the layout, which holds plain objects only (its undo snapshots
@@ -1046,7 +1054,7 @@ function followPointer(event: PointerMove) {
     const base = { outline: floor.value.outline, edges: floor.value.edges }
     const normal = outwardNormal(base.outline, gesture.index)
     const distance = snap((plan.x - gesture.startPlan.x) * normal.x + (plan.y - gesture.startPlan.y) * normal.y, step)
-    liveShape.value = moveSide(base, gesture.index, distance)
+    showLiveShape(moveSide(base, gesture.index, distance))
     return
   }
   if (gesture.type === 'wall-end') {
@@ -1089,7 +1097,7 @@ function followPointer(event: PointerMove) {
     // Like Figma (ISS-019): the corner moves freely, Shift keeps it on a straight or 45° line from
     // where it was; Alt keeps the corners beside it at right angles.
     const at = event.shiftKey ? constrainAngle(gesture.origin, to, step) : to
-    liveShape.value = moveCorner({ outline: floor.value.outline, edges: floor.value.edges }, gesture.index, at, event.altKey)
+    showLiveShape(moveCorner({ outline: floor.value.outline, edges: floor.value.edges }, gesture.index, at, event.altKey))
     return
   }
   preview.value = { selection: gesture.selection, ...to, rotation: gesture.origin.rotation, copy: gesture.type === 'drag' && event.altKey }

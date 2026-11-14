@@ -11,9 +11,10 @@ import StudioNumberField from './StudioNumberField.vue'
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, floorPageId, SHAPE_ARC, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
+import { edgeLength, floorPageId, isSimpleOutline, SHAPE_ARC, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
 import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
+import { losesStreetDoor } from '../composables/useLayoutDraft'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
 import type { AlignEdge, PlanClipboard } from '../designer/group'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
@@ -371,10 +372,11 @@ const placementAlerts = computed(() => {
 
 // --- Changes, each one undo step ---
 
-function changeFloor(apply: (floor: Floor) => void) {
+/** One change to the floor shown; false when there is none or the change was refused (a limit, ISS-043). */
+function changeFloor(apply: (floor: Floor) => void): boolean {
   const id = floor.value?.id
-  if (!id) return
-  draft.change((next) => {
+  if (!id) return false
+  return draft.change((next) => {
     const target = next.floors.find(candidate => candidate.id === id)
     if (target) apply(target)
   })
@@ -397,8 +399,7 @@ function placeItem(kind: ItemKind, at: Point, lookId?: string) {
   const id = newLayoutId('item')
   // A look's height comes with it (step 3e); a built-in piece has the kind's, so it saves none.
   const item: LayoutItem = { id, kind: look?.kind ?? kind, x: at.x, y: at.y, rotation: 0, width: size.defaultWidth, depth: size.defaultDepth, finishes: {}, ...(look && { lookId: look.id, height: look.defaultHeight }) }
-  changeFloor(target => target.items.push(item))
-  selection.value = { kind: 'item', id }
+  if (changeFloor(target => target.items.push(item))) selection.value = { kind: 'item', id }
 }
 
 function updateTable(tableId: string, change: Partial<{ floorId: string, x: number, y: number, rotation: number, width: number, depth: number, lookId: string }>) {
@@ -494,7 +495,7 @@ function remove(target: PlanSelection) {
   if (target.kind === 'edge') {
     const current = floor.value
     const index = Number(target.id)
-    if (current && current.edges[index] && current.edges[index].kind !== 'open') updateShape(setEdgeKind(shapeOf(current), index, 'open'))
+    if (current && current.edges[index] && current.edges[index].kind !== 'open') void updateShape(setEdgeKind(shapeOf(current), index, 'open'))
     return
   }
   draft.change((next) => {
@@ -507,11 +508,51 @@ function remove(target: PlanSelection) {
   selection.value = null
 }
 
-function updateShape(shape: FloorShape) {
-  changeFloor((target) => {
+/**
+ * A new outline for the floor shown, one undo step. Refused when it would cross itself (ISS-039;
+ * one that already did may still be edited back); asks first when it would remove Explore's street
+ * door (ISS-038).
+ */
+async function updateShape(shape: FloorShape) {
+  const current = floor.value
+  if (!current) return
+  if (!isSimpleOutline(shape.outline) && isSimpleOutline(current.outline)) {
+    toast.add({ title: 'Outline not changed', description: 'A floor\'s sides cannot cross each other.', color: 'neutral', icon: 'i-lucide-info' })
+    return
+  }
+  const apply = (next: ShopLayout) => {
+    const target = next.floors.find(candidate => candidate.id === current.id)
+    if (!target) return
     target.outline = shape.outline
     target.edges = shape.edges
-  })
+  }
+  if (!(await keepsStreetDoor(apply))) return
+  draft.change(apply)
+}
+
+/**
+ * Whether a change may go ahead as far as Explore's street door goes (ISS-038; owner 2026-11-14:
+ * ask, then turn Explore off): true when the door stays, or the owner agreed to lose it. The draft
+ * then clears the door and Explore with the change itself, so undo brings both back.
+ */
+async function keepsStreetDoor(apply: (next: ShopLayout) => void): Promise<boolean> {
+  const before = layout.value
+  const after = structuredClone(toRaw(before))
+  apply(after)
+  if (!losesStreetDoor(before, after)) return true
+  return await confirm(streetDoorWarning(before))
+}
+
+function streetDoorWarning(before: ShopLayout) {
+  const explore = before.scene?.explore === true
+  return {
+    title: explore ? 'Turn off Explore?' : 'Remove the street door?',
+    description: explore
+      ? 'This removes Explore\'s street door, so customers no longer see this café in Explore. Choose a street door in Explore settings to show it again.'
+      : 'This removes the street door chosen in Explore settings.',
+    confirmLabel: explore ? 'Turn off Explore' : 'Remove street door',
+    danger: true,
+  }
 }
 
 // --- Typing a length on the plan's label (3A) ---
@@ -552,7 +593,7 @@ function applyLength() {
   if (!edit || !current || typeof edit.value !== 'number' || !Number.isFinite(edit.value)) return
   const length = Math.min(EDGE_LENGTH_MAX_CM, Math.max(EDGE_LENGTH_MIN_CM, Math.round(edit.value)))
   if (length === Math.round(edgeLength(current.outline, edit.index))) return
-  updateShape(setEdgeLength(shapeOf(current), edit.index, length))
+  void updateShape(setEdgeLength(shapeOf(current), edit.index, length))
 }
 
 watch(() => [mode.value, floor.value?.id], () => {
@@ -571,7 +612,7 @@ function applyRoom(bounds: Bounds, cut: boolean) {
     toast.add({ title: cut ? 'Room not cut out' : 'Room not added', description: result.refused, color: 'error', icon: 'i-lucide-circle-alert' })
     return
   }
-  updateShape(result.shape)
+  void updateShape(result.shape)
   finishTool()
 }
 
@@ -586,9 +627,9 @@ function placeShape(bounds: Bounds) {
   const id = newLayoutId('item')
   // A round block may be an ellipse, as drawn (ISS-017); Shift draws a circle.
   const kind = roundShape.value ? 'block-round' : 'block'
-  changeFloor(target => target.items.push({ id, kind, x: Math.round((bounds.minX + bounds.maxX) / 2), y: Math.round((bounds.minY + bounds.maxY) / 2), rotation: 0, width, depth, finishes: {} }))
+  const added = changeFloor(target => target.items.push({ id, kind, x: Math.round((bounds.minX + bounds.maxX) / 2), y: Math.round((bounds.minY + bounds.maxY) / 2), rotation: 0, width, depth, finishes: {} }))
   finishTool()
-  selection.value = { kind: 'item', id }
+  if (added) selection.value = { kind: 'item', id }
 }
 const SHAPE_MIN_CM = 20
 
@@ -831,7 +872,7 @@ function duplicateGroup() {
   if (!floorId) return
   const targets = [...group.value]
   let copies: PlanSelection[] = []
-  if (targets.some(target => target.kind !== 'table')) draft.change(next => void (copies = duplicateSelected(next, floorId, targets, { x: 50, y: 50 })))
+  if (targets.some(target => target.kind !== 'table') && !draft.change(next => void (copies = duplicateSelected(next, floorId, targets, { x: 50, y: 50 })))) copies = []
   if (targets.some(target => target.kind === 'table')) {
     toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
   }
@@ -945,18 +986,25 @@ async function removeFloor() {
   const moved = labels.length
     ? `${listLabels(labels)} will move to Unplaced tables. ${labels.length === 1 ? 'Its QR code keeps' : 'Their QR codes keep'} working. `
     : ''
+  const apply = (next: ShopLayout) => {
+    next.floors = next.floors.filter(candidate => candidate.id !== target.id)
+    next.placements = next.placements.filter(placement => placement.floorId !== target.id)
+  }
+  // The ground floor holds Explore's street door (ISS-038): say so in the same dialog.
+  const after = structuredClone(toRaw(layout.value))
+  apply(after)
+  const explore = losesStreetDoor(layout.value, after)
+    ? layout.value.scene?.explore ? ' Explore\'s street door is on this floor: customers no longer see this café in Explore until you choose a new one.' : ' Explore\'s street door is on this floor and is removed too.'
+    : ''
   const confirmed = await confirm({
     title: `Remove the ${target.name} floor?`,
-    description: `${moved}Its outline, walls${pieces ? ` and ${pieces} ${pieces === 1 ? 'piece' : 'pieces'} of furniture` : ''} are deleted. You can undo until you save the layout.`,
+    description: `${moved}Its outline, walls${pieces ? ` and ${pieces} ${pieces === 1 ? 'piece' : 'pieces'} of furniture` : ''} are deleted.${explore} You can undo this.`,
     confirmLabel: 'Remove floor',
     danger: true,
   })
   if (!confirmed) return
   const index = floors.value.indexOf(target)
-  draft.change((next) => {
-    next.floors = next.floors.filter(candidate => candidate.id !== target.id)
-    next.placements = next.placements.filter(placement => placement.floorId !== target.id)
-  })
+  draft.change(apply)
   selectFloor(floors.value[Math.max(0, index - 1)]!.id)
 }
 
@@ -1055,7 +1103,7 @@ function pasteCopied(at?: Point | null) {
   }
   const offset = at && middle ? { x: Math.round(at.x - middle.x), y: Math.round(at.y - middle.y) } : sameFloor ? props.editor.nextPasteOffset() : { x: 0, y: 0 }
   let copies: PlanSelection[] = []
-  draft.change(next => void (copies = pasteClipboard(next, clipboard, current.id, offset)))
+  if (!draft.change(next => void (copies = pasteClipboard(next, clipboard, current.id, offset)))) return
   if (clipboard.tableIds.length) toast.add({ title: 'Tables not copied', description: 'Each table has its own QR code: use Duplicate look on one table to place another table.', color: 'neutral', icon: 'i-lucide-info' })
   props.editor.selectMany(copies)
 }
@@ -1085,8 +1133,7 @@ function duplicateItem(itemId: string, to?: Point) {
   if (!item) return
   const id = newLayoutId('item')
   const at = to ?? besideOf(item, item.width, item.depth)
-  changeFloor(target => target.items.push({ ...structuredClone(toRaw(item)), id, ...at }))
-  selection.value = { kind: 'item', id }
+  if (changeFloor(target => target.items.push({ ...structuredClone(toRaw(item)), id, ...at }))) selection.value = { kind: 'item', id }
 }
 
 // --- The cafe's own chair and fixture looks (step 3d) ---
@@ -1492,13 +1539,13 @@ const contextItems = computed((): ContextMenuItem[][] => {
         label: option.label,
         type: 'checkbox' as const,
         checked: kind === option.value,
-        onSelect: () => updateShape(setEdgeKind(shapeOf(current), index, option.value)),
+        onSelect: () => void updateShape(setEdgeKind(shapeOf(current), index, option.value)),
       })),
       kind === 'open'
         ? []
         : [
-            { label: kind === 'railing' ? 'Add a gate' : 'Add a door', icon: 'i-lucide-door-open', disabled: !openingFits(shape, index, 'door'), onSelect: () => updateShape(addOpening(shapeOf(current), index, 'door', newLayoutId('door'))) },
-            ...(kind === 'wall' ? [{ label: 'Add a window', icon: 'i-lucide-app-window', disabled: !openingFits(shape, index, 'window'), onSelect: () => updateShape(addOpening(shapeOf(current), index, 'window', newLayoutId('window'))) }] : []),
+            { label: kind === 'railing' ? 'Add a gate' : 'Add a door', icon: 'i-lucide-door-open', disabled: !openingFits(shape, index, 'door'), onSelect: () => void updateShape(addOpening(shapeOf(current), index, 'door', newLayoutId('door'))) },
+            ...(kind === 'wall' ? [{ label: 'Add a window', icon: 'i-lucide-app-window', disabled: !openingFits(shape, index, 'window'), onSelect: () => void updateShape(addOpening(shapeOf(current), index, 'window', newLayoutId('window'))) }] : []),
           ],
       kind === 'open' ? [] : [{ label: kind === 'railing' ? 'Remove railing' : 'Remove wall', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => remove(target) }],
     ].filter(group => group.length)

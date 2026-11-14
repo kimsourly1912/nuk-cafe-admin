@@ -68,3 +68,18 @@ Retest each check's steps on staging with a real mouse and trackpad. Capture the
 | ISS-024 | Selection from 3D back to 2D. Could not be reproduced. Retest with the toolbar's 2D button. If it fails, write the exact steps. |
 | ISS-036 step 4 | Decide what a page without frames contains (Color Palette, Components). |
 | ISS-004 | Owner: do you want ruler, grid and snap toggles in the zoom menu? Not built. |
+
+## B. Studio builder Phase 0 (ISS-037 to ISS-044, branch `ccr-e78bff39-u70ma7`)
+
+Issue files: [studio-builder/issues](studio-builder/issues/). Built from code and unit tests, plus one e2e step for ISS-038. Nothing here was checked in a browser by Claude.
+
+| ID | What to retest | Steps and expected result |
+|---|---|---|
+| ISS-038 (High) | Removing the street door asks first | Branch with a pin, Explore on, street door chosen. Each of these asks "Turn off Explore?": Remove floor (ground floor; its dialog says it), Delete on the door's wall, the door's remove button in the edge panel, deleting a corner so the door no longer fits. Cancel: nothing changes, Explore still on. Agree: Explore off after the save; Undo brings the door and Explore back. |
+| ISS-037 (High) | Corner delete keeps the layout savable | Open side next to a wall with a door: delete the corner between them. No door on the joined side, status goes back to Saved. Railing next to a wall with a window: the window goes, doors stay as gates. |
+| ISS-039 | No crossing outline | Edit points: drag a corner across the far side. The drag stops at the last good place; on release the outline does not cross. Typing a length that would cross is refused with "Outline not changed". 3D floor matches the plan. |
+| ISS-042 | Copied doors are separate | Duplicate (and copy and paste) an inside wall with a door. Each door can be edited on its own; the layout saves. |
+| ISS-043 | Floor limits | With about 150 pieces, duplicate 60: refused, toast "A floor holds at most 200 pieces of furniture.", nothing added, status stays Saved. |
+| ISS-044 | Remove-floor text | The dialog ends "You can undo this." Undo after the autosave brings the floor back. |
+| ISS-041 step 1 | 3D stays open | Orbit in 3D, switch to 2D and back: same camera, no loading. Edit in 2D, back to 3D: the edit shows. |
+

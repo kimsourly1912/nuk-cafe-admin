@@ -1,6 +1,6 @@
 # Studio flexible builder plan
 
-Status: proposal, 2026-11-14. Owner decisions D1–D7 below are open; each has a recommended default. When accepted, record the architecture change in [decisions](../decisions.md) (it amends D273's floor model) and refresh the index. Bugs and gaps found with this plan: [Studio builder QA](../qa/studio-builder/README.md) (ISS-037 to ISS-046).
+Status: proposal, 2026-11-14. Owner decisions D1–D6 below are open (D7 decided 2026-11-14); each has a recommended default. When accepted, record the architecture change in [decisions](../decisions.md) (it amends D273's floor model) and refresh the index. Bugs and gaps found with this plan: [Studio builder QA](../qa/studio-builder/README.md) (ISS-037 to ISS-046).
 
 ## Goal
 
@@ -121,7 +121,7 @@ Each phase is one PR or a small set, following `AGENTS.md`.
 | D4 | Split view breakpoint | Tailwind `lg` (1024 px) | Tablets in landscape get it; phones keep the toggle |
 | D5 | Maximum zoom | 32 px per cm (3,200 %) | Positions are whole cm; more zoom shows nothing new |
 | D6 | Deleting a wall with doors | Delete its openings too, after a warning | Same as Revit; no orphan doors |
-| D7 | Street door removed by an edit (ISS-038) | Refuse with the same message as moving the floor | Consistent with `moveFloor` |
+| D7 | Street door removed by an edit (ISS-038) | **Decided (owner, 2026-11-14): ask first, then turn Explore off** (recommendation was refuse) | Built in Phase 0; moving a floor keeps its refusal |
 
 ## Sources
 

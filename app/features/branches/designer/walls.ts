@@ -1,5 +1,6 @@
-import type { InnerWall, InnerWallKind, Opening, OpeningKind, Point } from '#shared/contracts/shop-layout'
+import type { Floor, InnerWall, InnerWallKind, Opening, OpeningKind, Point } from '#shared/contracts/shop-layout'
 import { innerWallKind, innerWallLength } from '#shared/contracts/shop-layout'
+import { newLayoutId } from './geometry'
 import { fitOpenings, freeSpot, OPENING_DEFAULT_WIDTH, OPENING_MIN_WIDTH } from './outline'
 
 /**
@@ -130,4 +131,28 @@ export function moveWalls(walls: readonly InnerWall[], ids: ReadonlySet<string>,
     const to = ends.some(end => same(candidate.to, end)) ? shift(candidate.to) : candidate.to
     return refit({ ...candidate, from: { ...from }, to: { ...to } })
   })
+}
+
+/**
+ * Gives every door or window whose id repeats in the layout a new id (ISS-042): copies of inside
+ * walls made before the fix kept their doors' ids, which the contract now refuses. The first one
+ * keeps its id, and outline edges come first, so Explore's street door (on an edge) is never
+ * renamed. Returns the floors unchanged (the same array) when nothing repeats.
+ */
+export function renewRepeatedOpeningIds<T extends Pick<Floor, 'edges' | 'walls'>>(floors: T[]): T[] {
+  const seen = new Set<string>()
+  const repeats = (opening: Opening) => {
+    const repeated = seen.has(opening.id)
+    seen.add(opening.id)
+    return repeated
+  }
+  const hosts = floors.flatMap(floor => [...floor.edges, ...floor.walls])
+  if (!hosts.flatMap(host => host.openings ?? []).some(repeats)) return floors
+  seen.clear()
+  const renew = (openings: Opening[]) => openings.map(opening => (repeats(opening) ? { ...opening, id: newLayoutId(opening.kind) } : opening))
+  return floors.map(floor => ({
+    ...floor,
+    edges: floor.edges.map(edge => ({ ...edge, openings: renew(edge.openings) })),
+    walls: floor.walls.map(wall => (wall.openings ? { ...wall, openings: renew(wall.openings) } : wall)),
+  }))
 }

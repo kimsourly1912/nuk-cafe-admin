@@ -1,8 +1,11 @@
+import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
+import { layoutSchema } from '#shared/contracts/shop-layout'
 import type { ShopLayout } from '#shared/contracts/shop-layout'
 import { alignOffsets, copySelected, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { distancesToOutline, gapsBetween, segmentTouches, snapToGuides } from '../designer/guides'
 import type { PlanSelection } from '../designer/plan'
+import { renewRepeatedOpeningIds } from '../designer/walls'
 
 /** One floor: a table, two pieces and a kitchen corner of two joined walls. */
 function layout(): ShopLayout {
@@ -178,5 +181,55 @@ describe('distribute (owner, 2026-11-13)', () => {
     expect(distributeOffsets([box('c', 400, 100), box('a', 0, 100), box('b', 120, 50)], 'x')).toEqual([{ target: { kind: 'item', id: 'b' }, delta: { x: 105, y: 0 } }])
     expect(distributeOffsets([box('a', 0, 100), box('b', 225, 50), box('c', 400, 100)], 'x')).toEqual([])
     expect(distributeOffsets([box('a', 0, 100), box('b', 300, 50)], 'x')).toEqual([])
+  })
+})
+
+describe('copied doors and windows get ids of their own (ISS-042)', () => {
+  /** The demo floor, with a door in wall w1. */
+  function withDoor(): ShopLayout {
+    const next = layout()
+    next.floors[0]!.walls[0]!.openings = [{ id: 'o1', kind: 'door', offset: 100, width: 90 }]
+    return next
+  }
+  const doorIds = (next: ShopLayout) => next.floors.flatMap(floor => floor.walls.flatMap(wall => (wall.openings ?? []).map(opening => opening.id)))
+  const messages = (next: ShopLayout) => (v.safeParse(layoutSchema, next).issues ?? []).map(issue => issue.message)
+
+  it('duplicate gives the copy\'s door a new id, and the layout saves', () => {
+    const next = withDoor()
+    duplicateSelected(next, 'g', [{ kind: 'wall', id: 'w1' }], { x: 0, y: 50 })
+    const ids = doorIds(next)
+    expect(ids).toHaveLength(2)
+    expect(ids[0]).toBe('o1')
+    expect(ids[1]).toMatch(/^door-/)
+    expect(messages(next)).toEqual([])
+  })
+
+  it('each paste gives its doors new ids', () => {
+    const next = withDoor()
+    const clipboard = copySelected(next, 'g', [{ kind: 'wall', id: 'w1' }])!
+    pasteClipboard(next, clipboard, 'g', { x: 0, y: 50 })
+    pasteClipboard(next, clipboard, 'g', { x: 0, y: 100 })
+    expect(new Set(doorIds(next)).size).toBe(3)
+    expect(messages(next)).toEqual([])
+  })
+
+  it('the contract refuses a door id used twice in a layout', () => {
+    const next = withDoor()
+    next.floors[0]!.walls[1]!.openings = [{ id: 'o1', kind: 'door', offset: 100, width: 90 }]
+    expect(messages(next)).toContain('Door and window ids repeat')
+  })
+
+  it('a layout saved with repeated ids gets new ones on load, keeping the first (an edge\'s street door)', () => {
+    const next = withDoor()
+    next.floors[0]!.edges[0]!.openings = [{ id: 'o1', kind: 'door', offset: 100, width: 90 }]
+    next.floors[0]!.walls[1]!.openings = [{ id: 'o1', kind: 'door', offset: 100, width: 90 }]
+    const floors = renewRepeatedOpeningIds(next.floors)
+    expect(floors[0]!.edges[0]!.openings[0]!.id).toBe('o1')
+    const renewed = { ...next, floors }
+    expect(messages(renewed)).toEqual([])
+    expect(doorIds(renewed)).not.toContain('o1')
+    // Nothing repeats: the same floors back, untouched.
+    const clean = withDoor()
+    expect(renewRepeatedOpeningIds(clean.floors)).toBe(clean.floors)
   })
 })

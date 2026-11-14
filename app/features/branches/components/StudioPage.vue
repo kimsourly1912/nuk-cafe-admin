@@ -28,8 +28,14 @@ const view = useUrlTab(['design', '3d'] as const, 'view')
  * survive 3D. Its sidebar splitter needs a real width to start: mounted hidden, it had none (D277).
  */
 const designMounted = ref(view.value === 'design')
+/**
+ * 3D the same (ISS-041): mounted the first time it is shown, then kept, so switching back is
+ * instant and keeps the camera. Hidden, it draws nothing and waits to rebuild until shown.
+ */
+const threeMounted = ref(view.value === '3d')
 watch(view, (current) => {
   if (current === 'design') designMounted.value = true
+  if (current === '3d') threeMounted.value = true
 })
 editor.load()
 const layout = editor.draft.layout
@@ -246,7 +252,8 @@ function showItemOnPlan(itemId: string) {
         </DesignShopEditor>
       </div>
       <div
-        v-if="view === '3d'"
+        v-if="threeMounted"
+        v-show="view === '3d'"
         class="flex min-h-0 flex-1 flex-col"
       >
         <template v-if="editor.error.value || !ready || !hasOutline">
@@ -301,6 +308,7 @@ function showItemOnPlan(itemId: string) {
           :dining-tables="tables ?? []"
           :unsaved="isDirty"
           :branch-id="id"
+          :active="view === '3d'"
           @show-on-plan="showOnPlan"
           @show-item-on-plan="showItemOnPlan"
           @design-shop="view = 'design'"
