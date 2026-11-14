@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/libsql'
 import { eq } from 'drizzle-orm'
 import { member, organization, user } from '../../../server/db/tables'
 import { createTable, saveLayout, updateBranchSettings } from '../../../server/features/branches'
+import { fromV1 } from '../../../shared/contracts/shop-layout'
 import type { Actor } from '../../../server/features/identity'
 import { createStaff } from '../../../server/features/identity'
 import { createCategory, createItem, createPromotion, publishItem } from '../../../server/features/menu'
@@ -145,9 +146,9 @@ async function seedLayoutLab(db: Db, qr: { secret: string, baseUrl: string }): P
   return { slug: cafe.slug, branchId, annexBranchId }
 }
 
-/** A shop drawing with its street door, the counter facing it and one table, published in Explore. */
+/** A shop drawing with its street door, the counter facing it and one table, published in Explore (written as before contract v2, D282, and upgraded). */
 function exploreLayout(tableId: string) {
-  return {
+  return fromV1({
     floors: [{
       id: 'ground', name: 'Ground', height: 320, hasRoof: true,
       outline: [{ x: 0, y: 0 }, { x: 800, y: 0 }, { x: 800, y: 1000 }, { x: 0, y: 1000 }],
@@ -162,7 +163,7 @@ function exploreLayout(tableId: string) {
     }],
     placements: [{ tableId, floorId: 'ground', x: 250, y: 700, rotation: 0, width: 80, depth: 80, lookId: 'round-cafe' }],
     scene: { preset: 'neighborhood-lane' as const, entrance: 'front-door', explore: true },
-  }
+  })
 }
 
 /** Tuk Trail (D275 step E4): two branches in Explore, so a ride crosses a gateway between them. */

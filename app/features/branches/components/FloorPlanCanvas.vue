@@ -1616,6 +1616,7 @@ const sizeBadge = computed(() => {
             :key="`band-${index}`"
             :points="points(band)"
             fill="var(--ui-text-toned)"
+            data-testid="plan-band"
           />
           <line
             v-for="(span, index) in (wall.kind === 'wall' ? [] : wall.spans)"

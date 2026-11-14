@@ -154,7 +154,7 @@ const foundPieces = computed(() => {
   return [
     ...tablesOn(current.id).map(placement => ({ selection: { kind: 'table' as const, id: placement.tableId }, label: tableLabel(placement.tableId) ?? 'Unavailable table', icon: 'i-lucide-table-2' })),
     ...current.items.map(item => ({ selection: { kind: 'item' as const, id: item.id }, label: pieceLabel(item), icon: ITEM_ICONS[item.kind] })),
-    ...current.walls.map((wall, index) => ({ selection: { kind: 'wall' as const, id: wall.id }, label: wallLabel(wall, index), icon: 'i-lucide-brick-wall' })),
+    ...current.walls.map((wall, index) => ({ selection: { kind: 'wall' as const, id: wall.id }, label: wallLabel(current.walls, index), icon: 'i-lucide-brick-wall' })),
   ].filter(piece => findMatches(piece.label))
 })
 
@@ -834,6 +834,7 @@ function layerIn(next: ShopLayout, target: PlanSelection, floorId: string): (Lay
   const on = next.floors.find(candidate => candidate.id === floorId)
   if (target.kind === 'item') return on?.items.find(item => item.id === target.id)
   if (target.kind === 'wall') return on?.walls.find(wall => wall.id === target.id)
+  if (target.kind === 'slab') return on?.slabs.find(slab => slab.id === target.id)
 }
 const setFlag = (layer: Layer | undefined, flag: LayerFlag, on: boolean) => {
   if (!layer) return
@@ -887,7 +888,14 @@ function clickLayer(target: PlanSelection, floorId: string, event: MouseEvent) {
 const layerHover = ref<PlanSelection | null>(null)
 /** In the selection: the one, or one of the set. */
 const isPicked = (kind: PlanSelection['kind'], id: string) => props.editor.selected.value.some(member => member.kind === kind && member.id === id)
-const wallLabel = (wall: Wall, index: number) => wall.name ?? `Interior wall ${index + 1}`
+/** A wall's layer name: its own, or numbered among the floor's outer (beside their line, D282) or interior walls. */
+function wallLabel(walls: readonly Wall[], index: number): string {
+  const wall = walls[index]!
+  if (wall.name) return wall.name
+  const number = walls.slice(0, index + 1).filter(other => !!other.side === !!wall.side).length
+  return `${wall.side ? 'Outer' : 'Interior'} wall ${number}`
+}
+const slabLabel = (slab: Floor['slabs'][number], index: number) => slab.name ?? `Floor surface ${index + 1}`
 
 function selectNext(step: 1 | -1) {
   const next = cycleSelection(floorOrder(), selection.value, step)
@@ -1880,10 +1888,25 @@ const pendingLabel = computed(() => {
             @hover="on => layerHover = on ? { kind: 'item', id: item.id } : null"
           />
           <StudioLayerRow
+            v-for="(slab, index) in candidate.slabs"
+            :key="slab.id"
+            :depth="1"
+            :label="slabLabel(slab, index)"
+            icon="i-lucide-square-dashed"
+            :selected="isPicked('slab', slab.id)"
+            :hidden="slab.hidden"
+            :locked="slab.locked"
+            :testid="`layer-slab-${slab.id}`"
+            @select="() => selectPlaced({ kind: 'slab', id: slab.id }, candidate.id)"
+            @rename="name => renameLayer({ kind: 'slab', id: slab.id }, candidate.id, name)"
+            @hidden="on => setLayerFlag({ kind: 'slab', id: slab.id }, candidate.id, 'hidden', on)"
+            @locked="on => setLayerFlag({ kind: 'slab', id: slab.id }, candidate.id, 'locked', on)"
+          />
+          <StudioLayerRow
             v-for="(wall, index) in candidate.walls"
             :key="wall.id"
             :depth="1"
-            :label="wallLabel(wall, index)"
+            :label="wallLabel(candidate.walls, index)"
             icon="i-lucide-brick-wall"
             :selected="isPicked('wall', wall.id)"
             :hidden="wall.hidden"
