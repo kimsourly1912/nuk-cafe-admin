@@ -3,7 +3,7 @@ import type { Object3D } from 'three'
 import { isFigureKind } from '#shared/contracts/shop-layout'
 import type { FigureKind, ItemLook, LayoutTable, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import { findItemLook, findLook, ITEM_SPECS, pieceFinishes, pieceHeight } from '../catalog'
-import { boundsOf } from '../geometry'
+import { boundsOf, floorPoints } from '../geometry'
 import type { FloorBuild } from './building'
 import { buildFloor, SLAB_THICKNESS_CM } from './building'
 import { buildFigure } from './figures'
@@ -91,12 +91,13 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
   const tableNodes = new Map<string, TableNode>()
   const itemNodes = new Map<string, ItemNode>()
   const figures: FigureNode[] = []
-  const topmost = layout.floors.findLastIndex(floor => floor.outline.length >= 3)
+  const topmost = layout.floors.findLastIndex(floor => floor.slabs.length > 0)
   let elevation = 0
   layout.floors.forEach((floor, index) => {
     const baseY = cm(elevation)
     elevation += floor.height
-    if (floor.outline.length < 3) return
+    // An empty floor (D282) has nothing to build; walls alone still stand.
+    if (!floor.slabs.length && !floor.walls.length) return
     const built = buildFloor(context, { floor, floorBelow: layout.floors[index - 1], topmost: index === topmost })
     built.group.position.y = baseY
     built.group.userData.baseY = baseY
@@ -123,7 +124,7 @@ export function buildScene(context: BuildContext, input: SceneInput): BuiltScene
       const top = item.kind === 'stairs' ? floor.height : pieceHeight(item)
       itemNodes.set(item.id, { itemId: item.id, label, floorId: floor.id, object, labelAnchor: new Vector3(cm(item.x), cm(top + 30), cm(item.y)) })
     }
-    const plan = boundsOf(floor.outline)
+    const plan = boundsOf(floorPoints(floor))
     floors.push({
       ...built,
       id: floor.id,

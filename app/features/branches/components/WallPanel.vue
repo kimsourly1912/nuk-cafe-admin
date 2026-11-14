@@ -1,36 +1,47 @@
 <script setup lang="ts">
 import StudioNumberField from './StudioNumberField.vue'
 /**
- * An inside wall, selected (D278): what it is (Wall, Railing, Half wall or Glass), its length, and
- * its doors and windows, like an outline edge's panel. Each change is one undo step, emitted as
- * the floor's new list of inside walls.
+ * A wall, selected (D278, D282: outer and inside walls alike): what it is (Wall, Railing, Half
+ * wall or Glass), its length, how it is built (thickness, height, which side of its line it stands:
+ * owner D3), and its doors and windows. Each change is one undo step, emitted as the floor's new
+ * list of walls.
  */
-import type { InnerWall, InnerWallKind, OpeningKind } from '#shared/contracts/shop-layout'
-import { innerWallKind, innerWallLength } from '#shared/contracts/shop-layout'
-import { newLayoutId } from '../designer/geometry'
-import { OPENING_MIN_WIDTH } from '../designer/outline'
-import { addInnerOpening, innerOpeningFits, removeInnerOpening, setInnerWallKind, setInnerWallLength, updateInnerOpening } from '../designer/walls'
+import type { OpeningKind, Wall, WallKind, WallSide } from '#shared/contracts/shop-layout'
+import { WALL_HEIGHT_MIN_CM, WALL_THICKNESS_MAX_CM, WALL_THICKNESS_MIN_CM, wallKind, wallLength } from '#shared/contracts/shop-layout'
+import { newLayoutId, wallHeight, wallThickness } from '../designer/geometry'
+import { addWallOpening, OPENING_MIN_WIDTH, removeWallOpening, setWallKind, setWallLength, setWallStructure, updateWallOpening, wallOpeningFits } from '../designer/walls'
 
 const props = defineProps<{
-  walls: readonly InnerWall[]
-  wall: InnerWall
+  walls: readonly Wall[]
+  wall: Wall
+  /** The floor's height: a wall stands at most this tall. */
+  floorHeight: number
 }>()
-const emit = defineEmits<{ change: [walls: InnerWall[]], remove: [], close: [] }>()
+const emit = defineEmits<{ change: [walls: Wall[]], remove: [], close: [] }>()
 
-const kind = computed(() => innerWallKind(props.wall))
-const length = computed(() => Math.round(innerWallLength(props.wall)))
-const KINDS: { value: InnerWallKind, label: string, help: string }[] = [
+const kind = computed(() => wallKind(props.wall))
+const length = computed(() => Math.round(wallLength(props.wall)))
+const KINDS: { value: WallKind, label: string, help: string }[] = [
   { value: 'wall', label: 'Wall', help: 'Floor to ceiling. Takes doors and windows.' },
   { value: 'railing', label: 'Railing', help: 'Waist-high posts and a rail: a mezzanine\'s edge.' },
   { value: 'half', label: 'Half wall', help: '110 cm high: a bar\'s back or a low divider.' },
   { value: 'glass', label: 'Glass', help: 'A glass partition, floor to ceiling.' },
 ]
 const kindLabel = computed(() => KINDS.find(option => option.value === kind.value)!.label)
+const thickness = computed(() => wallThickness(props.wall))
+const height = computed(() => wallHeight(props.wall, props.floorHeight))
+/** Where it stands on its line: an outer wall stands beside it, outside its floor (D282). */
+const SIDES: { value: WallSide | 'centre', label: string }[] = [
+  { value: 'left', label: 'Left' },
+  { value: 'centre', label: 'Centre' },
+  { value: 'right', label: 'Right' },
+]
+const side = computed(() => props.wall.side ?? 'centre')
 /** A door in a railing is a gate; in a half wall or glass it is a gap to walk through. */
 const doorLabel = computed(() => (kind.value === 'railing' ? 'Gate' : kind.value === 'wall' ? 'Door' : 'Opening'))
 const openingName = (opening: OpeningKind) => (opening === 'window' ? 'Window' : doorLabel.value)
 
-function setNumber(value: number | null | undefined, current: number, apply: (value: number) => InnerWall[]) {
+function setNumber(value: number | null | undefined, current: number, apply: (value: number) => Wall[]) {
   if (typeof value !== 'number' || !Number.isFinite(value) || Math.round(value) === current) return
   emit('change', apply(Math.round(value)))
 }
@@ -50,10 +61,10 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
       </span>
       <div class="min-w-0 flex-1">
         <p class="text-base font-semibold text-highlighted">
-          Inside {{ kindLabel.toLowerCase() }}
+          {{ kindLabel }}
         </p>
         <p class="text-xs text-muted tabular-nums">
-          {{ length }} cm
+          {{ length }} cm · {{ thickness }} cm thick
         </p>
       </div>
       <UTooltip
@@ -94,7 +105,7 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
           :variant="kind === option.value ? 'soft' : 'outline'"
           :aria-pressed="kind === option.value"
           class="justify-center"
-          @click="emit('change', setInnerWallKind(walls, wall.id, option.value))"
+          @click="emit('change', setWallKind(walls, wall.id, option.value))"
         />
       </div>
     </UFormField>
@@ -109,8 +120,63 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
         unit="cm"
         :min="10"
         :max="10000"
-        @update:model-value="value => setNumber(value, length, next => setInnerWallLength(walls, wall.id, next))"
+        @update:model-value="value => setNumber(value, length, next => setWallLength(walls, wall.id, next))"
       />
+    </UFormField>
+
+    <div class="grid grid-cols-2 gap-3">
+      <UFormField label="Thickness (cm)">
+        <StudioNumberField
+          :model-value="thickness"
+          label="Thickness"
+          unit="cm"
+          :min="WALL_THICKNESS_MIN_CM"
+          :max="WALL_THICKNESS_MAX_CM"
+          @update:model-value="value => setNumber(value, thickness, next => setWallStructure(walls, wall.id, { thickness: next }))"
+        />
+      </UFormField>
+      <UFormField label="Height (cm)">
+        <StudioNumberField
+          :model-value="height"
+          label="Height"
+          unit="cm"
+          :min="WALL_HEIGHT_MIN_CM"
+          :max="floorHeight"
+          @update:model-value="value => setNumber(value, height, next => setWallStructure(walls, wall.id, { height: next }))"
+        />
+      </UFormField>
+    </div>
+    <UButton
+      v-if="wall.thickness || wall.height"
+      label="Use the type's thickness and height"
+      icon="i-lucide-rotate-ccw"
+      color="neutral"
+      variant="link"
+      size="xs"
+      class="self-start px-0"
+      @click="emit('change', setWallStructure(walls, wall.id, { thickness: null, height: null }))"
+    />
+
+    <UFormField
+      label="Stands on its line"
+      help="An outer wall stands beside its line, outside the floor, so the room keeps the size drawn."
+    >
+      <div
+        class="grid grid-cols-3 gap-1"
+        role="group"
+        aria-label="Stands on its line"
+      >
+        <UButton
+          v-for="option in SIDES"
+          :key="option.value"
+          :label="option.label"
+          :color="side === option.value ? 'primary' : 'neutral'"
+          :variant="side === option.value ? 'soft' : 'outline'"
+          :aria-pressed="side === option.value"
+          class="justify-center"
+          @click="emit('change', setWallStructure(walls, wall.id, { side: option.value === 'centre' ? null : option.value }))"
+        />
+      </div>
     </UFormField>
 
     <div class="flex flex-col gap-2">
@@ -123,8 +189,8 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
           icon="i-lucide-door-open"
           color="neutral"
           variant="outline"
-          :disabled="!innerOpeningFits(wall, 'door')"
-          @click="emit('change', addInnerOpening(walls, wall.id, 'door', newLayoutId('door')))"
+          :disabled="!wallOpeningFits(wall, 'door')"
+          @click="emit('change', addWallOpening(walls, wall.id, 'door', newLayoutId('door')))"
         />
         <UButton
           v-if="kind === 'wall'"
@@ -132,8 +198,8 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
           icon="i-lucide-app-window"
           color="neutral"
           variant="outline"
-          :disabled="!innerOpeningFits(wall, 'window')"
-          @click="emit('change', addInnerOpening(walls, wall.id, 'window', newLayoutId('window')))"
+          :disabled="!wallOpeningFits(wall, 'window')"
+          @click="emit('change', addWallOpening(walls, wall.id, 'window', newLayoutId('window')))"
         />
       </div>
     </div>
@@ -154,7 +220,7 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
           variant="ghost"
           size="xs"
           :aria-label="`Remove this ${openingName(opening.kind).toLowerCase()}`"
-          @click="emit('change', removeInnerOpening(walls, wall.id, opening.id))"
+          @click="emit('change', removeWallOpening(walls, wall.id, opening.id))"
         />
       </div>
       <div class="grid grid-cols-2 gap-3">
@@ -165,7 +231,7 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
             unit="cm"
             :min="OPENING_MIN_WIDTH"
             :max="length"
-            @update:model-value="value => setNumber(value, opening.width, width => updateInnerOpening(walls, wall.id, opening.id, { width }))"
+            @update:model-value="value => setNumber(value, opening.width, width => updateWallOpening(walls, wall.id, opening.id, { width }))"
           />
         </UFormField>
         <UFormField label="From the start (cm)">
@@ -175,7 +241,7 @@ function setNumber(value: number | null | undefined, current: number, apply: (va
             unit="cm"
             :min="0"
             :max="Math.max(0, length - opening.width)"
-            @update:model-value="value => setNumber(value, opening.offset, offset => updateInnerOpening(walls, wall.id, opening.id, { offset }))"
+            @update:model-value="value => setNumber(value, opening.offset, offset => updateWallOpening(walls, wall.id, opening.id, { offset }))"
           />
         </UFormField>
       </div>

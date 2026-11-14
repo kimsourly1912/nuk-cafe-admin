@@ -1,3 +1,4 @@
+import { fromV1 } from '#shared/contracts/shop-layout'
 import type { LayoutTable, ShopLayout } from '#shared/contracts/shop-layout'
 
 /**
@@ -29,7 +30,8 @@ const OUTLINE = [
 ]
 
 export function demoCafe(): ShopLayout {
-  return {
+  // Written as an outline with edges (before contract v2, D282), as the starters are.
+  return fromV1({
     floors: [
       {
         id: 'ground',
@@ -83,5 +85,5 @@ export function demoCafe(): ShopLayout {
       { tableId: 'demo-e5', floorId: 'first', x: 560, y: 360, rotation: 0, width: 70, depth: 70, lookId: 'square-bistro' },
       { tableId: 'demo-e6', floorId: 'first', x: 450, y: 820, rotation: 0, width: 120, depth: 80, lookId: 'oak-rectangle' },
     ],
-  }
+  })
 }

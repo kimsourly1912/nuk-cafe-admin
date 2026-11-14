@@ -39,7 +39,7 @@ watch(view, (current) => {
 })
 editor.load()
 const layout = editor.draft.layout
-const hasOutline = computed(() => layout.value.floors.some(floor => floor.outline.length >= 3))
+const hasOutline = computed(() => layout.value.floors.some(floor => floor.slabs.length > 0))
 const explore = useRuntimeConfig().public.explore
 const publishes = computed(() => explore && hasPin.value && (layout.value.scene?.explore || editor.query.data.value?.scene?.explore))
 const exitOpen = ref(false)

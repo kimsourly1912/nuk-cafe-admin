@@ -15,11 +15,11 @@ const chosen = ref<Starter>(STARTERS[1]!)
 
 /** Each floor's outline, fitted into the card's picture; upper floors drawn dashed. */
 const previews = Object.fromEntries(STARTERS.map((starter) => {
-  const floors = starter.layout().floors.filter(floor => floor.outline.length >= 3)
-  const bounds = boundsOf(floors.flatMap(floor => floor.outline))
+  const floors = starter.layout().floors.filter(floor => floor.slabs.length > 0)
+  const bounds = boundsOf(floors.flatMap(floor => floor.slabs.flatMap(slab => slab.outline)))
   const scale = floors.length ? Math.min(100 / (bounds.maxX - bounds.minX), 72 / (bounds.maxY - bounds.minY)) : 1
   const fit = (point: Point) => `${10 + (point.x - bounds.minX) * scale},${10 + (point.y - bounds.minY) * scale}`
-  return [starter.id, floors.map((floor, index) => ({ points: floor.outline.map(fit).join(' '), upper: index > 0 }))]
+  return [starter.id, floors.flatMap((floor, index) => floor.slabs.map(slab => ({ points: slab.outline.map(fit).join(' '), upper: index > 0 })))]
 }))
 </script>
 

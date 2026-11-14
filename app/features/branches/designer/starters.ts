@@ -1,5 +1,5 @@
-import type { Floor, ShopLayout } from '#shared/contracts/shop-layout'
-import { LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
+import type { Floor, ShopLayout, ShopLayoutV1 } from '#shared/contracts/shop-layout'
+import { fromV1, LAYOUT_MAX_FLOORS } from '#shared/contracts/shop-layout'
 import { newLayoutId } from './geometry'
 
 /**
@@ -24,19 +24,22 @@ export interface Starter {
 
 const wall = () => ({ kind: 'wall' as const, openings: [] })
 
+const v1 = (layout: ShopLayoutV1): ShopLayout => fromV1(layout)
+
 export const STARTERS: Starter[] = [
   {
     id: 'blank',
     name: 'Blank',
     description: 'Draw your own outline',
     // No corners yet: the editor opens Draw outline on it.
-    layout: () => ({ floors: [{ id: 'ground', name: 'Ground', height: FLOOR_HEIGHT_DEFAULT_CM, hasRoof: true, outline: [], edges: [], walls: [], items: [] }], placements: [] }),
+    layout: () => ({ floors: [{ id: 'ground', name: 'Ground', height: FLOOR_HEIGHT_DEFAULT_CM, hasRoof: true, slabs: [], walls: [], items: [] }], placements: [] }),
   },
   {
     id: 'shophouse',
     name: 'Narrow shophouse',
     description: '4 × 15 m · stairs at the back',
-    layout: () => ({
+    // Written as outlines with edges (before contract v2, D282) and upgraded.
+    layout: () => v1({
       floors: [{
         id: 'ground',
         name: 'Ground',
@@ -55,7 +58,8 @@ export const STARTERS: Starter[] = [
     id: 'wide',
     name: 'Wide café',
     description: '12 × 7 m · long shop window',
-    layout: () => ({
+    // Written as outlines with edges (before contract v2, D282) and upgraded.
+    layout: () => v1({
       floors: [{
         id: 'ground',
         name: 'Ground',
@@ -73,7 +77,8 @@ export const STARTERS: Starter[] = [
     id: 'rooftop',
     name: 'Rooftop café',
     description: '2 floors · open patio on top',
-    layout: () => ({
+    // Written as outlines with edges (before contract v2, D282) and upgraded.
+    layout: () => v1({
       floors: [
         {
           id: 'ground',
@@ -117,18 +122,16 @@ export function canAddFloor(layout: ShopLayout): boolean {
 }
 
 /**
- * A floor on top of the others: the top floor's outline (so the walls line up), every edge a wall
- * without doors or windows, nothing on it.
+ * A floor on top of the others, empty (owner D1, 2026-11-14): the floor below shows faintly as a
+ * guide, and "Copy walls from floor below" (`copyStructure`) brings its surfaces and walls up.
  */
 export function newFloor(layout: ShopLayout): Floor {
-  const top = layout.floors.at(-1)
   return {
     id: newLayoutId('floor'),
     name: floorName(layout.floors.length),
     height: FLOOR_HEIGHT_DEFAULT_CM,
     hasRoof: true,
-    outline: (top?.outline ?? []).map(point => ({ ...point })),
-    edges: (top?.outline ?? []).map(() => ({ kind: 'wall' as const, openings: [] })),
+    slabs: [],
     walls: [],
     items: [],
   }

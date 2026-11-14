@@ -1,11 +1,11 @@
 import type { Floor, LayoutItem, Point, TableLook } from '#shared/contracts/shop-layout'
-import { edgeLength, innerWallLength, isFigureKind } from '#shared/contracts/shop-layout'
+import { wallLength, isFigureKind } from '#shared/contracts/shop-layout'
 import { ITEM_SPECS } from './catalog'
 import type { Bounds, Pose, Sized } from './geometry'
-import { BOOTH_BENCH_DEPTH_CM, boundsOf, outwardNormal, pointInPolygon, pointOnEdge, rectCorners, rotatePoint, INNER_WALL_THICKNESS_CM, WALL_THICKNESS_CM, wallPieces } from './geometry'
+import { BOOTH_BENCH_DEPTH_CM, boundsOf, pointInPolygon, rectCorners, rotatePoint, wallBand, wallNormal, wallPieces, wallThickness } from './geometry'
 
 const EPSILON = 1e-7
-type FloorShape = Pick<Floor, 'outline' | 'edges' | 'walls' | 'height'>
+type FloorShape = Pick<Floor, 'slabs' | 'walls' | 'height'>
 
 interface PlanFootprint {
   id: string
@@ -98,27 +98,22 @@ function insideOutline(points: Point[], outline: Point[]): boolean {
 
 function wallFootprints(floor: FloorShape): Point[][] {
   const walls: Point[][] = []
-  const append = (from: Point, to: Point, shift: Point, thickness = WALL_THICKNESS_CM) => {
-    const length = Math.hypot(to.x - from.x, to.y - from.y)
-    if (length <= EPSILON) return
-    const center = { x: (from.x + to.x) / 2 + shift.x, y: (from.y + to.y) / 2 + shift.y }
-    const rotation = Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI
-    walls.push(rectCorners(center, length, thickness, rotation))
-  }
-  // Inside walls (D278): their doorways are clear, like the outline's.
+  // Every wall (D282) where it stands, beside its line or on it; doorways are clear.
   for (const wall of floor.walls) {
-    const length = innerWallLength(wall)
-    const at = (offset: number) => ({ x: wall.from.x + (wall.to.x - wall.from.x) * offset / Math.max(length, EPSILON), y: wall.from.y + (wall.to.y - wall.from.y) * offset / Math.max(length, EPSILON) })
+    const length = wallLength(wall)
+    if (length <= EPSILON) continue
+    const thickness = wallThickness(wall)
+    const { near, far } = wallBand(wall)
+    const normal = wallNormal(wall)
+    const shift = { x: normal.x * (near + far) / 2, y: normal.y * (near + far) / 2 }
+    const at = (offset: number) => ({ x: wall.from.x + (wall.to.x - wall.from.x) * offset / length, y: wall.from.y + (wall.to.y - wall.from.y) * offset / length })
     for (const part of wallPieces(length, floor.height, wall.openings ?? [])) {
-      if (part.bottom === 0) append(at(part.from), at(part.to), { x: 0, y: 0 }, INNER_WALL_THICKNESS_CM)
-    }
-  }
-  for (const [index, edge] of floor.edges.entries()) {
-    if (edge.kind !== 'wall') continue
-    const normal = outwardNormal(floor.outline, index)
-    const shift = { x: normal.x * WALL_THICKNESS_CM / 2, y: normal.y * WALL_THICKNESS_CM / 2 }
-    for (const part of wallPieces(edgeLength(floor.outline, index), floor.height, edge.openings)) {
-      if (part.bottom === 0) append(pointOnEdge(floor.outline, index, part.from), pointOnEdge(floor.outline, index, part.to), shift)
+      if (part.bottom !== 0) continue
+      const from = at(part.from)
+      const to = at(part.to)
+      const center = { x: (from.x + to.x) / 2 + shift.x, y: (from.y + to.y) / 2 + shift.y }
+      const rotation = Math.atan2(to.y - from.y, to.x - from.x) * 180 / Math.PI
+      walls.push(rectCorners(center, part.to - part.from, thickness, rotation))
     }
   }
   return walls
@@ -149,12 +144,12 @@ function overlaps(a: Polygon, b: Polygon): boolean {
 
 export function placementWarnings(floor: FloorShape, footprints: readonly PlanFootprint[], preview?: PlanFootprint): Map<string, PlacementWarning> {
   const warnings = new Map<string, PlacementWarning>()
-  if (floor.outline.length < 3) return warnings
+  if (!floor.slabs.length) return warnings
   const walls = wallFootprints(floor).map(polygon)
   const items = footprints.map(piece => ({ id: piece.id, parts: piece.parts.map(polygon), bounds: boundsOf(piece.parts.flat()) }))
   const subjects = preview ? [{ id: preview.id, parts: preview.parts.map(polygon), bounds: boundsOf(preview.parts.flat()) }] : items
   for (const item of subjects) {
-    const outside = item.parts.some(part => !insideOutline(part.points, floor.outline))
+    const outside = item.parts.some(part => !floor.slabs.some(slab => insideOutline(part.points, slab.outline)))
     const overlap = item.parts.some(part => walls.some(wall => overlaps(part, wall))) || items.some(other =>
       other.id !== item.id && intersects(item.bounds, other.bounds) && item.parts.some(part => other.parts.some(blocker => overlaps(part, blocker))),
     )

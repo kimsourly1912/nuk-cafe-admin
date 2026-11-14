@@ -11,8 +11,8 @@ import StudioNumberField from './StudioNumberField.vue'
 import { createReusableTemplate, useElementSize, useEventListener, useMediaQuery } from '@vueuse/core'
 import type { CommandPaletteGroup, ContextMenuItem, DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import { edgeLength, floorPageId, isSimpleOutline, SHAPE_ARC, innerWallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
-import type { CustomItemLook, CustomLook, Finish, Floor, InnerWall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
+import { edgeLength, floorPageId, isSimpleOutline, SHAPE_ARC, wallKind, isFigureKind, ITEM_SIZE_MAX_CM, isItemLookKind, isShapeKind, itemHeightRange, LAYOUT_MAX_EXTENT_CM, LAYOUT_MAX_FLOORS, LAYOUT_MAX_PAGES, layoutPages, PAGE_NAME_MAX, SHAPE_NAME_MAX } from '#shared/contracts/shop-layout'
+import type { CustomItemLook, CustomLook, Finish, Floor, Wall, ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
 import type { LayoutEditor } from '../composables/useLayoutEditor'
 import { losesStreetDoor } from '../composables/useLayoutDraft'
 import type { ItemCategory, LookCategory } from '../designer/catalog'
@@ -20,19 +20,18 @@ import type { AlignEdge, PlanClipboard } from '../designer/group'
 import { CATEGORIES, FINISH_SWATCHES, LOOK_CATEGORIES, findItemLook, findLook, ITEM_SPECS, itemFinish, keepsCircle, NEW_TABLE_LOOK, pieceFinishes, pieceHeight } from '../designer/catalog'
 import { fittedRadius, maxRadius } from '../designer/shapes'
 import type { ShapeEdit } from '../designer/shapes'
-import { besideOf, boundsOf, newLayoutId, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
+import { besideOf, boundsOf, floorPoints, newLayoutId, normalizeRotation, placementExtent, snap, SNAP_CM } from '../designer/geometry'
 import type { Bounds, Sized } from '../designer/geometry'
-import { addOpening, areaM2, edgeNames, openingFits, setEdgeKind, setEdgeLength, shapeOf } from '../designer/outline'
+import { areaM2, edgeNames, setEdgeLength, shapeOf, withShape } from '../designer/outline'
 import type { FloorShape } from '../designer/outline'
 import type { PlanGhost, PlanMode, PlanSelection } from '../designer/plan'
 import { alignOffsets, cycleSelection, distributeOffsets, duplicateSelected, pasteClipboard, removeSelected, shiftSelected, turnSelected } from '../designer/group'
 import { addRoom } from '../designer/rooms'
 import { canAddFloor, newFloor } from '../designer/starters'
-import { addPage, besideFrames, effectiveFrames, floorsOnPage, removePage, renamePage, setFloorPage } from '../designer/pages'
-import { addInnerOpening, innerOpeningFits, setInnerWallKind } from '../designer/walls'
+import { addPage, besideFrames, effectiveFrames, floorsOnPage, framePlace, removePage, renamePage, setFloorPage } from '../designer/pages'
+import { addWallOpening, copyStructure, setWallKind, wallOpeningFits } from '../designer/walls'
 import type { Starter } from '../designer/starters'
-import EdgePanel from './EdgePanel.vue'
-import InnerWallPanel from './InnerWallPanel.vue'
+import WallPanel from './WallPanel.vue'
 import ExploreLayoutSettings from './ExploreLayoutSettings.vue'
 import ItemLookFormModal from './ItemLookFormModal.vue'
 import type { ItemLookSource } from './ItemLookFormModal.vue'
@@ -218,7 +217,7 @@ const pageFloors = computed(() => floorsOnPage(layout.value, pageId.value))
 const frameOffsets = computed(() => effectiveFrames(pageFloors.value))
 const frameAt = computed(() => (floor.value ? frameOffsets.value[floor.value.id] ?? { x: 0, y: 0 } : { x: 0, y: 0 }))
 /** The page's frames with their offsets written out, as `besideFrames` and a move need them. */
-const placedFrames = () => pageFloors.value.map(candidate => ({ ...candidate, canvasX: frameOffsets.value[candidate.id]?.x ?? 0, canvasY: frameOffsets.value[candidate.id]?.y ?? 0 }))
+const placedFrames = () => pageFloors.value.map(candidate => framePlace({ ...candidate, canvasX: frameOffsets.value[candidate.id]?.x ?? 0, canvasY: frameOffsets.value[candidate.id]?.y ?? 0 }))
 /** The page's other floors, drawn beside the one shown (hidden ones aren't). */
 const otherFrames = computed(() => pageFloors.value.filter(candidate => candidate.id !== floor.value?.id && !candidate.hidden))
 
@@ -258,16 +257,26 @@ function moveFloorToPage(id: string) {
     // Beside the frames already there, as a new floor would be.
     const moved = next.floors.find(candidate => candidate.id === current.id)
     if (!moved) return
-    const at = besideFrames(target.map(other => ({ ...other, canvasX: offsets[other.id]?.x ?? 0, canvasY: offsets[other.id]?.y ?? 0 })), moved.outline)
+    const at = besideFrames(target.map(other => framePlace({ ...other, canvasX: offsets[other.id]?.x ?? 0, canvasY: offsets[other.id]?.y ?? 0 })), floorPoints(moved))
     moved.canvasX = at.x
     moved.canvasY = at.y
   })
 }
 
-// A floor without an outline (Blank) opens Draw outline.
-watch(() => floor.value?.outline.length === 0, (empty) => {
+// An empty floor (Blank, or a new floor: owner D1) opens Draw outline; Copy walls from floor below is in Properties.
+watch(() => !!floor.value && !floor.value.slabs.length && !floor.value.walls.length, (empty) => {
   if (empty) mode.value = 'outline'
 }, { immediate: true })
+
+/**
+ * The floor surface Edit points works on (D282): the one selected or double-clicked, else the
+ * floor's first. Kept while its floor is shown.
+ */
+const slabId = ref<string | null>(null)
+const activeSlab = computed(() => floor.value?.slabs.find(slab => slab.id === slabId.value) ?? floor.value?.slabs[0])
+watch(selection, (current) => {
+  if (current?.kind === 'slab') slabId.value = current.id
+})
 
 const ITEM_ICONS: Record<ItemKind, string> = {
   'cafe-chair': 'i-lucide-armchair',
@@ -324,14 +333,10 @@ const selectedTable = computed(() => selectedPlacement.value && tables.value.fin
 const selectedDiningTable = computed(() => selectedPlacement.value && props.diningTables.find(table => table.id === selectedPlacement.value!.tableId))
 const selectedItem = computed(() => selection.value?.kind === 'item' ? floor.value?.items.find(item => item.id === selection.value!.id) : undefined)
 const selectedWall = computed(() => selection.value?.kind === 'wall' ? floor.value?.walls.find(wall => wall.id === selection.value!.id) : undefined)
-const selectedEdge = computed(() => {
-  if (selection.value?.kind !== 'edge' || !floor.value) return undefined
-  const index = Number(selection.value.id)
-  return index < floor.value.edges.length ? index : undefined
-})
-watch([selection, selectedPlacement, selectedItem, selectedWall, selectedEdge], ([current, table, item, wall, edge]) => {
+const selectedSlab = computed(() => selection.value?.kind === 'slab' ? floor.value?.slabs.find(slab => slab.id === selection.value!.id) : undefined)
+watch([selection, selectedPlacement, selectedItem, selectedWall, selectedSlab], ([current, table, item, wall, slab]) => {
   if (!current) return
-  if ({ table, item, wall, edge }[current.kind] === undefined) {
+  if ({ table, item, wall, slab }[current.kind] === undefined) {
     selection.value = null
     detailsOpen.value = false
   }
@@ -346,7 +351,6 @@ watch([group, () => floor.value], ([members, current]) => {
   if (present.length !== members.length) props.editor.selectMany(present)
 })
 
-const names = computed(() => (floor.value ? edgeNames(floor.value.outline) : []))
 const selectedLook = computed(() => selectedPlacement.value && findLook(props.looks, selectedPlacement.value.lookId))
 const lookUsers = computed(() => {
   const placement = selectedPlacement.value
@@ -486,48 +490,87 @@ function resize(target: PlanSelection, size: Omit<Sized, 'rotation'>) {
 }
 
 /**
- * A table leaves the map (back to Unplaced, its QR untouched); furniture and walls are deleted. An
- * outline edge becomes Open (D278): its wall or railing goes, with its doors and windows, and the
- * floor keeps its shape. It stays selected, so Wall or Railing puts one back.
+ * A table leaves the map (back to Unplaced, its QR untouched); furniture, walls and floor surfaces
+ * are deleted (D282: really, ISS-046).
  */
 function remove(target: PlanSelection) {
   if (inGroup(target)) return removeGroup()
-  if (target.kind === 'edge') {
-    const current = floor.value
-    const index = Number(target.id)
-    if (current && current.edges[index] && current.edges[index].kind !== 'open') void updateShape(setEdgeKind(shapeOf(current), index, 'open'))
-    return
-  }
+  if (target.kind === 'wall' || target.kind === 'slab') return void removePart(target)
   draft.change((next) => {
     if (target.kind === 'table') next.placements = next.placements.filter(placement => placement.tableId !== target.id)
     for (const candidate of next.floors) {
       if (target.kind === 'item') candidate.items = candidate.items.filter(item => item.id !== target.id)
-      if (target.kind === 'wall') candidate.walls = candidate.walls.filter(wall => wall.id !== target.id)
     }
   })
   selection.value = null
 }
 
 /**
- * A new outline for the floor shown, one undo step. Refused when it would cross itself (ISS-039;
- * one that already did may still be edited back); asks first when it would remove Explore's street
- * door (ISS-038).
+ * A wall or a floor surface deleted for real (ISS-046, D282): a wall with its doors and windows,
+ * silently (owner D6: Undo brings them back); a surface without its walls. Removing Explore's
+ * street door asks first (ISS-038).
  */
-async function updateShape(shape: FloorShape) {
-  const current = floor.value
-  if (!current) return
-  if (!isSimpleOutline(shape.outline) && isSimpleOutline(current.outline)) {
-    toast.add({ title: 'Outline not changed', description: 'A floor\'s sides cannot cross each other.', color: 'neutral', icon: 'i-lucide-info' })
-    return
-  }
+async function removePart(target: PlanSelection) {
   const apply = (next: ShopLayout) => {
-    const target = next.floors.find(candidate => candidate.id === current.id)
-    if (!target) return
-    target.outline = shape.outline
-    target.edges = shape.edges
+    for (const candidate of next.floors) {
+      if (target.kind === 'wall') candidate.walls = candidate.walls.filter(wall => wall.id !== target.id)
+      if (target.kind === 'slab') candidate.slabs = candidate.slabs.filter(slab => slab.id !== target.id)
+    }
   }
   if (!(await keepsStreetDoor(apply))) return
   draft.change(apply)
+  selection.value = null
+}
+
+/**
+ * A floor surface's new outline and the floor's walls after it (Edit points, D282), one undo step.
+ * Refused when it would cross itself (ISS-039; one that already did may still be edited back); asks
+ * first when it would remove Explore's street door (ISS-038).
+ */
+async function updateShape(slabId: string, shape: FloorShape) {
+  const current = floor.value
+  const slab = current?.slabs.find(candidate => candidate.id === slabId)
+  if (!current || !slab) return
+  if (!isSimpleOutline(shape.outline) && isSimpleOutline(slab.outline)) {
+    toast.add({ title: 'Outline not changed', description: 'A floor\'s sides cannot cross each other.', color: 'neutral', icon: 'i-lucide-info' })
+    return
+  }
+  await changeStructure(current.id, target => withShape(target, slabId, shape))
+}
+
+/** A new floor surface drawn on the floor shown, with its walls around it (D282). */
+function addSlab(shape: FloorShape) {
+  const id = newLayoutId('slab')
+  if (changeFloor((target) => {
+    target.slabs.push({ id, outline: shape.outline })
+    target.walls.push(...shape.walls)
+  })) slabId.value = id
+}
+
+/**
+ * The floor's surfaces and walls replaced by `change` (Room, Edit points, Copy walls), one undo
+ * step, after asking when Explore's street door would go (ISS-038).
+ */
+async function changeStructure(floorId: string, change: (floor: Floor) => Pick<Floor, 'slabs' | 'walls'>) {
+  const apply = (next: ShopLayout) => {
+    const target = next.floors.find(candidate => candidate.id === floorId)
+    if (!target) return
+    const { slabs, walls } = change(target)
+    target.slabs = slabs
+    target.walls = walls
+  }
+  if (!(await keepsStreetDoor(apply))) return
+  draft.change(apply)
+}
+
+/** Owner D1: the floor below's surfaces and walls on the floor shown, without doors or windows. */
+function copyWallsFromBelow() {
+  const current = floor.value
+  const below = floors.value[floorIndex.value - 1]
+  if (!current || !below) return
+  const copied = copyStructure(below)
+  void changeStructure(current.id, target => ({ slabs: [...target.slabs, ...copied.slabs], walls: [...target.walls, ...copied.walls] }))
+  if (mode.value === 'outline') finishTool()
 }
 
 /**
@@ -567,18 +610,13 @@ const INNER_WALL_OPTIONS = [
   { value: 'half', label: 'Half wall' },
   { value: 'glass', label: 'Glass' },
 ] as const
-const EDGE_KINDS = [
-  { value: 'wall', label: 'Wall' },
-  { value: 'railing', label: 'Railing' },
-  { value: 'open', label: 'Open' },
-] as const
 const EDGE_LENGTH_MIN_CM = 10
 const EDGE_LENGTH_MAX_CM = 10_000
 
 function editLength(index: number, at: Point) {
-  const current = floor.value
-  if (!current) return
-  lengthEdit.value = { index, at, value: Math.round(edgeLength(current.outline, index)) }
+  const slab = activeSlab.value
+  if (!slab) return
+  lengthEdit.value = { index, at, value: Math.round(edgeLength(slab.outline, index)) }
   void nextTick(() => {
     lengthInput.value?.inputRef?.focus()
     lengthInput.value?.inputRef?.select()
@@ -590,10 +628,11 @@ function applyLength() {
   const edit = lengthEdit.value
   lengthEdit.value = null
   const current = floor.value
-  if (!edit || !current || typeof edit.value !== 'number' || !Number.isFinite(edit.value)) return
+  const slab = activeSlab.value
+  if (!edit || !current || !slab || typeof edit.value !== 'number' || !Number.isFinite(edit.value)) return
   const length = Math.min(EDGE_LENGTH_MAX_CM, Math.max(EDGE_LENGTH_MIN_CM, Math.round(edit.value)))
-  if (length === Math.round(edgeLength(current.outline, edit.index))) return
-  void updateShape(setEdgeLength(shapeOf(current), edit.index, length))
+  if (length === Math.round(edgeLength(slab.outline, edit.index))) return
+  void updateShape(slab.id, setEdgeLength(shapeOf(current, slab), edit.index, length))
 }
 
 watch(() => [mode.value, floor.value?.id], () => {
@@ -601,18 +640,19 @@ watch(() => [mode.value, floor.value?.id], () => {
 })
 
 /**
- * The Room tool (D278): the rectangle becomes the floor, merges into it or, with Alt, is cut out of
- * it, as one undo step; then Select again, as Figma's shape tools do. A refused room says why.
+ * The Room tool (D278, D282): the rectangle becomes a floor surface with walls, merges into the
+ * surfaces it touches or, with Cut, is cut out of them, as one undo step; then Select again, as
+ * Figma's shape tools do. A refused room says why.
  */
 function applyRoom(bounds: Bounds, cut: boolean) {
   const current = floor.value
   if (!current) return
-  const result = addRoom(shapeOf(current), bounds, cut)
+  const result = addRoom(current, bounds, cut)
   if ('refused' in result) {
     toast.add({ title: cut ? 'Room not cut out' : 'Room not added', description: result.refused, color: 'error', icon: 'i-lucide-circle-alert' })
     return
   }
-  void updateShape(result.shape)
+  void changeStructure(current.id, () => result.floor)
   finishTool()
 }
 
@@ -633,12 +673,12 @@ function placeShape(bounds: Bounds) {
 }
 const SHAPE_MIN_CM = 20
 
-function addWall(wall: Omit<InnerWall, 'id'>) {
+function addWall(wall: Omit<Wall, 'id'>) {
   changeFloor(target => target.walls.push({ id: newLayoutId('wall'), ...wall }))
 }
 
 /** The floor's inside walls after a change from their panel or the plan (D278): one undo step. */
-function setWalls(walls: InnerWall[]) {
+function setWalls(walls: Wall[]) {
   changeFloor((target) => {
     target.walls = walls
   })
@@ -679,9 +719,9 @@ function distributeGroup(axis: 'x' | 'y') {
 /** Align one piece to its floor (ED-11, Figma's align to the frame): the outline's edges, as drawn. */
 function alignToFloor(edge: AlignEdge) {
   const target = selection.value
-  const outline = floor.value?.outline
-  if (!target || !outline || outline.length < 3) return
-  moveEach(boxes => alignOffsets(boxes, edge, boundsOf(outline)), [target])
+  const points = floor.value ? floor.value.slabs.flatMap(slab => slab.outline) : []
+  if (!target || !points.length) return
+  moveEach(boxes => alignOffsets(boxes, edge, boundsOf(points)), [target])
 }
 /** Moves each selected one by its own offset, from their boxes as drawn; one undo step. */
 function moveEach(offsets: (boxes: { target: PlanSelection, bounds: Bounds }[]) => { target: PlanSelection, delta: Point }[], targets: readonly PlanSelection[] = group.value) {
@@ -719,14 +759,14 @@ function removeGroup() {
 
 /** Shift+click: in or out of the set. */
 function toggleSelected(target: PlanSelection) {
-  const current = props.editor.selected.value.filter(member => member.kind !== 'edge')
+  const current = props.editor.selected.value.filter(member => member.kind !== 'slab')
   const present = current.some(member => member.kind === target.kind && member.id === target.id)
   props.editor.selectMany(present ? current.filter(member => member.kind !== target.kind || member.id !== target.id) : [...current, target])
 }
 
 /** A box selection: what it touched, added to the set with Shift. */
 function selectBox(targets: PlanSelection[], additive: boolean) {
-  const base = additive ? props.editor.selected.value.filter(member => member.kind !== 'edge') : []
+  const base = additive ? props.editor.selected.value.filter(member => member.kind !== 'slab') : []
   props.editor.selectMany([...base, ...targets])
 }
 
@@ -847,7 +887,7 @@ function clickLayer(target: PlanSelection, floorId: string, event: MouseEvent) {
 const layerHover = ref<PlanSelection | null>(null)
 /** In the selection: the one, or one of the set. */
 const isPicked = (kind: PlanSelection['kind'], id: string) => props.editor.selected.value.some(member => member.kind === kind && member.id === id)
-const wallLabel = (wall: InnerWall, index: number) => wall.name ?? `Interior wall ${index + 1}`
+const wallLabel = (wall: Wall, index: number) => wall.name ?? `Interior wall ${index + 1}`
 
 function selectNext(step: 1 | -1) {
   const next = cycleSelection(floorOrder(), selection.value, step)
@@ -894,7 +934,7 @@ function addFloor() {
   stopFind()
   // On the page shown, beside its frames (ISS-036).
   const created: Floor = { ...newFloor(layout.value) }
-  const at = besideFrames(placedFrames(), created.outline)
+  const at = besideFrames(placedFrames(), [])
   created.canvasX = at.x
   created.canvasY = at.y
   if (pageId.value !== pages.value[0]!.id) created.pageId = pageId.value
@@ -1015,7 +1055,7 @@ function listLabels(labels: readonly string[]): string {
 // --- Draw outline and Draw wall (3A, 9A) ---
 
 /** The layout when the tool opened: Cancel puts this floor's shape and walls back, as one undo step. */
-let toolStart: { floorId: string, shape: FloorShape, walls: InnerWall[] } | null = null
+let toolStart: { floorId: string, slabs: Floor['slabs'], walls: Wall[] } | null = null
 
 function startTool(next: PlanMode) {
   if (next === 'room') roomCut.value = false
@@ -1027,7 +1067,7 @@ function startTool(next: PlanMode) {
     return
   }
   const current = floor.value
-  toolStart = current ? { floorId: current.id, shape: shapeOf(current), walls: current.walls } : null
+  toolStart = current ? { floorId: current.id, slabs: current.slabs, walls: current.walls } : null
   mode.value = next
   selection.value = null
 }
@@ -1041,12 +1081,11 @@ function cancelTool() {
   const start = toolStart
   const current = floors.value.find(candidate => candidate.id === start?.floorId)
   const changed = (now: unknown, then: unknown) => JSON.stringify(now) !== JSON.stringify(then)
-  if (start && current && (changed(current.outline, start.shape.outline) || changed(current.edges, start.shape.edges) || changed(current.walls, start.walls))) {
+  if (start && current && (changed(current.slabs, start.slabs) || changed(current.walls, start.walls))) {
     draft.change((next) => {
       const target = next.floors.find(candidate => candidate.id === start.floorId)
       if (!target) return
-      target.outline = structuredClone(toRaw(start.shape.outline))
-      target.edges = structuredClone(toRaw(start.shape.edges))
+      target.slabs = structuredClone(toRaw(start.slabs))
       target.walls = structuredClone(toRaw(start.walls))
     })
   }
@@ -1451,8 +1490,8 @@ function onStudioKey(event: KeyboardEvent) {
     return
   }
   // Enter opens Edit points on the floor (Figma's Enter into a shape's points), and closes it again.
-  if (event.key === 'Enter' && !event.shiftKey && floor.value && floor.value.outline.length >= 3) {
-    if (mode.value === 'select' && (!selection.value || selection.value.kind === 'edge')) return run(() => startTool('outline'))
+  if (event.key === 'Enter' && !event.shiftKey && floor.value && floor.value.slabs.length) {
+    if (mode.value === 'select' && (!selection.value || selection.value.kind === 'slab')) return run(() => startTool('outline'))
     if (mode.value === 'outline') return run(finishTool)
   }
   // Figma's flips (ED-07): Shift+H, Shift+V on the selected pieces.
@@ -1517,38 +1556,22 @@ const contextItems = computed((): ContextMenuItem[][] => {
   if (selectedWall.value && target && floor.value) {
     const wall = selectedWall.value
     const walls = floor.value.walls
-    const kind = innerWallKind(wall)
+    const kind = wallKind(wall)
     return [
-      INNER_WALL_OPTIONS.map(option => ({ label: option.label, type: 'checkbox' as const, checked: kind === option.value, onSelect: () => setWalls(setInnerWallKind(walls, wall.id, option.value)) })),
+      INNER_WALL_OPTIONS.map(option => ({ label: option.label, type: 'checkbox' as const, checked: kind === option.value, onSelect: () => setWalls(setWallKind(walls, wall.id, option.value)) })),
       [
-        { label: kind === 'railing' ? 'Add a gate' : kind === 'wall' ? 'Add a door' : 'Add an opening', icon: 'i-lucide-door-open', disabled: !innerOpeningFits(wall, 'door'), onSelect: () => setWalls(addInnerOpening(walls, wall.id, 'door', newLayoutId('door'))) },
-        ...(kind === 'wall' ? [{ label: 'Add a window', icon: 'i-lucide-app-window', disabled: !innerOpeningFits(wall, 'window'), onSelect: () => setWalls(addInnerOpening(walls, wall.id, 'window', newLayoutId('window'))) }] : []),
+        { label: kind === 'railing' ? 'Add a gate' : kind === 'wall' ? 'Add a door' : 'Add an opening', icon: 'i-lucide-door-open', disabled: !wallOpeningFits(wall, 'door'), onSelect: () => setWalls(addWallOpening(walls, wall.id, 'door', newLayoutId('door'))) },
+        ...(kind === 'wall' ? [{ label: 'Add a window', icon: 'i-lucide-app-window', disabled: !wallOpeningFits(wall, 'window'), onSelect: () => setWalls(addWallOpening(walls, wall.id, 'window', newLayoutId('window'))) }] : []),
       ],
       ...editGroup([target]),
       zoomItems,
       [{ label: 'Delete wall', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => remove(target) }],
     ]
   }
-  const current = floor.value
-  const index = selectedEdge.value
-  if (current && index !== undefined && target) {
-    const kind = current.edges[index]?.kind
-    const shape = shapeOf(current)
-    return [
-      EDGE_KINDS.map(option => ({
-        label: option.label,
-        type: 'checkbox' as const,
-        checked: kind === option.value,
-        onSelect: () => void updateShape(setEdgeKind(shapeOf(current), index, option.value)),
-      })),
-      kind === 'open'
-        ? []
-        : [
-            { label: kind === 'railing' ? 'Add a gate' : 'Add a door', icon: 'i-lucide-door-open', disabled: !openingFits(shape, index, 'door'), onSelect: () => void updateShape(addOpening(shapeOf(current), index, 'door', newLayoutId('door'))) },
-            ...(kind === 'wall' ? [{ label: 'Add a window', icon: 'i-lucide-app-window', disabled: !openingFits(shape, index, 'window'), onSelect: () => void updateShape(addOpening(shapeOf(current), index, 'window', newLayoutId('window'))) }] : []),
-          ],
-      kind === 'open' ? [] : [{ label: kind === 'railing' ? 'Remove railing' : 'Remove wall', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => remove(target) }],
-    ].filter(group => group.length)
+  if (selectedSlab.value && target) {
+    return [[
+      { label: 'Edit points', icon: 'i-lucide-pen-tool', kbds: ['enter'], onSelect: () => startTool('outline') },
+    ], [{ label: 'Delete floor surface', icon: 'i-lucide-trash-2', color: 'error' as const, kbds: ['delete'], onSelect: () => remove(target) }]]
   }
   return [...(props.editor.clipboard.value
     ? [[{ label: 'Paste here', icon: 'i-lucide-clipboard-paste', kbds: ['meta', 'v'], onSelect: () => pasteCopied(plan?.contextPoint) }]]
@@ -2741,23 +2764,64 @@ const pendingLabel = computed(() => {
       </div>
     </div>
 
-    <InnerWallPanel
+    <WallPanel
       v-else-if="selectedWall && floor"
       :walls="floor.walls"
       :wall="selectedWall"
+      :floor-height="floor.height"
       @change="setWalls"
       @remove="remove(selection!)"
       @close="selection = null; detailsOpen = false"
     />
 
-    <EdgePanel
-      v-else-if="floor && selectedEdge !== undefined"
-      :shape="shapeOf(floor)"
-      :index="selectedEdge"
-      :name="names[selectedEdge] ?? 'Edge'"
-      @change="updateShape"
-      @close="selection = null; detailsOpen = false"
-    />
+    <!-- A floor surface (D282): its area, Edit points, and a real delete (ISS-046). -->
+    <div
+      v-else-if="selectedSlab && floor"
+      class="flex flex-col gap-4"
+      data-testid="selected-slab"
+    >
+      <div class="flex items-center gap-3">
+        <span class="flex size-9 items-center justify-center rounded-md bg-elevated text-muted">
+          <UIcon
+            name="i-lucide-square-dashed"
+            class="size-5"
+          />
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-base font-semibold text-highlighted">
+            {{ selectedSlab.name ?? 'Floor surface' }}
+          </p>
+          <p class="text-xs text-muted tabular-nums">
+            {{ areaM2(selectedSlab.outline) }} m² · {{ selectedSlab.outline.length }} corners
+          </p>
+        </div>
+        <UButton
+          icon="i-lucide-trash-2"
+          color="neutral"
+          variant="ghost"
+          aria-label="Delete floor surface"
+          @click="remove(selection!)"
+        />
+        <UButton
+          icon="i-lucide-x"
+          color="neutral"
+          variant="ghost"
+          aria-label="Close panel"
+          @click="selection = null; detailsOpen = false"
+        />
+      </div>
+      <UButton
+        label="Edit points"
+        icon="i-lucide-pen-tool"
+        color="neutral"
+        variant="outline"
+        class="self-start"
+        @click="startTool('outline')"
+      />
+      <p class="text-xs text-muted">
+        Deleting the surface keeps its walls; delete a wall on its own to remove it.
+      </p>
+    </div>
     <!-- Nothing selected (D277): the floor shown, then Explore. These were the floor bar's menu. -->
     <div
       v-else-if="floor"
@@ -3136,6 +3200,7 @@ const pendingLabel = computed(() => {
                 :frame-offsets="frameOffsets"
                 :group="group"
                 :placing="!!pending"
+                :slab-id="activeSlab?.id ?? null"
                 @open-floor="selectFloor"
                 @place="placePending"
                 @cancel-place="pending = null"
@@ -3147,6 +3212,7 @@ const pendingLabel = computed(() => {
                 @shape-edit="editShape"
                 @remove="remove"
                 @shape="updateShape"
+                @new-slab="addSlab"
                 @add-wall="addWall"
                 @walls="setWalls"
                 @room="applyRoom"
@@ -3154,7 +3220,7 @@ const pendingLabel = computed(() => {
                 @toggle="toggleSelected"
                 @select-many="selectBox"
                 @move-group="moveGroup"
-                @edit-points="startTool('outline')"
+                @edit-points="id => { slabId = id; startTool('outline') }"
                 @edit-length="editLength"
                 @move-frame="moveFrame"
               />
@@ -3201,7 +3267,7 @@ const pendingLabel = computed(() => {
               :max="EDGE_LENGTH_MAX_CM"
               size="sm"
               class="w-28 shadow-md"
-              :aria-label="`${names[lengthEdit.index] ?? 'Edge'} length (cm)`"
+              :aria-label="`${(activeSlab ? edgeNames(activeSlab.outline) : [])[lengthEdit.index] ?? 'Edge'} length (cm)`"
               :ui="{ trailing: 'pointer-events-none text-xs text-muted' }"
               @blur="applyLength()"
               @keydown.esc.stop.prevent="lengthEdit = null"
@@ -3288,58 +3354,6 @@ const pendingLabel = computed(() => {
               <span class="hidden sm:inline">Delete wall</span>
             </UButton>
           </div>
-          <div
-            v-else-if="showQuickBar && mode === 'select' && quickBarStyle && floor && selectedEdge !== undefined"
-            ref="quickBar"
-            role="toolbar"
-            :aria-label="`${names[selectedEdge] ?? 'Edge'} quick actions`"
-            class="absolute flex items-center gap-0.5 rounded-lg border border-default bg-default p-1 shadow-md"
-            :style="quickBarStyle"
-            data-testid="quick-actions"
-          >
-            <UFieldGroup
-              role="group"
-              aria-label="Edge type"
-            >
-              <UButton
-                v-for="kind in EDGE_KINDS"
-                :key="kind.value"
-                :label="kind.label"
-                :color="floor.edges[selectedEdge]?.kind === kind.value ? 'primary' : 'neutral'"
-                :variant="floor.edges[selectedEdge]?.kind === kind.value ? 'soft' : 'ghost'"
-                :aria-pressed="floor.edges[selectedEdge]?.kind === kind.value"
-                @click="updateShape(setEdgeKind(shapeOf(floor), selectedEdge, kind.value))"
-              />
-            </UFieldGroup>
-            <template v-if="floor.edges[selectedEdge]?.kind !== 'open'">
-              <USeparator
-                orientation="vertical"
-                class="h-5"
-              />
-              <UButton
-                icon="i-lucide-door-open"
-                color="neutral"
-                variant="ghost"
-                :aria-label="`Add a ${floor.edges[selectedEdge]?.kind === 'railing' ? 'gate' : 'door'}`"
-                :disabled="!openingFits(shapeOf(floor), selectedEdge, 'door')"
-                @click="updateShape(addOpening(shapeOf(floor), selectedEdge, 'door', newLayoutId('door')))"
-              >
-                <span class="hidden sm:inline">{{ floor.edges[selectedEdge]?.kind === 'railing' ? 'Gate' : 'Door' }}</span>
-              </UButton>
-              <UButton
-                v-if="floor.edges[selectedEdge]?.kind === 'wall'"
-                icon="i-lucide-app-window"
-                color="neutral"
-                variant="ghost"
-                aria-label="Add a window"
-                :disabled="!openingFits(shapeOf(floor), selectedEdge, 'window')"
-                @click="updateShape(addOpening(shapeOf(floor), selectedEdge, 'window', newLayoutId('window')))"
-              >
-                <span class="hidden sm:inline">Window</span>
-              </UButton>
-            </template>
-          </div>
-
           <div class="pointer-events-none absolute inset-x-3 top-3 flex flex-col gap-2">
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div class="flex min-w-0 flex-wrap items-center gap-2">
@@ -3364,7 +3378,7 @@ const pendingLabel = computed(() => {
                 >
                   <span class="rounded-lg border border-default bg-default px-3 py-2 text-sm font-semibold text-highlighted shadow-sm">
                     {{ mode === 'outline' ? 'Edit points' : mode === 'room' ? 'Room' : mode === 'shape' ? 'Shape' : 'Draw wall' }}
-                    <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && floor.outline.length >= 3"> · {{ areaM2(floor.outline) }} m²</template></span>
+                    <span class="font-normal text-muted">· {{ floor.name }} floor<template v-if="mode === 'outline' && activeSlab"> · {{ areaM2(activeSlab.outline) }} m²</template></span>
                   </span>
                   <span class="pointer-events-auto flex items-center gap-1 rounded-lg border border-default bg-default p-1 shadow-sm">
                     <UFieldGroup
@@ -3409,7 +3423,16 @@ const pendingLabel = computed(() => {
                       class="px-1"
                     />
                     <UButton
-                      v-if="floor.outline.length >= 3"
+                      v-if="mode === 'outline' && floorIndex > 0 && !floor.slabs.length && !floor.walls.length"
+                      label="Copy walls from floor below"
+                      icon="i-lucide-copy"
+                      color="neutral"
+                      variant="ghost"
+                      size="sm"
+                      @click="copyWallsFromBelow()"
+                    />
+                    <UButton
+                      v-if="floor.slabs.length"
                       label="Cancel"
                       color="neutral"
                       variant="ghost"
@@ -3419,7 +3442,6 @@ const pendingLabel = computed(() => {
                     <UButton
                       label="Done"
                       size="sm"
-                      :disabled="floor.outline.length < 3"
                       @click="finishTool()"
                     />
                   </span>
@@ -3467,14 +3489,14 @@ const pendingLabel = computed(() => {
             v-if="drawing"
             class="pointer-events-none absolute bottom-28 left-2 flex max-w-60 flex-col gap-1 rounded-lg border border-default bg-default px-3 py-2 text-xs text-toned shadow-sm"
           >
-            <template v-if="mode === 'outline' && floor.outline.length === 0">
+            <template v-if="mode === 'outline' && !floor.slabs.length">
               <span>Click on the grid to add corners.</span>
               <span>Click the first corner, double-click or press Enter to close the shape.</span>
             </template>
             <template v-else-if="mode === 'outline'">
               <span>Drag a corner to move it (Shift: in a straight line, Alt: keep right angles), or drag a side to move it.</span>
               <span>Double-click a side or click its round handle to add a corner. Click a corner, then Delete to remove it.</span>
-              <span>Click an edge to make it a wall, railing or open, or to add doors and windows. Escape or Enter when done.</span>
+              <span>Walls on a corner move with it. Select a wall to change it or add doors and windows. Escape or Enter when done.</span>
             </template>
             <template v-else-if="mode === 'shape'">
               <span>Drag to draw a {{ roundShape ? 'round block' : 'block' }} for anything the library doesn't have: a stage, a planter box, a platform. A click makes one 100 × 100 cm.</span>

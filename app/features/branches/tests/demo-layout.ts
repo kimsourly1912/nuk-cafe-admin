@@ -1,3 +1,4 @@
+import { fromV1 } from '#shared/contracts/shop-layout'
 import type { LayoutTable, ShopLayout } from '#shared/contracts/shop-layout'
 
 /**
@@ -34,7 +35,8 @@ const L_SHAPE = [
 ]
 
 export function demoLayout(): ShopLayout {
-  return {
+  // Written as outlines with edges (before contract v2, D282) and upgraded.
+  return fromV1({
     floors: [
       {
         id: 'ground',
@@ -134,5 +136,5 @@ export function demoLayout(): ShopLayout {
       { tableId: 'demo-t09', floorId: 'rooftop', x: 400, y: 650, rotation: 0, width: 80, depth: 80, lookId: 'round-cafe' },
       { tableId: 'demo-t10', floorId: 'rooftop', x: 720, y: 250, rotation: 0, width: 120, depth: 80, lookId: 'oak-rectangle' },
     ],
-  }
+  })
 }

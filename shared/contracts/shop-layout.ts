@@ -725,14 +725,24 @@ function unique(values: readonly string[]): boolean {
 
 // --- Contract v1 → v2 (D282) ---
 
+/** An outline edge before contract v2: its outer wall (or railing, or nothing), with its doors and windows. */
+export interface EdgeV1 {
+  kind: 'wall' | 'railing' | 'open'
+  openings: Opening[]
+}
+
 /** A floor as saved before contract v2: one outline whose edges are its outer walls. */
-export interface FloorV1 {
-  id: string
-  outline: Point[]
-  edges: { kind: 'wall' | 'railing' | 'open', openings: Opening[] }[]
-  walls: Wall[]
-  items: LayoutItem[]
-  [key: string]: unknown
+export type FloorV1 = Omit<Floor, 'slabs'> & { outline: Point[], edges: EdgeV1[] }
+export type ShopLayoutV1 = Omit<ShopLayout, 'floors'> & { floors: FloorV1[] }
+
+/** A floor written the v1 way (starters, fixtures), in v2. */
+export function floorFromV1(floor: FloorV1): Floor {
+  return upgradeFloor<unknown>(floor) as Floor
+}
+
+/** A layout written the v1 way (starters, fixtures), in v2. */
+export function fromV1(layout: ShopLayoutV1): ShopLayout {
+  return { ...layout, floors: layout.floors.map(floorFromV1) }
 }
 
 /** An outer wall's thickness before v2, and a railing's (it stood 3 cm outside the outline). */
@@ -778,7 +788,7 @@ export function upgradeFloor<T>(floor: T): T {
 /** A whole layout in contract v2 (D282): each floor upgraded. Anything else comes back as it was. */
 export function upgradeLayout<T>(layout: T): T {
   if (!layout || typeof layout !== 'object' || !Array.isArray((layout as { floors?: unknown }).floors)) return layout
-  return { ...layout, floors: (layout as { floors: unknown[] }).floors.map(upgradeFloor) }
+  return { ...layout, floors: (layout as unknown as { floors: unknown[] }).floors.map(upgradeFloor) }
 }
 
 function isFloorV1(floor: unknown): floor is FloorV1 {
@@ -797,4 +807,3 @@ function shortHash(text: string): string {
   }
   return (hash >>> 0).toString(36)
 }
-

@@ -202,7 +202,7 @@ describe('contract v2 (D282): layouts saved before it', () => {
   it('accepts an old save body at the route and upgrades it before checking', () => {
     const parsed = v.safeParse(saveLayoutSchema, { version: 0, layout: { floors: [{ ...v1Ground(), name: 'Ground', height: 300, hasRoof: true }], placements: [], scene: { preset: 'none', entrance: 'street', explore: false } } })
     expect(parsed.issues?.map(issue => issue.message)).toBeUndefined()
-    expect(parsed.output?.layout.floors[0]!.slabs).toHaveLength(1)
+    expect(parsed.success && parsed.output.layout.floors[0]!.slabs).toHaveLength(1)
   })
 
   it('upgrades a history snapshot saved before it', async () => {

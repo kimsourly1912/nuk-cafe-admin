@@ -412,7 +412,6 @@ export function describeIssue(issue: v.BaseIssue<unknown> | undefined, layout: S
   const keys = issue.path?.map(item => item.key) ?? []
   if (keys[0] === 'floors' && typeof keys[1] === 'number') {
     const floor = layout.floors[keys[1]]
-    if (floor && floor.outline.length === 0) return `Draw the ${floor.name} floor's outline first.`
     if (floor) return `${floor.name} floor: ${issue.message}`
   }
   return issue.message

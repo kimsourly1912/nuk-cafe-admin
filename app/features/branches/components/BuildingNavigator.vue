@@ -21,7 +21,7 @@ const emit = defineEmits<{
   selectTable: [tableId: string]
 }>()
 
-const floors = computed(() => props.layout.floors.filter(floor => floor.outline.length >= 3).reverse().map(floor => ({
+const floors = computed(() => props.layout.floors.filter(floor => floor.slabs.length > 0).reverse().map(floor => ({
   ...floor,
   tables: props.layout.placements
     .filter(placement => placement.floorId === floor.id)

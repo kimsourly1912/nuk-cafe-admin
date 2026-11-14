@@ -1,20 +1,20 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import type { InnerWall } from '#shared/contracts/shop-layout'
-import { floorSchema, innerWallLength } from '#shared/contracts/shop-layout'
+import type { Wall } from '#shared/contracts/shop-layout'
+import { floorSchema, wallLength } from '#shared/contracts/shop-layout'
 import { addInnerOpening, innerOpeningFits, moveWall, moveWallEnd, removeInnerOpening, setInnerWallKind, setInnerWallLength, updateInnerOpening } from '../designer/walls'
 
 const SQUARE = [{ x: 0, y: 0 }, { x: 800, y: 0 }, { x: 800, y: 600 }, { x: 0, y: 600 }]
 
 /** Whether these inside walls make a valid floor by the shared contract (what the server checks). */
-function valid(walls: InnerWall[]): string[] {
+function valid(walls: Wall[]): string[] {
   const edges = SQUARE.map(() => ({ kind: 'wall' as const, openings: [] }))
   const result = v.safeParse(floorSchema, { id: 'f', name: 'Ground', height: 300, hasRoof: true, outline: SQUARE, edges, walls, items: [] })
   return (result.issues ?? []).map(issue => issue.message)
 }
 
 /** A kitchen's corner: two walls joined at (400, 300). */
-function corner(): InnerWall[] {
+function corner(): Wall[] {
   return [
     { id: 'a', from: { x: 100, y: 300 }, to: { x: 400, y: 300 } },
     { id: 'b', from: { x: 400, y: 300 }, to: { x: 400, y: 0 } },
@@ -44,9 +44,9 @@ describe('inside walls (D278)', () => {
   })
 
   it('refuses at the contract what the editor never makes: a window in glass, a door past the end', () => {
-    const glass: InnerWall = { id: 'g', from: { x: 0, y: 300 }, to: { x: 300, y: 300 }, kind: 'glass', openings: [{ id: 'w', kind: 'window', offset: 0, width: 100 }] }
+    const glass: Wall = { id: 'g', from: { x: 0, y: 300 }, to: { x: 300, y: 300 }, kind: 'glass', openings: [{ id: 'w', kind: 'window', offset: 0, width: 100 }] }
     expect(valid([glass])).toContain('A window needs a full wall')
-    const long: InnerWall = { id: 'l', from: { x: 0, y: 300 }, to: { x: 300, y: 300 }, openings: [{ id: 'd', kind: 'door', offset: 250, width: 90 }] }
+    const long: Wall = { id: 'l', from: { x: 0, y: 300 }, to: { x: 300, y: 300 }, openings: [{ id: 'd', kind: 'door', offset: 250, width: 90 }] }
     expect(valid([long])).toContain('A door or window does not fit its wall')
   })
 
@@ -55,7 +55,7 @@ describe('inside walls (D278)', () => {
     walls = updateInnerOpening(walls, 'a', 'd1', { offset: 500, width: 100 })
     expect(walls[0]!.openings![0]).toMatchObject({ offset: 200, width: 100 })
     walls = setInnerWallLength(walls, 'a', 150)
-    expect(innerWallLength(walls[0]!)).toBe(150)
+    expect(wallLength(walls[0]!)).toBe(150)
     expect(walls[0]!.openings![0]).toMatchObject({ offset: 50, width: 100 })
     walls = setInnerWallLength(walls, 'a', 30)
     expect(walls[0]!.openings).toBeUndefined()

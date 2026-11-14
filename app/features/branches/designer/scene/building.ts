@@ -1,16 +1,18 @@
 import { BoxGeometry, ExtrudeGeometry, Group, Mesh, Path, PointLight, Shape, Vector2, Vector3 } from 'three'
 import type { BufferGeometry, Material, Object3D } from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import type { Floor, Point } from '#shared/contracts/shop-layout'
-import { edgeLength, innerWallKind, innerWallLength, signedArea } from '#shared/contracts/shop-layout'
-import { DOOR_HEIGHT_CM, floorInteriorPoint, GLASS_THICKNESS_CM, INNER_WALL_THICKNESS_CM, innerWallHeight, outwardNormal, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, WALL_THICKNESS_CM, wallPieces, WINDOW_SILL_CM, WINDOW_TOP_CM } from '../geometry'
+import type { Floor, Opening, Point } from '#shared/contracts/shop-layout'
+import { edgeLength, wallLength } from '#shared/contracts/shop-layout'
+import { DOOR_HEIGHT_CM, floorInteriorPoint, mainSlab, outwardNormal, pointInPolygon, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, WALL_THICKNESS_CM, wallFacesOut, wallHeight, wallNormal, wallOutward, wallPieces, wallThickness, WINDOW_SILL_CM, WINDOW_TOP_CM } from '../geometry'
+import { drawWalls } from '../walls'
 import type { BuildContext } from './furniture'
 import { cm, yRotation } from './units'
 
 /**
- * A floor of the building from its outline (D273): the slab (with the stairwell from the floor below
- * cut out), walls split around doors and windows, railings, inside walls, the roof and a warm light.
- * Walls stand outside the outline, so the room keeps the size drawn on the plan.
+ * A floor of the building (D273, D282): each floor surface's slab (with the stairwell from the
+ * floor below cut out), every wall split around its doors and windows (beside its line or on it,
+ * as thick and tall as its own or its kind's), railings, the roof over the surfaces and a warm light.
+ * Outer walls stand outside their surface, so the room keeps the size drawn on the plan.
  */
 
 export { SLAB_THICKNESS_CM }
@@ -47,83 +49,67 @@ export function buildFloor(context: BuildContext, options: FloorBuildOptions): F
   const lights: PointLight[] = []
   const surfaces = context.materials
 
-  const stairwells = (floorBelow?.items ?? [])
-    .filter(item => item.kind === 'stairs')
-    .map(item => rectCorners(item, item.width + 10, item.depth, item.rotation))
+  const stairs = (floorBelow?.items ?? []).filter(item => item.kind === 'stairs')
   const floorMaterial = surfaces.surface(floor.hasRoof ? 'floor-wood' : 'floor-tiles')
-  const slab = new Mesh(slabGeometry(context, floor.outline, SLAB_THICKNESS_CM, stairwells), [floorMaterial, surfaces.surface('slab')])
-  slab.position.y = -cm(SLAB_THICKNESS_CM)
-  slab.receiveShadow = true
-  slab.castShadow = true
-  slab.userData.floorId = floor.id
-  group.add(slab)
+  for (const surface of floor.slabs) {
+    const stairwells = stairs.filter(item => pointInPolygon(item, surface.outline)).map(item => rectCorners(item, item.width + 10, item.depth, item.rotation))
+    const slab = new Mesh(slabGeometry(context, surface.outline, SLAB_THICKNESS_CM, stairwells), [floorMaterial, surfaces.surface('slab')])
+    slab.position.y = -cm(SLAB_THICKNESS_CM)
+    slab.receiveShadow = true
+    slab.castShadow = true
+    slab.userData.floorId = floor.id
+    group.add(slab)
+  }
 
-  const area = signedArea(floor.outline)
-  floor.edges.forEach((edge, index) => {
-    if (edge.kind === 'open') return
-    const from = floor.outline[index]!
-    const to = floor.outline[(index + 1) % floor.outline.length]!
-    const length = edgeLength(floor.outline, index)
-    if (length < 1) return
-    const normal = outwardNormal(floor.outline, index)
-    const angle = (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI
-    const edgeGroup = new Group()
-    edgeGroup.rotation.y = yRotation(angle)
-    if (edge.kind === 'wall') {
-      const startConvex = isConvex(floor.outline, index, area)
-      const endConvex = isConvex(floor.outline, (index + 1) % floor.outline.length, area)
-      const offset = WALL_THICKNESS_CM / 2
-      edgeGroup.position.set(cm((from.x + to.x) / 2 + normal.x * offset), 0, cm((from.y + to.y) / 2 + normal.y * offset))
-      wallEdge(context, edgeGroup, { length, height: floor.height, openings: edge.openings, startExtra: startConvex ? WALL_THICKNESS_CM : 0, endExtra: endConvex ? WALL_THICKNESS_CM : 0 })
-    }
-    else {
-      edgeGroup.position.set(cm((from.x + to.x) / 2 + normal.x * 3), 0, cm((from.y + to.y) / 2 + normal.y * 3))
-      railingEdge(context, edgeGroup, length, edge.openings)
-    }
-    group.add(edgeGroup)
-    walls.push({ object: edgeGroup, normal: new Vector3(normal.x, 0, normal.y), center: new Vector3(cm((from.x + to.x) / 2), 0, cm((from.y + to.y) / 2)) })
-  })
-
-  // Inside walls (D278): a wall, half wall or glass with its doors and windows, or a railing.
-  for (const wall of floor.walls) {
-    const length = innerWallLength(wall)
+  // Every wall (D278, D282): a wall, half wall or glass with its doors and windows, or a railing.
+  for (const drawing of drawWalls(floor.walls)) {
+    const { wall, kind, near, far, reach } = drawing
+    const length = wallLength(wall)
     if (length < 1) continue
-    const kind = innerWallKind(wall)
-    const openings = wall.openings ?? []
+    const normal = wallNormal(wall)
+    const middle = (near + far) / 2
     const angle = (Math.atan2(wall.to.y - wall.from.y, wall.to.x - wall.from.x) * 180) / Math.PI
     const wallGroup = new Group()
     wallGroup.rotation.y = yRotation(angle)
-    wallGroup.position.set(cm((wall.from.x + wall.to.x) / 2), 0, cm((wall.from.y + wall.to.y) / 2))
-    if (kind === 'railing') railingEdge(context, wallGroup, length, openings)
+    // On the band's middle; `wallEdge` runs past either end as far as a mitred corner reaches.
+    const center = { x: (wall.from.x + wall.to.x) / 2 + normal.x * middle, y: (wall.from.y + wall.to.y) / 2 + normal.y * middle }
+    wallGroup.position.set(cm(center.x), 0, cm(center.y))
+    const openings = wall.openings ?? []
+    const height = wallHeight(wall, floor.height)
+    if (kind === 'railing') railingEdge(context, wallGroup, length, openings, height)
     else {
-      const thickness = kind === 'glass' ? GLASS_THICKNESS_CM : INNER_WALL_THICKNESS_CM
-      // Square ends: the wall runs half its thickness past each end, so two walls meeting close the corner.
-      const extra = kind === 'glass' ? 0 : thickness / 2
-      wallEdge(context, wallGroup, { length, height: innerWallHeight(kind, floor.height), openings, startExtra: extra, endExtra: extra, thickness, surface: kind === 'glass' ? 'glass' : 'plaster', leaves: kind === 'wall' })
+      const thickness = wallThickness(wall)
+      wallEdge(context, wallGroup, { length, height, openings, startExtra: reach.start, endExtra: reach.end, thickness, surface: kind === 'glass' ? 'glass' : 'plaster', leaves: kind === 'wall' })
       if (kind === 'glass') {
         // A frame along the top and at each end holds the glass.
-        addBox(context, wallGroup, length, 4, 6, surfaces.surface('frame'), { x: 0, y: floor.height - 2, z: 0 })
-        for (const end of [-length / 2 + 2, length / 2 - 2]) addBox(context, wallGroup, 4, floor.height, 6, surfaces.surface('frame'), { x: end, y: floor.height / 2, z: 0 })
+        addBox(context, wallGroup, length, 4, 6, surfaces.surface('frame'), { x: 0, y: height - 2, z: 0 })
+        for (const end of [-length / 2 + 2, length / 2 - 2]) addBox(context, wallGroup, 4, height, 6, surfaces.surface('frame'), { x: end, y: height / 2, z: 0 })
       }
     }
     group.add(wallGroup)
+    // An outer wall steps aside in the cutaway when it faces the camera.
+    if (wallFacesOut(floor, wall)) {
+      const out = wallOutward(wall, floor.slabs)
+      walls.push({ object: wallGroup, normal: new Vector3(out.x, 0, out.y), center: new Vector3(cm((wall.from.x + wall.to.x) / 2), 0, cm((wall.from.y + wall.to.y) / 2)) })
+    }
   }
 
-  if (floor.hasRoof) {
+  if (floor.hasRoof && floor.slabs.length) {
     const roof = new Group()
-    const roofSlab = new Mesh(slabGeometry(context, floor.outline, SLAB_THICKNESS_CM, []), [surfaces.surface('roof'), surfaces.surface('plaster-outside')])
-    // A centimetre below the floor above's slab, so the two never fight where they overlap.
-    roofSlab.position.y = cm(floor.height - SLAB_THICKNESS_CM - 1)
-    roofSlab.castShadow = true
-    roofSlab.receiveShadow = true
-    roof.add(roofSlab)
-    if (topmost) {
-      floor.outline.forEach((from, index) => {
-        const to = floor.outline[(index + 1) % floor.outline.length]!
-        const normal = outwardNormal(floor.outline, index)
-        const length = edgeLength(floor.outline, index)
+    for (const surface of floor.slabs) {
+      const roofSlab = new Mesh(slabGeometry(context, surface.outline, SLAB_THICKNESS_CM, []), [surfaces.surface('roof'), surfaces.surface('plaster-outside')])
+      // A centimetre below the floor above's slab, so the two never fight where they overlap.
+      roofSlab.position.y = cm(floor.height - SLAB_THICKNESS_CM - 1)
+      roofSlab.castShadow = true
+      roofSlab.receiveShadow = true
+      roof.add(roofSlab)
+      if (!topmost) continue
+      surface.outline.forEach((from, index) => {
+        const to = surface.outline[(index + 1) % surface.outline.length]!
+        const out = outwardNormal(surface.outline, index)
+        const length = edgeLength(surface.outline, index)
         const parapet = new Mesh(blockGeometry(context, length + WALL_THICKNESS_CM * 2, 35, WALL_THICKNESS_CM), surfaces.surface('plaster-outside'))
-        parapet.position.set(cm((from.x + to.x) / 2 + (normal.x * WALL_THICKNESS_CM) / 2), cm(floor.height + 17.5), cm((from.y + to.y) / 2 + (normal.y * WALL_THICKNESS_CM) / 2))
+        parapet.position.set(cm((from.x + to.x) / 2 + (out.x * WALL_THICKNESS_CM) / 2), cm(floor.height + 17.5), cm((from.y + to.y) / 2 + (out.y * WALL_THICKNESS_CM) / 2))
         parapet.rotation.y = yRotation((Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI)
         parapet.castShadow = true
         roof.add(parapet)
@@ -133,7 +119,8 @@ export function buildFloor(context: BuildContext, options: FloorBuildOptions): F
     group.add(roof)
   }
 
-  const middle = floorInteriorPoint(floor.outline)
+  const main = mainSlab(floor)
+  const middle = main && floorInteriorPoint(main.outline)
   if (middle) {
     if (floor.hasRoof) {
       const lamp = new Mesh(lampShadeGeometry(context), surfaces.surface('lamp'))
@@ -147,15 +134,6 @@ export function buildFloor(context: BuildContext, options: FloorBuildOptions): F
   }
 
   return { group, walls, roofs, lights }
-}
-
-/** Corner `index` points out of the floor (an L's outer corners), so the walls meeting there need filling. */
-function isConvex(outline: readonly Point[], index: number, area: number): boolean {
-  const previous = outline[(index - 1 + outline.length) % outline.length]!
-  const corner = outline[index]!
-  const next = outline[(index + 1) % outline.length]!
-  const cross = (corner.x - previous.x) * (next.y - corner.y) - (corner.y - previous.y) * (next.x - corner.x)
-  return Math.sign(cross) === Math.sign(area)
 }
 
 function slabGeometry(context: BuildContext, outline: readonly Point[], thickness: number, holes: Point[][]): BufferGeometry {
@@ -195,10 +173,10 @@ function lampShadeGeometry(context: BuildContext): BufferGeometry {
 interface WallEdgeOptions {
   length: number
   height: number
-  openings: Floor['edges'][number]['openings']
+  openings: readonly Opening[]
   startExtra: number
   endExtra: number
-  /** An inside wall's own (D278); the outline's walls are `WALL_THICKNESS_CM`. */
+  /** The wall's own or its kind's (`wallThickness`). */
   thickness?: number
   surface?: 'plaster' | 'glass'
   /** Door leaves in its doorways (a half wall's or glass's doorway is an open gap). */
@@ -258,7 +236,8 @@ function wallEdge(context: BuildContext, group: Group, options: WallEdgeOptions)
 }
 
 /** Posts, a top rail and thin balusters, merged per edge. */
-function railingEdge(context: BuildContext, group: Group, length: number, openings: Floor['edges'][number]['openings']) {
+/** `top`: the rail's height (a railing's own, D282, or `RAILING_HEIGHT_CM`). */
+function railingEdge(context: BuildContext, group: Group, length: number, openings: readonly Opening[], top = RAILING_HEIGHT_CM) {
   const metal = context.materials.surface('frame')
   const parts: BufferGeometry[] = []
   const add = (width: number, height: number, depth: number, x: number, y: number) => {
@@ -272,16 +251,16 @@ function railingEdge(context: BuildContext, group: Group, length: number, openin
     const start = from - length / 2
     const middle = start + width / 2
     const postWidth = Math.min(5, width)
-    add(width + (openings.length ? 0 : 4), 5, 6, middle, RAILING_HEIGHT_CM - 2.5)
+    add(width + (openings.length ? 0 : 4), 5, 6, middle, top - 2.5)
     add(width, 3, 3, middle, 12)
     const posts = Math.max(1, Math.ceil(width / 150))
     for (let post = 0; post <= posts; post++) {
       const x = start + postWidth / 2 + post * (width - postWidth) / posts
-      add(postWidth, RAILING_HEIGHT_CM, 5, x, RAILING_HEIGHT_CM / 2)
+      add(postWidth, top, 5, x, top / 2)
     }
     const balusters = Math.floor(width / 12)
     for (let baluster = 1; baluster < balusters; baluster++) {
-      add(1.4, RAILING_HEIGHT_CM - 18, 1.4, start + baluster * width / balusters, (RAILING_HEIGHT_CM - 18) / 2 + 13.5)
+      add(1.4, top - 18, 1.4, start + baluster * width / balusters, (top - 18) / 2 + 13.5)
     }
   }
   let cursor = 0

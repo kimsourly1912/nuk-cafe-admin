@@ -1,7 +1,7 @@
 import type { ItemKind, ItemLook, LayoutItem, LayoutTable, Point, ShopLayout, TableLook } from '#shared/contracts/shop-layout'
-import { innerWallKind, innerWallLength } from '#shared/contracts/shop-layout'
+import { wallLength } from '#shared/contracts/shop-layout'
 import type { SurroundingsPlan } from '~/features/branches'
-import { BUILT_IN_LOOKS, chairPoses, DOOR_HEIGHT_CM, findLook, innerWallHeight, ITEM_SPECS, outwardNormal, pieceHeight, placementExtent, planLane, RAILING_HEIGHT_CM, rectCorners, SLAB_THICKNESS_CM, toPlan } from '~/features/branches'
+import { BUILT_IN_LOOKS, chairPoses, DOOR_HEIGHT_CM, findLook, ITEM_SPECS, pieceHeight, placementExtent, planLane, pointInPolygon, rectCorners, SLAB_THICKNESS_CM, toPlan, wallFacesOut, wallHeight, wallOutward } from '~/features/branches'
 import type { GatewaySide } from './network'
 import type { MotoStreet } from './moto'
 import type { RideCourse } from './ride'
@@ -157,31 +157,37 @@ export function buildDistrict(input: DistrictInput): District {
   surfaces.push({ shape: 'area', outline: base, holes: [], y: street })
   laneObstacles(plan, span, street, walls, solids)
 
-  const drawn = layout.floors.map((floor, index) => ({ floor, index })).filter(({ floor }) => floor.outline.length >= 3)
+  const drawn = layout.floors.map((floor, index) => ({ floor, index })).filter(({ floor }) => floor.slabs.length > 0)
   let elevation = 0
   layout.floors.forEach((floor, index) => {
     const y = elevation / 100
     elevation += floor.height
-    if (floor.outline.length < 3) return
-    const outline = floor.outline.map(m)
+    if (!floor.slabs.length) return
     const below = layout.floors[index - 1]
-    const holes = (below?.items ?? []).filter(item => item.kind === 'stairs').map(item => rectCorners(item, item.width + 10, item.depth, item.rotation).map(m))
-    surfaces.push({ shape: 'area', outline, holes, y })
     const above = drawn.find(entry => entry.index > index)
-    floors.push({ id: floor.id, name: floor.name, outline, y, ceiling: above || floor.hasRoof ? y + floor.height / 100 : null })
+    // Each floor surface (D282) is a walkable area of the floor.
+    for (const slab of floor.slabs) {
+      const outline = slab.outline.map(m)
+      const holes = (below?.items ?? []).filter(item => item.kind === 'stairs' && pointInPolygon(item, slab.outline)).map(item => rectCorners(item, item.width + 10, item.depth, item.rotation).map(m))
+      surfaces.push({ shape: 'area', outline, holes, y })
+      floors.push({ id: floor.id, name: floor.name, outline, y, ceiling: above || floor.hasRoof ? y + floor.height / 100 : null })
+    }
     const ground = drawn[0]?.index === index
 
-    floor.outline.forEach((corner, edgeIndex) => {
-      const next = floor.outline[(edgeIndex + 1) % floor.outline.length]!
-      const edge = floor.edges[edgeIndex] ?? { kind: 'wall' as const, openings: [] }
-      if (edge.kind === 'open') return
-      const top = y + (edge.kind === 'railing' ? RAILING_HEIGHT_CM : floor.height) / 100
-      const length = Math.hypot(next.x - corner.x, next.y - corner.y)
-      const along = (offset: number): Point => ({ x: corner.x + ((next.x - corner.x) * offset) / length, y: corner.y + ((next.y - corner.y) * offset) / length })
+    // Every wall (D282) along its line, as tall as its own or its kind's. A door in an outer wall
+    // has a leaf to swing (and on the ground floor leads in from the street); inside, it is a gap.
+    for (const wall of floor.walls) {
+      const length = wallLength(wall)
+      if (length < 1) continue
+      const top = y + wallHeight(wall, floor.height) / 100
+      const outer = wallFacesOut(floor, wall)
+      const along = (offset: number): Point => ({ x: wall.from.x + ((wall.to.x - wall.from.x) * offset) / length, y: wall.from.y + ((wall.to.y - wall.from.y) * offset) / length })
       let cursor = 0
-      for (const opening of [...edge.openings].sort((left, right) => left.offset - right.offset)) {
+      for (const opening of [...(wall.openings ?? [])].sort((left, right) => left.offset - right.offset)) {
         if (opening.kind !== 'door') continue
         if (opening.offset > cursor) walls.push({ a: m(along(cursor)), b: m(along(opening.offset)), bottom: y, top })
+        cursor = opening.offset + opening.width
+        if (!outer) continue
         const a = m(along(opening.offset))
         const b = m(along(opening.offset + opening.width))
         const doorTop = y + Math.min(DOOR_HEIGHT_CM, floor.height) / 100
@@ -189,24 +195,9 @@ export function buildDistrict(input: DistrictInput): District {
         // Above the door: the camera meets it, a body passes under it.
         if (top > doorTop) walls.push({ a, b, bottom: doorTop, top })
         if (ground) {
-          const normal = outwardNormal(floor.outline, edgeIndex)
-          doors.push({ id: opening.id, a, b, mid: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }, out: { x: normal.x, z: normal.y }, y })
+          const out = wallOutward(wall, floor.slabs)
+          doors.push({ id: opening.id, a, b, mid: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 }, out: { x: out.x, z: out.y }, y })
         }
-        cursor = opening.offset + opening.width
-      }
-      if (cursor < length) walls.push({ a: m(along(cursor)), b: m(next), bottom: y, top })
-    })
-    // Inside walls (D278): as tall as their kind, open where a door is (no leaf to swing indoors).
-    for (const wall of floor.walls) {
-      const length = innerWallLength(wall)
-      if (length < 1) continue
-      const top = y + innerWallHeight(innerWallKind(wall), floor.height) / 100
-      const along = (offset: number): Point => ({ x: wall.from.x + ((wall.to.x - wall.from.x) * offset) / length, y: wall.from.y + ((wall.to.y - wall.from.y) * offset) / length })
-      let cursor = 0
-      for (const opening of [...(wall.openings ?? [])].sort((left, right) => left.offset - right.offset)) {
-        if (opening.kind !== 'door') continue
-        if (opening.offset > cursor) walls.push({ a: m(along(cursor)), b: m(along(opening.offset)), bottom: y, top })
-        cursor = opening.offset + opening.width
       }
       if (cursor < length) walls.push({ a: m(along(cursor)), b: m(wall.to), bottom: y, top })
     }
