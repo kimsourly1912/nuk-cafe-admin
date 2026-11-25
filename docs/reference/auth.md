@@ -143,6 +143,7 @@ definePageMeta({ public: true, layout: 'auth' })
 - On the first navigation, the middleware calls `fetchSession()` once.
 - When any request answers 401 or 403 `NOT_ADMIN`, `apiFetch` clears the user and `plugins/api.ts` redirects to `/admin/login?redirect=…`. No retry. (Removing someone's admin role also deletes their sessions, so they usually get a 401.)
 - Session-expiry errors are never toasted ([`isSilentError`](./errors.md#issilenterror)).
+- **How long (D243, D286):** a customer's session lasts 90 days, renewed while used; a workspace's a day from sign-in, or 30 days for an owner who ticked **Keep me signed in on this device** on the admin's sign-in page. The page asks for it with `useKeepSignedIn()` (`app/features/auth/composables/useKeepSignedIn.ts`, `POST /api/me/keep-signed-in`) after a sign-in succeeded, on the password, two-step code and Google paths alike; a refusal is the toast "You're signed in for today only", and the sign-in still stands. Rules: [security → Sessions](../server/security.md#sessions).
 
 ## Test accounts (local dev)
 

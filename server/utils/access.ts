@@ -58,15 +58,16 @@ async function sessionOf(event: H3Event): Promise<{ user: SessionUser | null, se
 
 /**
  * The session of a workspace request (a cafe's admin and counter, the platform console, and their
- * `/me` checks): at most a day from sign-in (D243); older, it's deleted and the request is 401
- * `SESSION_EXPIRED`. Customer routes keep Better Auth's 7 days.
+ * `/me` checks): at most a day from sign-in (D243), 30 days for an owner who chose Keep me signed in
+ * (D286); older, it's deleted and the request is 401 `SESSION_EXPIRED`. Customer routes keep Better
+ * Auth's 90 days.
  */
-export async function workspaceSession(event: H3Event): Promise<{ user: SessionUser | null, sessionId: string | undefined }> {
+export async function workspaceSession(event: H3Event): Promise<{ user: SessionUser | null, sessionId: string | undefined, stamp: SessionStamp | undefined }> {
   const session = await getUserSession(event)
   const user = (session?.user as SessionUser | undefined) ?? null
   const stamp = session?.session as SessionStamp | undefined
   await requireWorkspaceSession(useDb(), user, stamp)
-  return { user, sessionId: stamp?.id }
+  return { user, sessionId: stamp?.id, stamp }
 }
 
 const isForbidden = (error: unknown) => (error as { statusCode?: number, data?: { code?: string } }).statusCode === 403 && (error as { data?: { code?: string } }).data?.code === 'FORBIDDEN'

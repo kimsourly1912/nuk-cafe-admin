@@ -26,10 +26,20 @@ export const IdentityErrorCodes = {
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   /** A dangerous change (D246) needs this session's password confirmed in the last 15 minutes. */
   CONFIRMATION_REQUIRED: 'CONFIRMATION_REQUIRED',
+  /** Keep me signed in (D286) asked for more than 5 minutes after sign-in. */
+  KEEP_SIGNED_IN_TOO_LATE: 'KEEP_SIGNED_IN_TOO_LATE',
+  /** Keep me signed in (D286) by an account that owns no cafe, or a super admin. */
+  KEEP_SIGNED_IN_NOT_ALLOWED: 'KEEP_SIGNED_IN_NOT_ALLOWED',
 } as const
 
 export const sessionExpired = () =>
   apiError(401, IdentityErrorCodes.SESSION_EXPIRED, 'Your sign-in has ended. Sign in again.')
+
+export const keepSignedInTooLate = () =>
+  apiError(403, IdentityErrorCodes.KEEP_SIGNED_IN_TOO_LATE, 'Keep me signed in is chosen when you sign in. This sign-in lasts a day.')
+
+export const keepSignedInNotAllowed = () =>
+  apiError(403, IdentityErrorCodes.KEEP_SIGNED_IN_NOT_ALLOWED, 'Only a cafe\'s owners can stay signed in. This sign-in lasts a day.')
 
 /** The app answers it with "Confirm it's you" and sends the same request again (D246). */
 export const confirmationRequired = () =>

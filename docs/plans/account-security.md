@@ -25,7 +25,7 @@ Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 don
 ## 3. The owner's answers (2026-10-30: every recommendation)
 
 - **Q1 Two-step sign-in for owners and staff:** available to every owner and staff member (self-service). Owners first optional, then **required for owners** after a short grace period (a later step; the period is set then). **Never required for counter staff** (it would slow the counter).
-- **Q2 Session length:** customers keep **7 days** (renewed while used). Owners, staff and super admins: **1 day** absolute, so a tablet or phone left signed in is signed out by the next day.
+- **Q2 Session length:** customers keep **7 days** (renewed while used). Owners, staff and super admins: **1 day** absolute, so a tablet or phone left signed in is signed out by the next day. **Revised 2026-11-25 (D286):** customers **90 days** renewed while used (they were asked to sign in again after a week away); an owner may tick **Keep me signed in on this device** at the admin's sign-in for **30 days** from sign-in; counter staff, managers and super admins keep 1 day.
 - **Q3 Re-confirm (password or code, valid about 15 minutes) before:** changing payment receiving settings (KHQR settings and the Bakong token); giving someone admin (owner) access; adding, removing or transferring owners (console).
 - **Q4 PIN mode for the counter:** not now. Instead a **Switch person** action on the counter. Revisit PINs if cashiers find switching slow.
 

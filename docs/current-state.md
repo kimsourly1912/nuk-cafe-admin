@@ -6,6 +6,8 @@ Snapshot reviewed against main `ff2ca27` and GitHub's PR list, 2026-11-06. Read 
 
 - **Server P2 reliability fixes (D267), PR #268:** B3–B7 payment/QR guards, consistent order/report reads, atomic confirmation attempts and promotion-scoped retries. Updated against main `ff2ca27`; preserves the customer-order index and KHQR recovery from merged PR #267 (D265/D266). Original head CI passed all six browser shards; the integrated revision must pass fresh PR checks before merging. [Progress](progress.md#server-p2-reliability-fixes-d267-2026-11-06).
 
+- **Session lengths (D286), branch `ccr-7be58e3e-cmcyfi`:** customers 90 days renewed while used; Keep me signed in on the admin's sign-in (owners, 30 days from sign-in). Migration `0067`. Owner check on staging: tick it, come back after a day. [Progress](progress.md#session-lengths-customers-90-days-keep-me-signed-in-for-owners-d286-2026-11-25).
+
 ## Waiting on the owner
 
 - **Backups are not proven (highest risk).** PR #253 (export polling contract) merged 2026-11-03; no production run, real encrypted R2 copy, full decryption or isolated D1 restore has been verified since. Do not deploy, trigger or restore without owner approval. Runbook and evidence: [progress](progress.md#d1-backup-export-contract-repair-pr-253-2026-11-03), [operations](server/operations.md).

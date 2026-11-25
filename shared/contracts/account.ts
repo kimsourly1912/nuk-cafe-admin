@@ -66,6 +66,11 @@ export interface IdentityConfirmed {
   confirmedUntil: string
 }
 
+/** `POST /api/me/keep-signed-in` (D286): until when this session lasts in the workspaces. */
+export interface SessionKept {
+  keptUntil: string
+}
+
 /**
  * `GET /api/me/sessions` (D243): where the signed-in account is signed in, newest first, for Your
  * devices on the account security page. No tokens: signing the others out is Better Auth's
