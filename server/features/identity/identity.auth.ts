@@ -128,12 +128,18 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
     },
     trustedOrigins: siteUrl ? [new URL(siteUrl).origin] : [],
     session: {
-      // 7 days, extended once a day while used (D45): a customer's. A workspace (admin, counter,
-      // console) takes a session for a day from sign-in only, checked on its requests (D243,
+      // 90 days, extended once a day while used (D286): a customer stays signed in while they keep
+      // coming back, and the idle-guest cleanup ends a guest's at the same 90 days (D236). A
+      // workspace (admin, counter, console) takes a session for a day from sign-in, or 30 days for
+      // an owner who chose Keep me signed in, checked on its requests (D243, D286,
       // `requireWorkspaceSession`): Better Auth's own renewal can't keep a shorter absolute limit.
-      expiresIn: 7 * DAY,
+      expiresIn: 90 * DAY,
       updateAge: DAY,
       additionalFields: {
+        // Keep me signed in (D286): set by `POST /api/me/keep-signed-in` only, right after sign-in.
+        // An owner's workspace session then lasts 30 days from sign-in instead of one. Never read by
+        // the browser; only identity writes it.
+        keepSignedIn: { type: 'boolean', required: false, defaultValue: false, input: false, returned: false },
         // When this session last confirmed its password before a dangerous action (D246,
         // `confirmation.service.ts`): per session, so it ends with it at sign-out. Never read by
         // the browser; only identity writes it.
@@ -267,7 +273,8 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       haveIBeenPwned({ enabled: checkBreachedPasswords }),
       // Two-step sign-in (P1b, D188): an authenticator app's code (TOTP) or a backup code, after the
       // password or Google. Required for super admins (\`authorizePlatform\`); any account that turns it on is
-      // asked for a code at every sign-in. No "trust this device": sessions already last 7 days.
+      // asked for a code at every sign-in. No "trust this device" for the code: a sign-in lasts as
+      // long as its session (90 days, or an owner's Keep me signed in, D286).
       googleTwoFactor(),
       // Guests (D156): Place order without an account signs the browser in as a guest, a user with
       // no email or password. Orders keep their owner, so "only your own orders" holds as before.

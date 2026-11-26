@@ -10,7 +10,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | API/server architecture and integrity | D39–D45, D52, D71, D116, D194, D200; version, idempotency, guard, audit, repository, shared owner conditions, token queues, connect codes, joined snapshots and JSON-bound sets, archive and permanent delete |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256, D263, D264, D268, D269, D270, D271, D273, D274, D278, D279, D280, D281, D282, D283, D284, D285; counter board layout; motion, animation, transitions, easing curves; shop designer, floor plan, 3D view, scenes, surroundings |
-| Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248, D272; organization, tenant, branch, platform console, Better Auth endpoint allowlist |
+| Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248, D272, D286; organization, tenant, branch, platform console, Better Auth endpoint allowlist |
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250, D257, D265, D266; KHQR recovery, review cases, customer order index |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109, D254 |
@@ -332,3 +332,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D283](decisions.md#d283-studio-doors-windows-and-pieces-built-as-wanted-2026-11-14) | Opening `height`, window `sill`, door `swing`/`hinge`/`leaf: false` (`openingSpan`); item `z` above its floor (not stairs or figures); Explore swings leaves by hinge and swing |
 | [D284](decisions.md#d284-studio-snap-step-polygon-shapes-and-saved-groups-2026-11-14) | G cycles the snap step 1/5/10/25 cm; `block-poly` shapes with `points` in thousandths of their size; cafe-wide saved groups (`layout_groups`, migration 0066) placed as copies, no tables |
 | [D285](decisions.md#d285-studio-free-colours-wall-and-floor-finishes-door-and-window-styles-2026-11-14) | A finish is a palette key or `#rrggbb`, drawn with its slot's material; wall colour, floor surface `floor` and colour; door styles panel/glazed/louvred, window styles panes/single/shutters, with a colour |
+| [D286](decisions.md#d286-customers-stay-signed-in-for-90-days-owners-may-keep-a-workspace-sign-in-for-30-2026-11-25) | Customers 90 days renewed while used; Keep me signed in on the admin's sign-in: an owner's workspace session 30 days from sign-in (within 5 minutes of sign-in, owners only, never super admins); others keep a day, 2026-11-25 |

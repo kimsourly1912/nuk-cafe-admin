@@ -2,6 +2,7 @@
 import type { FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
 import { loginRedirectTarget, useAuth } from '../composables/useAuth'
+import { useKeepSignedIn } from '../composables/useKeepSignedIn'
 
 const schema = v.object({
   email: v.pipe(v.string(), v.trim(), v.minLength(1, 'Email is required'), v.email('Enter an email address')),
@@ -15,6 +16,12 @@ const assertActive = useAuthCompletion()
 const identity = useSessionIdentity()
 // Hidden by default: staff sign in at the counter, where customers can see the screen.
 const showPassword = ref(false)
+/**
+ * Keep me signed in on this device (D286): off by default, and never remembered. Kept through the
+ * two-step code and Google, and asked for once the sign-in succeeded (`enter`).
+ */
+const keepSignedIn = ref(false)
+const keep = useKeepSignedIn()
 const error = ref<string>()
 /** After a password that needs a code (two-step sign-in, D188): the code step replaces the form. */
 const codeStep = ref(false)
@@ -35,6 +42,18 @@ watch(admitted, async (allowed) => {
   if (allowed && !loading.value) await navigateTo(loginRedirectTarget(route.query.redirect, slug.value), { replace: true })
 })
 
+/**
+ * Signed in: Keep me signed in if ticked (a refusal is a toast, the sign-in still stands), then on
+ * to the admin.
+ */
+async function enter() {
+  if (keepSignedIn.value) {
+    await keep.execute(undefined)
+    assertActive()
+  }
+  await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+}
+
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
 const form = useTemplateRef('form')
@@ -53,7 +72,7 @@ async function onGoogleSignIn() {
       state.password = ''
       return
     }
-    await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+    await enter()
   }
   catch (e) {
     if (e instanceof WorkspaceRefusedError) await checkSession()
@@ -64,6 +83,7 @@ async function onGoogleSignIn() {
       state.email = ''
       state.password = ''
       showPassword.value = false
+      keepSignedIn.value = false
     }
     loading.value = false
   }
@@ -81,7 +101,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       state.password = ''
       return
     }
-    await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+    await enter()
   }
   catch (e) {
     await showError(e)
@@ -114,7 +134,7 @@ async function onRetry() {
   try {
     await finishLogin()
     assertActive()
-    await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+    await enter()
   }
   catch (e) {
     if (e instanceof WorkspaceRefusedError) {
@@ -135,6 +155,7 @@ async function onRetry() {
 function onSignedOut() {
   refused.value = null
   state.email = ''
+  keepSignedIn.value = false
 }
 
 /** The code was right (D188): finish the sign-in as after a password alone. */
@@ -143,7 +164,7 @@ async function onCodeVerified() {
   try {
     await finishLogin()
     assertActive()
-    await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+    await enter()
   }
   catch (e) {
     codeStep.value = false
@@ -303,6 +324,13 @@ const aside = { title: 'Welcome back', text: 'Sign in to manage your cafe.' }
           </template>
         </UInput>
       </UFormField>
+
+      <UCheckbox
+        v-model="keepSignedIn"
+        label="Keep me signed in on this device"
+        description="For 30 days, on your own phone or computer. Leave it off on a shared device, such as the counter tablet."
+        :ui="{ description: 'text-toned' }"
+      />
     </UForm>
 
     <template #footer>

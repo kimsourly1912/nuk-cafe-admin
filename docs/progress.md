@@ -3,6 +3,14 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Session lengths: customers 90 days, Keep me signed in for owners (D286, 2026-11-25)
+
+Branch `ccr-7be58e3e-cmcyfi`. The owner asked why people sign in again and again, whether refresh tokens are handled (no: Better Auth renews its database session on the server, nothing to refresh) and for the recommended fix.
+
+- **Status:** built, waiting for review. Migration `0067_session_keep_signed_in` (expand only) runs before the Worker as usual. Owner check on staging: tick Keep me signed in at the admin, come back after more than a day.
+- **Built:** customer sessions 90 days renewed daily while used; Keep me signed in on this device at the admin's sign-in (password, two-step code, Google), `POST /api/me/keep-signed-in` within 5 minutes of sign-in, owners only, never super admins, audited; a kept session lasts 30 days from sign-in in the workspaces; everyone else keeps a day ([D286](decisions.md#d286-customers-stay-signed-in-for-90-days-owners-may-keep-a-workspace-sign-in-for-30-2026-11-25)). Assistant help `general.md` updated.
+- **Evidence:** `pnpm lint` 0, `pnpm typecheck` 0, `pnpm test:unit` (201 files, 3100 passed, 1 skipped). e2e `auth.test.ts` 19/19 (4 new, one on the real server). The 8 new guards removed one at a time each failed a test (D286 → Verified). Full `pnpm test:e2e` not run locally yet; CI's shards run it.
+
 ### Studio builder: free colours, wall and floor finishes, door and window styles (D285, 2026-11-14)
 
 Branch `ccr-e78bff39-u70ma7` (after PR #319): one commit per step (free colours, walls and floors, doors and windows). Owner D2 (free colours, for everything) and the rest of D3.

@@ -1,15 +1,15 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Db } from '#server/utils/batch'
-import { session } from '#server/db/tables'
+import { auditEvents, member, session, user } from '#server/db/tables'
 import { createTestAuth, sessionHeaders } from '#server/tests/support/auth'
 import type { TestAuth } from '#server/tests/support/auth'
-import { createTestDb, ensureTenant } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
-import { deviceLabel, listAccountSessions, requireWorkspaceSession, WORKSPACE_SESSION_MS } from '#server/features/identity/sessions.service'
+import { deviceLabel, KEEP_SIGNED_IN_WINDOW_MS, keepSignedIn, KEPT_WORKSPACE_SESSION_MS, listAccountSessions, requireWorkspaceSession, WORKSPACE_SESSION_MS } from '#server/features/identity/sessions.service'
 import type { SessionUser } from '#server/features/identity/identity.types'
 
-// Session length by role and Your devices (D243), against Better Auth on a test database.
+// Session length by role and Your devices (D243), Keep me signed in (D286), against Better Auth on a test database.
 
 let db: Db
 let auth: TestAuth
@@ -46,7 +46,7 @@ describe('a workspace session ends a day after sign-in', () => {
 
     vi.setSystemTime(Date.now() + WORKSPACE_SESSION_MS - 1000)
     await check(new Date())
-    // As a customer's, it's still a session to Better Auth (7 days, renewed while used, D45).
+    // As a customer's, it's still a session to Better Auth (90 days, renewed while used, D286).
     vi.setSystemTime(Date.now() + 2000)
     expect((await auth.api.getSession({ headers }))?.session.id).toBe(signedIn.session.id)
     await expectApiError(() => check(new Date()), 401, 'SESSION_EXPIRED')
@@ -97,5 +97,69 @@ describe('Your devices', () => {
     expect(deviceLabel('curl/8.0')).toBe('Unknown device')
     expect(deviceLabel('')).toBe('Unknown device')
     expect(deviceLabel(null)).toBe('Unknown device')
+  })
+})
+
+describe('Keep me signed in (D286)', () => {
+  /** Makes dara@example.com an owner of the test cafe. */
+  async function makeOwner() {
+    const [row] = await db.select({ id: user.id }).from(user).where(eq(user.email, 'dara@example.com'))
+    await db.insert(member).values({ id: crypto.randomUUID(), organizationId: TEST_TENANT, userId: row!.id, role: 'owner', createdAt: new Date() })
+  }
+  const keptOf = async (id: string) => (await db.select({ keep: session.keepSignedIn }).from(session).where(eq(session.id, id)))[0]?.keep
+
+  it('an owner right after sign-in: 30 days from sign-in, audited; Better Auth and the workspace check agree', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    await makeOwner()
+    const headers = await signInFrom(ANDROID)
+    const signedIn = await sessionOf(headers)
+    const kept = await keepSignedIn(db, signedIn.user as SessionUser, signedIn.session, { requestId: 'req-1' })
+    expect(kept.keptUntil).toBe(new Date(new Date(signedIn.session.createdAt).getTime() + KEPT_WORKSPACE_SESSION_MS).toISOString())
+    expect(await keptOf(signedIn.session.id)).toBe(true)
+    const audited = await db.select({ action: auditEvents.action, actorId: auditEvents.actorId, tenantId: auditEvents.tenantId }).from(auditEvents)
+    expect(audited).toEqual([{ action: 'identity.session.keep', actorId: signedIn.user.id, tenantId: null }])
+    // Asking again changes nothing.
+    await keepSignedIn(db, signedIn.user as SessionUser, signedIn.session)
+
+    const check = () => requireWorkspaceSession(db, signedIn.user as SessionUser, signedIn.session, new Date())
+    vi.setSystemTime(Date.now() + KEPT_WORKSPACE_SESSION_MS - 60_000)
+    expect((await auth.api.getSession({ headers }))?.session.id).toBe(signedIn.session.id)
+    await check()
+    vi.setSystemTime(Date.now() + 120_000)
+    await expectApiError(check, 401, 'SESSION_EXPIRED')
+    expect(await auth.api.getSession({ headers })).toBeNull()
+  })
+
+  it('only right after sign-in: 5 minutes later it\'s refused, and the session is unchanged', async () => {
+    await makeOwner()
+    const signedIn = await sessionOf(await signInFrom(ANDROID))
+    const later = new Date(new Date(signedIn.session.createdAt).getTime() + KEEP_SIGNED_IN_WINDOW_MS)
+    await expectApiError(() => keepSignedIn(db, signedIn.user as SessionUser, signedIn.session, { now: later }), 403, 'KEEP_SIGNED_IN_TOO_LATE')
+    await expectApiError(() => keepSignedIn(db, signedIn.user as SessionUser, { id: signedIn.session.id, createdAt: 'not a date' }), 403, 'KEEP_SIGNED_IN_TOO_LATE')
+    expect(await keptOf(signedIn.session.id)).toBe(false)
+  })
+
+  it('a customer, or staff without a cafe of their own, can\'t', async () => {
+    const signedIn = await sessionOf(await signInFrom(ANDROID))
+    await expectApiError(() => keepSignedIn(db, signedIn.user as SessionUser, signedIn.session), 403, 'KEEP_SIGNED_IN_NOT_ALLOWED')
+    await db.insert(member).values({ id: crypto.randomUUID(), organizationId: TEST_TENANT, userId: signedIn.user.id, role: 'member', createdAt: new Date() })
+    await expectApiError(() => keepSignedIn(db, signedIn.user as SessionUser, signedIn.session), 403, 'KEEP_SIGNED_IN_NOT_ALLOWED')
+    expect(await keptOf(signedIn.session.id)).toBe(false)
+  })
+
+  it('a super admin can\'t, even one who owns a cafe', async () => {
+    await makeOwner()
+    const signedIn = await sessionOf(await signInFrom(ANDROID))
+    await expectApiError(() => keepSignedIn(db, { ...signedIn.user, role: 'superadmin' } as SessionUser, signedIn.session), 403, 'KEEP_SIGNED_IN_NOT_ALLOWED')
+    expect(await keptOf(signedIn.session.id)).toBe(false)
+  })
+
+  it('never marks another account\'s session, whatever id it names; signed out is 401', async () => {
+    await makeOwner()
+    const theirs = await sessionOf(await signInFrom(ANDROID, 'other@example.com'))
+    const mine = await sessionOf(await signInFrom(ANDROID))
+    await expectApiError(() => keepSignedIn(db, mine.user as SessionUser, { id: theirs.session.id, createdAt: mine.session.createdAt }), 401, 'UNAUTHENTICATED')
+    expect(await keptOf(theirs.session.id)).toBe(false)
+    await expectApiError(() => keepSignedIn(db, null, undefined), 401, 'UNAUTHENTICATED')
   })
 })

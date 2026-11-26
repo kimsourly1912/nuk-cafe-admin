@@ -470,6 +470,13 @@
       "when": 1794658489004,
       "tag": "0066_layout_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "6",
+      "when": 1795617101868,
+      "tag": "0067_session_keep_signed_in",
+      "breakpoints": true
     }
   ]
 }

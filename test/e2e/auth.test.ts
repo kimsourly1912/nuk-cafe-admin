@@ -1,7 +1,9 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
-import { describe, expect, it } from 'vitest'
-import { ADMIN, failures, gotoHydrated, MockFailure, mockApi, openTabs, setupE2e, SIGNED_OUT } from './support/mock-api'
+import { describe, expect, inject, it } from 'vitest'
+import { asNewVisitor } from './support/client-address'
+import { e2eDatabase } from './support/database'
+import { ADMIN, failures, gotoHydrated, MockFailure, mockApi, openTabs, setupE2e, SIGNED_OUT, toast } from './support/mock-api'
 
 await setupE2e()
 
@@ -108,6 +110,88 @@ describe('auth', () => {
     await page.getByLabel('Email').fill('admin@nukcafe.test')
     await expect.poll(() => page.getByText('Enter an email address').count()).toBe(0)
     expect(await page.evaluate(() => (window as unknown as { seenClasses: Set<string> }).seenClasses.has('field-message-leave-active'))).toBe(true)
+  })
+})
+
+// Keep me signed in on this device (D286): asked after the sign-in succeeded; the server decides.
+describe('keep me signed in', () => {
+  const KEPT = { keptUntil: '2026-12-25T01:00:00.000Z' }
+
+  it('off by default: signing in never asks for it', async () => {
+    const page = await createPage()
+    const api = await mockApi(page, SIGNED_OUT)
+    await page.goto(url('/c/nuk/admin/login?redirect=/c/nuk/admin/categories'), { waitUntil: 'hydration' })
+    expect(await page.getByLabel('Keep me signed in on this device').isChecked()).toBe(false)
+    api.set({ ...SIGN_IN_OK, 'GET /admin/me': () => ADMIN })
+    await signIn(page)
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
+    expect(api.calls).not.toContain('POST /me/keep-signed-in')
+  })
+
+  it('ticked: asked once the admin let the account in, then on to the admin', async () => {
+    const page = await createPage()
+    const api = await mockApi(page, SIGNED_OUT)
+    await page.goto(url('/c/nuk/admin/login?redirect=/c/nuk/admin/categories'), { waitUntil: 'hydration' })
+    api.set({ ...SIGN_IN_OK, 'GET /admin/me': () => ADMIN, 'POST /me/keep-signed-in': () => KEPT })
+    await page.getByLabel('Keep me signed in on this device').check()
+    await signIn(page)
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
+    const writes = api.calls.filter(call => call.startsWith('POST'))
+    expect(writes).toEqual(['POST /auth/sign-in/email', 'POST /me/keep-signed-in'])
+    expect(api.calls.indexOf('POST /me/keep-signed-in')).toBeGreaterThan(api.calls.indexOf('GET /admin/me'))
+  })
+
+  it('refused by the server: says the sign-in lasts a day, and still opens the admin', async () => {
+    const page = await createPage()
+    const api = await mockApi(page, SIGNED_OUT)
+    await page.goto(url('/c/nuk/admin/login?redirect=/c/nuk/admin/categories'), { waitUntil: 'hydration' })
+    api.set({
+      ...SIGN_IN_OK,
+      'GET /admin/me': () => ADMIN,
+      'POST /me/keep-signed-in': () => {
+        throw new MockFailure(403, 'KEEP_SIGNED_IN_NOT_ALLOWED', 'Only a cafe\'s owners can stay signed in. This sign-in lasts a day.')
+      },
+    })
+    await page.getByLabel('Keep me signed in on this device').check()
+    await signIn(page)
+    await toast(page, 'You\'re signed in for today only').waitFor()
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
+  })
+
+  it('on the real server: an owner who ticks it gets a kept session; unticked, a day\'s', async () => {
+    const seed = inject('shopSeed')
+    const { email, password } = seed.customers.beanOwner
+    const keptSessions = async () => {
+      const client = e2eDatabase(seed.dbFile)
+      try {
+        const result = await client.execute({ sql: 'select count(*) as n from session s join user u on u.id = s.user_id where u.email = ? and s.keep_signed_in = 1', args: [email] })
+        return Number(result.rows[0]!.n)
+      }
+      finally {
+        client.close()
+      }
+    }
+    const signInAsOwner = async (keep: boolean) => {
+      const page = await createPage()
+      page.setDefaultTimeout(10_000)
+      await asNewVisitor(page)
+      await page.goto(url(`/c/${seed.secondCafe.slug}/admin/login`), { waitUntil: 'hydration' })
+      await page.getByLabel('Email').fill(email)
+      await page.getByLabel('Password', { exact: true }).fill(password)
+      if (keep) await page.getByLabel('Keep me signed in on this device').check()
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+      await page.waitForURL(u => u.pathname === `/c/${seed.secondCafe.slug}/admin`)
+      return page
+    }
+    const before = await keptSessions()
+    await (await signInAsOwner(false)).close()
+    expect(await keptSessions()).toBe(before)
+    const page = await signInAsOwner(true)
+    await expect.poll(keptSessions).toBe(before + 1)
+    // Asking again is harmless: the same session, still one kept.
+    expect(await page.evaluate(async () => (await fetch('/api/me/keep-signed-in', { method: 'POST' })).status)).toBe(200)
+    expect(await keptSessions()).toBe(before + 1)
+    await page.close()
   })
 })
 

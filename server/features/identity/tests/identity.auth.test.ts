@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as authSchema from '#auth/schema'
+import { session as sessionTable } from '#server/db/tables'
 import { identityAuthOptions } from '#server/features/identity/identity.auth'
 import { seedFirstOwner } from '#server/features/identity/staff.service'
 import { seedTenant } from '#server/features/tenants'
@@ -69,12 +70,36 @@ describe('accounts', () => {
     expect(row).toMatchObject({ role: 'customer', mustChangePassword: true, emailVerified: true })
   })
 
-  it('keeps sessions for 7 days', async () => {
+  it('keeps sessions for 90 days (D286)', async () => {
     const { headers } = await signUp()
     const session = await auth.api.getSession({ headers })
     const days = (session!.session.expiresAt.getTime() - Date.now()) / 86_400_000
-    expect(days).toBeGreaterThan(6.99)
-    expect(days).toBeLessThanOrEqual(7)
+    expect(days).toBeGreaterThan(89.99)
+    expect(days).toBeLessThanOrEqual(90)
+  })
+
+  it('renews a session still in use: 90 days from the last visit (D286)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const { headers } = await signUp()
+      const signedIn = (await auth.api.getSession({ headers }))!
+      vi.setSystemTime(Date.now() + 60 * 86_400_000)
+      const renewed = (await auth.api.getSession({ headers }))!
+      expect(renewed.session.id).toBe(signedIn.session.id)
+      const days = (renewed.session.expiresAt.getTime() - Date.now()) / 86_400_000
+      expect(days).toBeGreaterThan(89.99)
+    }
+    finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('never shows the browser Keep me signed in, and a new session doesn\'t have it (D286)', async () => {
+    const { headers } = await signUp()
+    const current = (await auth.api.getSession({ headers }))!
+    expect(current.session).not.toHaveProperty('keepSignedIn')
+    const [row] = await db.select({ keepSignedIn: sessionTable.keepSignedIn }).from(sessionTable).where(eq(sessionTable.id, current.session.id))
+    expect(row?.keepSignedIn).toBe(false)
   })
 
   it('trusts only the site origin', () => {

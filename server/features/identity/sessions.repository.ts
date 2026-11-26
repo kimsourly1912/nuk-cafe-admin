@@ -1,6 +1,6 @@
-import { and, desc, eq, gt, sql } from 'drizzle-orm'
+import { and, desc, eq, exists, gt, sql } from 'drizzle-orm'
 import type { Db } from '#server/utils/batch'
-import { session } from '#server/db/tables'
+import { member, session } from '#server/db/tables'
 
 // --- Row types ---
 
@@ -47,6 +47,35 @@ export function reserveConfirmationStatement(db: Db, userId: string, sessionId: 
 /** Revoke at the reserved-attempt limit in the same batch as the failed-check audit. */
 export function endConfirmationSessionStatement(db: Db, userId: string, sessionId: string, max: number) {
   return db.delete(session).where(and(eq(session.id, sessionId), eq(session.userId, userId), sql`coalesce(${session.confirmFailures}, 0) >= ${max}`)).returning({ id: session.id })
+}
+
+/** Owns at least one cafe (an admin of it): who may choose Keep me signed in (D286). */
+export async function ownsACafe(db: Db, userId: string): Promise<boolean> {
+  const [row] = await db.select({ id: member.id }).from(member)
+    .where(and(eq(member.userId, userId), eq(member.role, 'owner')))
+    .limit(1)
+  return row !== undefined
+}
+
+/**
+ * This session chose Keep me signed in **and** its account still owns a cafe (D286), in one read.
+ * Asked only for a workspace session past its first day, so most requests never make it.
+ */
+export async function isKeptOwnerSession(db: Db, userId: string, sessionId: string): Promise<boolean> {
+  const [row] = await db.select({ id: session.id }).from(session)
+    .where(and(
+      eq(session.id, sessionId),
+      eq(session.userId, userId),
+      eq(session.keepSignedIn, true),
+      exists(db.select({ id: member.id }).from(member).where(and(eq(member.userId, userId), eq(member.role, 'owner')))),
+    ))
+    .limit(1)
+  return row !== undefined
+}
+
+/** Keep me signed in on this session (D286); nothing for an expired or another account's session. */
+export function markSessionKeptStatement(db: Db, userId: string, sessionId: string, at: Date) {
+  return db.update(session).set({ keepSignedIn: true }).where(and(eq(session.id, sessionId), eq(session.userId, userId), gt(session.expiresAt, at)))
 }
 
 /** Ends one session (the account's own, by id). */

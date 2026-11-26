@@ -154,7 +154,7 @@ describe('through Better Auth', () => {
     const { headers } = await auth.api.signInAnonymous({ returnHeaders: true })
     const cookie = sessionHeaders(headers)
     const signedIn = (await auth.api.getSession({ headers: cookie }))!
-    // 120 days later, with the cookie kept (sessions last 7 days, so it would have lapsed anyway).
+    // 120 days later, with the cookie kept (sessions last 90 days, so it would have lapsed anyway).
     await db.update(user).set({ name: 'Dara', createdAt: ago(120), updatedAt: ago(120) }).where(eq(user.id, signedIn.user.id))
     await db.update(session).set({ createdAt: ago(120), updatedAt: ago(120), expiresAt: new Date(Date.now() + DAY) }).where(eq(session.userId, signedIn.user.id))
 
