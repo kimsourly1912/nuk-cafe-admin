@@ -108,6 +108,9 @@ export interface ReportSent {
   sentAt: string
 }
 
+export const REPORT_DELIVERY_IN_PROGRESS = 'REPORT_DELIVERY_IN_PROGRESS'
+export const REPORT_DELIVERY_UNCERTAIN = 'REPORT_DELIVERY_UNCERTAIN'
+
 // --- Notifications and their delivery (step 8.1d, D113) ---
 
 /**
@@ -158,7 +161,7 @@ export interface NotificationDelivery {
   /** "New order #042", "Closing summary · Tue 30 Sep 2026". */
   subject: string
   destination: { id: string, title: string }
-  status: DeliveryStatus
+  status: DeliveryStatus | 'uncertain'
   attempts: number
   /** When the next try is due (`pending` after a failed try). */
   nextAttemptAt: string | null

@@ -4,6 +4,8 @@ Snapshot reviewed against main `ff2ca27` and GitHub's PR list, 2026-11-06. Read 
 
 ## In review
 
+- **Telegram report retries and staging shift check (D287):** reserve manual sends before contacting Telegram, retry only definite failures, and expose uncertain delivery in the existing dialog and Telegram history. The staging shift checklist covers Google, the table QR, two counters and the report. See [progress](progress.md#manual-telegram-report-delivery-and-shift-check-d287-2026-11-28).
+
 - **Server P2 reliability fixes (D267), PR #268:** B3–B7 payment/QR guards, consistent order/report reads, atomic confirmation attempts and promotion-scoped retries. Updated against main `ff2ca27`; preserves the customer-order index and KHQR recovery from merged PR #267 (D265/D266). Original head CI passed all six browser shards; the integrated revision must pass fresh PR checks before merging. [Progress](progress.md#server-p2-reliability-fixes-d267-2026-11-06).
 
 - **Session lengths (D286), branch `ccr-7be58e3e-cmcyfi`:** customers 90 days renewed while used; Keep me signed in on the admin's sign-in (owners, 30 days from sign-in). Migration `0067`. Owner check on staging: tick it, come back after a day. [Progress](progress.md#session-lengths-customers-90-days-keep-me-signed-in-for-owners-d286-2026-11-25).

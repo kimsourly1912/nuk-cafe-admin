@@ -56,3 +56,5 @@ The latest 50 messages sent to Telegram, with the time, what, to which chat and 
 - **"Telegram asks to wait … seconds."**: Telegram limits how fast a bot sends. Try again after that time.
 - **No closing summary arrived**: check the chat has **Closing summary** on, the branch had opening hours that day (Branch → hours), and the delivery history.
 - **A message arrived twice**: rare; if Telegram's answer is lost after it accepted a message, the retry can repeat it.
+
+For manual reports, **Delivery unconfirmed** means some or all of the report may have reached chat. Check Telegram before sending another copy. A definite failure offers **Retry**, which skips any report text already confirmed.

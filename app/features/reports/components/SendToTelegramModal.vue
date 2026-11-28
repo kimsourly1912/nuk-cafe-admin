@@ -2,11 +2,11 @@
 /**
  * Send to Telegram (step 8.1c, D112, the owner's frames): a report as it's shown on the page, to
  * one connected chat. The preview is the message the server will send; a group shows who will see
- * it; Attach CSV adds the report's file. A failure stays in the dialog with its reason, and Send
- * again reuses the same idempotency key, so a lost answer never sends twice.
+ * it; Attach CSV adds the report's file. Retries and status checks reuse the request's key.
  */
 import type { RadioGroupItem } from '@nuxt/ui'
 import type { SendableReport } from '#shared/contracts/notifications'
+import { REPORT_DELIVERY_IN_PROGRESS, REPORT_DELIVERY_UNCERTAIN } from '#shared/contracts/notifications'
 import { useReportDestinations, useSendReport, useTelegramPreview } from '../composables/useReports'
 
 const tenantPath = useTenantPath()
@@ -48,15 +48,29 @@ const items = computed<RadioGroupItem[]>(() => connected.value.map(d => ({
 const keys = new Map<string, string>()
 const keyFor = (request: string) => keys.get(request) ?? keys.set(request, crypto.randomUUID()).get(request)!
 
-const failure = ref<string>()
+const failure = ref<{ kind: 'failed' | 'checking' | 'uncertain', message: string }>()
+const locked = computed(() => send.pending || (failure.value !== undefined && failure.value.kind !== 'failed'))
+watch([destinationId, attachCsv], () => {
+  if (failure.value?.kind === 'failed') failure.value = undefined
+})
+
 async function submit() {
-  if (!chosen.value || chosen.value.status !== 'connected') return
+  const id = destinationId.value
+  if (!id || failure.value?.kind === 'uncertain' || (failure.value?.kind !== 'checking' && chosen.value?.status !== 'connected')) return
   failure.value = undefined
-  const body = { report: report.value, destinationId: chosen.value.id, attachCsv: attachCsv.value }
+  const body = { report: report.value, destinationId: id, attachCsv: attachCsv.value }
   const result = await send.execute({ ...body, key: keyFor(JSON.stringify(body)) })
   if (result.ok) emit('close', true)
   else if (result.status === 'error') {
-    failure.value = result.error.message
+    const error = result.error
+    if (error.code === REPORT_DELIVERY_UNCERTAIN) failure.value = { kind: 'uncertain', message: error.message }
+    else if (error.code === REPORT_DELIVERY_IN_PROGRESS || error.retryable) {
+      failure.value = {
+        kind: 'checking',
+        message: error.code === REPORT_DELIVERY_IN_PROGRESS ? error.message : 'The send status is unavailable. Check delivery to continue with the same report.',
+      }
+    }
+    else failure.value = { kind: 'failed', message: error.message }
     // Telegram said the chat is gone: show it blocked.
     if (result.error.code === 'TELEGRAM_BLOCKED') destinations.refresh()
   }
@@ -96,6 +110,7 @@ async function submit() {
           v-model="destinationId"
           legend="Send to"
           :items="items"
+          :disabled="locked"
         />
         <UAlert
           v-if="chosen?.kind === 'group'"
@@ -108,6 +123,7 @@ async function submit() {
           v-model="attachCsv"
           label="Attach CSV"
           description="The report's file, with every matching row."
+          :disabled="locked"
         />
       </template>
 
@@ -136,27 +152,28 @@ async function submit() {
 
       <UAlert
         v-if="failure"
-        color="error"
+        :color="failure.kind === 'failed' ? 'error' : 'warning'"
         variant="subtle"
         icon="i-lucide-circle-alert"
-        title="Not sent"
-        :description="failure"
+        :title="failure.kind === 'failed' ? 'Delivery incomplete' : 'Delivery unconfirmed'"
+        :description="failure.message"
       />
     </template>
 
     <template #footer>
       <div class="flex w-full justify-end gap-2">
         <UButton
-          label="Cancel"
+          :label="failure?.kind === 'uncertain' ? 'Close' : 'Cancel'"
           color="neutral"
           variant="outline"
           @click="emit('close', false)"
         />
         <UButton
-          :label="failure ? 'Try again' : 'Send'"
+          v-if="failure?.kind !== 'uncertain'"
+          :label="failure?.kind === 'checking' ? 'Check delivery' : failure ? 'Try again' : 'Send'"
           icon="i-lucide-send"
           :loading="send.pending"
-          :disabled="!chosen || chosen.status !== 'connected'"
+          :disabled="failure?.kind !== 'checking' && chosen?.status !== 'connected'"
           @click="submit()"
         />
       </div>

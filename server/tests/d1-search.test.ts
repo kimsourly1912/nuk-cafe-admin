@@ -360,7 +360,7 @@ it('runs the message snapshot, shared connect codes and all four token queues on
   await db.batch([
     db.insert(telegramDestinations).values({ id, tenantId: ours, kind: 'group', chatId: id, title: 'Messages group', connectedBy: person.id, connectedAt: now }),
     db.insert(notificationRules).values({ tenantId: ours, kind: 'closing_summary', destinationId: id, attachCsv: true }),
-    db.insert(notificationDeliveries).values({ id, tenantId: ours, kind: 'report', destinationId: id, dedupeKey: id, subject: id, message: { html: 'Hello' }, nextAttemptAt: now }),
+    db.insert(notificationDeliveries).values({ id, tenantId: ours, kind: 'closing_summary', destinationId: id, dedupeKey: id, subject: id, message: { html: 'Hello' }, nextAttemptAt: now }),
     db.insert(telegramLinks).values({ id, tenantId: ours, kind: 'group', codeHash: id, createdBy: person.id, expiresAt: until }),
     db.insert(marketingChannelLinks).values({ id, tenantId: ours, codeHash: id, createdBy: person.id, expiresAt: until }),
     db.insert(marketingChannels).values({ id, tenantId: ours, kind: 'telegram_channel', externalId: id, title: 'News', connectedAt: now }),

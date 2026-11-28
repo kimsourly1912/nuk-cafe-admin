@@ -31,7 +31,20 @@ What the tests can't see: real phones, the real Worker and D1, two real devices.
 4. **Ready twice (row 7).** On the paid order, press Mark ready in both windows. One succeeds; the other says it changed and offers Reload.
 5. **Image without a save (row 10).** In Admin → Menu items, open an item, upload a photo, then close without saving (Discard). The item keeps its old image (or none) on the customer menu.
 
-Write the date and anything odd into `docs/progress.md` (step 10.5).
+### Shift check before production promotion
+
+Use a verified staging test customer, two counter sessions for the same staging branch, and a staging owner. Use a test branch and table, a low-price test menu item, and simulated cash recorded in the app. Keep the revision, branch, business date and pickup number for the evidence.
+
+| Step | Expected result |
+|---|---|
+| Scan the test table QR from a signed-out phone and sign in with a real Google test account when prompted | Google returns to the original checkout and the draft still says Dine-in with the scanned table. |
+| Submit the order and open it on two counter devices | Both see the same pickup number, table and total. |
+| Try Take payment → Cash USD on both counters together | Exactly one payment is recorded. The other counter reloads to Preparing. |
+| Mark ready on one counter and complete it on the other | Both counters and the customer's order page converge on Completed. |
+| In Admin → Reports, open the branch and business date. Find the test order in Order history and export CSV | The order has one Cash USD payment, the same amount and one Preparing transition. Summary, History and the export agree. |
+| In the owner's dedicated staging test Telegram chat, send that Summary with Attach CSV | One report and one CSV arrive, and Telegram → Delivery history shows Sent. If delivery is unconfirmed, record the result and inspect the chat before trying another copy. Run this step only with a test chat designated for the shift check. |
+
+Record each step as Passed, Failed or Blocked with the checked revision and device in `docs/progress.md`. Keep credentials, customer names and private chat details out of the evidence.
 
 ## Hand check result, 2026-10-01 (staging, run for the owner by an AI browser agent): NOT PASSED
 

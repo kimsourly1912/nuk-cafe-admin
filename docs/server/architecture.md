@@ -261,6 +261,8 @@ const { response } = await withIdempotency(db, { actorId: actor.userId, operatio
 - `request` is compared as canonical JSON (key order and `undefined` fields don't matter); pass the validated input plus path ids.
 - The response must be computable before the batch runs: generate ids up front (`newId()`).
 
+When an action calls an external service, first commit its request key and durable work record. Keep the network call outside the `withIdempotency` builder. Manual Telegram reports (D287) claim the delivery before sending and keep an uncertain claim fenced against replay.
+
 Internal awards (points on completion) use a deterministic key (`earn:order:{orderId}`) with a unique index, so they can't double-apply even without a header.
 
 ### Audit

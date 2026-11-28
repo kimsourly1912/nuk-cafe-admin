@@ -26,9 +26,13 @@ const deliveries = computed(() => data.value?.deliveries ?? [])
 function status(delivery: NotificationDelivery): { label: string, color: 'success' | 'neutral' | 'warning' | 'error' } {
   if (delivery.status === 'sent') return { label: 'Sent', color: 'success' }
   if (delivery.status === 'failed') return { label: 'Failed', color: 'error' }
+  if (delivery.status === 'uncertain') return { label: 'Delivery unconfirmed', color: 'warning' }
   if (delivery.attempts > 0 && delivery.nextAttemptAt) return { label: `Retrying at ${formatTime(delivery.nextAttemptAt)}`, color: 'warning' }
   return { label: 'Pending', color: 'neutral' }
 }
+
+const canRetry = (delivery: NotificationDelivery) => delivery.status === 'failed'
+  || (delivery.kind === 'report' && delivery.status === 'pending' && delivery.attempts === 0)
 
 const snapshotModal = useOverlay().create(DeliverySnapshotModal)
 const view = (delivery: NotificationDelivery) => snapshotModal.open({ id: delivery.id, subject: delivery.subject })
@@ -122,7 +126,7 @@ const columns: TableColumn<NotificationDelivery>[] = [
             @click="view(delivery)"
           />
           <UButton
-            v-if="delivery.status === 'failed'"
+            v-if="canRetry(delivery)"
             label="Retry"
             color="neutral"
             variant="outline"
@@ -166,7 +170,7 @@ const columns: TableColumn<NotificationDelivery>[] = [
       <template #actions-cell="{ row }">
         <div class="flex justify-end gap-1">
           <UButton
-            v-if="row.original.status === 'failed'"
+            v-if="canRetry(row.original)"
             label="Retry"
             color="neutral"
             variant="outline"

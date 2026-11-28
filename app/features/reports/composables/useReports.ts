@@ -212,7 +212,7 @@ export function useTelegramPreview(report: MaybeRefOrGetter<ReportMessageInput>)
 }
 
 export interface SendInput extends SendReportInput {
-  /** One per request the admin makes: Try again reuses it, so a lost answer never sends twice. */
+  /** Try again and Check delivery reuse the key for the same report request. */
   key: string
 }
 

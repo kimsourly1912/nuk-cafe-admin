@@ -14,7 +14,7 @@ import { maintenanceLimit } from '#server/utils/maintenance'
 import { orderReadyAlertTooLate } from './notifications.errors'
 import { orderReadyMessage, orderReadySubscribedText } from './notifications.messages'
 import * as repo from './notifications.customers.repository'
-import { sendStored } from './notifications.delivery'
+import { sendStored } from './notifications.send'
 import { hashLinkCode, isBlockedError, newLinkCode } from './notifications.rules'
 import type { TelegramSettings } from './notifications.settings'
 

@@ -7,6 +7,7 @@ import type { Actor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { placeOrder } from '#server/features/orders'
 import { deliverySnapshot, listDeliveries, queueOrderAlert, queueServerErrorAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
+import { sendReport } from '#server/features/notifications/notifications.reports'
 import { notificationDeliveries, telegramDestinations } from '#server/features/notifications/notifications.schema'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { cancelLink, confirmLink, createLink, disconnectDestination, getLink, handleUpdate, listDestinations, sendTestMessage, telegramOverview } from '#server/features/notifications/notifications.service'
@@ -71,6 +72,20 @@ beforeEach(async () => {
 })
 
 describe('telegram tenants', () => {
+  it('scopes manual report keys, claims and history to their cafe', async () => {
+    const ourChat = await destination(TEST_TENANT, 'Our chat', '111')
+    const theirChat = await destination(OTHER, 'Their chat', '222')
+    const key = crypto.randomUUID()
+    const build = async () => ({ subject: 'Summary', html: 'Report', audit: {} })
+    const send = (actor: Actor, destinationId: string) => sendReport(db, telegram.api, actor, key, { destinationId, report: {}, attachCsv: false }, build, now)
+    await expectApiError(() => send(theirs, ourChat), 404, 'NOT_FOUND')
+    expect((await send(ours, ourChat)).destination.id).toBe(ourChat)
+    expect((await send(theirs, theirChat)).destination.id).toBe(theirChat)
+    const [ourReport] = await listDeliveries(db, TEST_TENANT)
+    expect((await listDeliveries(db, OTHER)).map(row => row.destination.id)).toEqual([theirChat])
+    await expectApiError(() => retryDelivery(db, telegram.api, theirs, ourReport!.id, now, async () => undefined), 404, 'NOT_FOUND')
+  })
+
   it('shows and changes only the cafe\'s own chats', async () => {
     const mine = await destination(TEST_TENANT, 'Our chat', '111')
     const theirChat = await destination(OTHER, 'Their chat', '222')
