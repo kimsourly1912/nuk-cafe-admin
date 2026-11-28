@@ -102,7 +102,7 @@ export async function oldestDueNotification(db: Db, now: Date): Promise<Date | n
 }
 
 /**
- * Across cafes: Telegram deliveries going wrong, grouped by cafe (the console's System health, P4, D192): failed ones
+ * Across cafes: scheduled Telegram deliveries going wrong, grouped by cafe (the console's System health, P4, D192): failed ones
  * made since `since`, pending ones retrying after a failed try, and the latest failed try. Counts
  * and dates only; never the message, the chat or the error. Reads `notification_deliveries_created_idx`.
  */
@@ -113,7 +113,7 @@ export async function deliveryHealth(db: Db, since: Date): Promise<{ tenantId: s
     retrying: sql<number>`sum(case when ${notificationDeliveries.status} = 'pending' and ${notificationDeliveries.attempts} > 0 then 1 else 0 end)`.mapWith(Number),
     lastFailureAt: sql<number | null>`max(case when ${notificationDeliveries.status} = 'failed' or ${notificationDeliveries.attempts} > 0 then ${notificationDeliveries.createdAt} end)`,
   }).from(notificationDeliveries)
-    .where(and(gte(notificationDeliveries.createdAt, since), or(
+    .where(and(scheduled, gte(notificationDeliveries.createdAt, since), or(
       eq(notificationDeliveries.status, 'failed'),
       and(eq(notificationDeliveries.status, 'pending'), gt(notificationDeliveries.attempts, 0)),
     )))

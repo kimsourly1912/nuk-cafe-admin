@@ -3,7 +3,7 @@ import type { Update } from 'grammy/types'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Actor } from '#server/features/identity'
-import { deliverDue, listDeliveries, retryDelivery } from '#server/features/notifications/notifications.delivery'
+import { deliverDue, listDeliveries, retryDelivery, telegramDeliveryHealth } from '#server/features/notifications/notifications.delivery'
 import { sendReport } from '#server/features/notifications/notifications.reports'
 import { notificationDeliveries, telegramDestinations, telegramLinks } from '#server/features/notifications/notifications.schema'
 import { cancelLink, confirmLink, createLink, disconnectDestination, getLink, handleUpdate, sendTestMessage, telegramOverview } from '#server/features/notifications/notifications.service'
@@ -306,6 +306,7 @@ describe('sending a report', () => {
     expect(history).toMatchObject({ status: 'uncertain', kind: 'report', nextAttemptAt: null })
     await expectApiError(() => retryDelivery(db, telegram.api, admin, history!.id, later(6), async () => undefined), 409, 'REPORT_DELIVERY_UNCERTAIN')
     expect(await deliverDue(db, telegram.api, new Date('9999-01-02'))).toEqual({ sent: 0, retried: 0, failed: 0 })
+    expect(await telegramDeliveryHealth(db, now)).toEqual([])
     expect(telegram.sent()).toHaveLength(before + 1)
   })
 
