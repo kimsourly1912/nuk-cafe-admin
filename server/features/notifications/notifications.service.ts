@@ -1,20 +1,20 @@
 import type { Api } from 'grammy'
 import type { Message, Update } from 'grammy/types'
-import type { CreateTelegramLinkInput, NewTelegramLink, ReportSent, TelegramDestination, TelegramLink, TelegramOverview } from '#shared/contracts/notifications'
+import type { CreateTelegramLinkInput, NewTelegramLink, TelegramDestination, TelegramLink, TelegramOverview } from '#shared/contracts/notifications'
 import { TELEGRAM_LINK_MINUTES } from '#shared/contracts/notifications'
 import type { Actor } from '#server/features/identity'
-import { auditStatement, withIdempotency } from '#server/features/platform'
+import { auditStatement } from '#server/features/platform'
 import type { Db } from '#server/utils/batch'
 import { requireOneChange, runBatch, tryGuardedBatch } from '#server/utils/batch'
 import { versionConflict } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { log } from '#server/utils/log'
 import { toIso } from '#server/utils/time'
-import * as deliveryRepo from './notifications.deliveries.repository'
 import * as linkRepo from './notifications.links.repository'
 import { destinationBlocked, destinationNotFound, linkNotFound, linkUnusable } from './notifications.errors'
 import * as repo from './notifications.repository'
-import { notificationRulesOf, sendStored } from './notifications.delivery'
+import { notificationRulesOf } from './notifications.delivery'
+import { sendStored } from './notifications.send'
 import { ORDER_CODE_PREFIX, useOrderReadyCode } from './notifications.customers'
 import { chatTitle, escapeHtml, hashLinkCode, isBlockedError, isGroup, linkUrl, newLinkCode, sendFailure, startCode } from './notifications.rules'
 import type { TelegramSettings } from './notifications.settings'
@@ -274,34 +274,4 @@ export async function disconnectDestination(db: Db, api: Api, actor: Actor, id: 
     auditStatement(db, actor, { action: 'notifications.telegram.disconnect', targetType: 'telegram_destination', targetId: id, metadata: { kind: row.kind } }),
   ], () => versionConflict('This Telegram chat'))
   if (row.kind === 'group' && row.status === 'connected' && !await repo.hasConnectedChatAcrossCafes(db, row.chatId)) await leaveQuietly(api, row.chatId)
-}
-
-/**
- * Sends a report (Send to Telegram), once per `Idempotency-Key`: a retry after a lost answer gets
- * the first result back instead of a second message. A retry after a failure sends again.
- */
-export async function sendReport(
-  db: Db,
-  api: Api,
-  actor: Actor,
-  key: string,
-  request: { destinationId: string, report: unknown, attachCsv: boolean },
-  build: () => Promise<OutgoingMessage & { audit: Record<string, unknown> }>,
-  now = new Date(),
-): Promise<ReportSent> {
-  const { response } = await withIdempotency(db, { tenantId: actor.tenantId, actorId: actor.userId, operation: 'notifications.send-report', key }, request, async () => {
-    const row = await connectedDestination(db, actor.tenantId, request.destinationId)
-    const { audit, ...message } = await build()
-    await deliver(db, api, row, message, now)
-    return {
-      statements: [
-        repo.sentStatement(db, actor.tenantId, row.id, now),
-        // In the delivery history with the alerts (8.1d, D113), as sent.
-        deliveryRepo.insertDeliveryStatement(db, { id: newId(), tenantId: actor.tenantId, kind: 'report', destinationId: row.id, dedupeKey: `report:${key}`, subject: message.subject, message: { html: message.html }, status: 'sent', attempts: 1, createdAt: now, nextAttemptAt: now, sentAt: now }),
-        auditStatement(db, actor, { action: 'report.send', targetType: 'telegram_destination', targetId: row.id, metadata: { ...audit, attachCsv: request.attachCsv } }),
-      ],
-      response: { destination: { id: row.id, title: row.title }, sentAt: toIso(now) },
-    }
-  }, { now })
-  return response
 }

@@ -97,8 +97,8 @@ export const notificationRules = sqliteTable('notification_rules', {
  * One message to one chat, saved before it's sent (step 8.1d, D113): the text (and a closing
  * summary's CSV) is a snapshot, so a retry sends the same thing. `dedupe_key` names what it's about
  * (`new_order:<orderId>`, `closing_summary:<branchId>:<date>`): one per chat, whatever repeats.
- * Sent by `notifications:deliver` every minute: at least once, a retry after a lost answer can
- * repeat a message (Telegram has no idempotency key).
+ * Scheduled notifications are delivered at least once. Manual reports reserve their own claim
+ * and retain it on an uncertain answer, so the scheduler can never resend a manual report.
  */
 export const notificationDeliveries = sqliteTable('notification_deliveries', {
   id: text().primaryKey().$defaultFn(() => newId()),
@@ -129,6 +129,15 @@ export interface StoredMessage {
   html: string
   button?: { text: string, url: string }
   document?: { filename: string, content: string }
+  manualReport?: ManualReportProgress
+}
+
+/** Progress of a manual report. Dates here are epoch milliseconds, as this is JSON. */
+export interface ManualReportProgress {
+  audit: Record<string, unknown>
+  textSent?: true
+  checkBy?: number
+  retryAt?: number
 }
 
 /**

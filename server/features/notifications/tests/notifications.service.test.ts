@@ -3,8 +3,10 @@ import type { Update } from 'grammy/types'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Actor } from '#server/features/identity'
-import { telegramDestinations, telegramLinks } from '#server/features/notifications/notifications.schema'
-import { cancelLink, confirmLink, createLink, disconnectDestination, getLink, handleUpdate, sendReport, sendTestMessage, telegramOverview } from '#server/features/notifications/notifications.service'
+import { deliverDue, listDeliveries, retryDelivery } from '#server/features/notifications/notifications.delivery'
+import { sendReport } from '#server/features/notifications/notifications.reports'
+import { notificationDeliveries, telegramDestinations, telegramLinks } from '#server/features/notifications/notifications.schema'
+import { cancelLink, confirmLink, createLink, disconnectDestination, getLink, handleUpdate, sendTestMessage, telegramOverview } from '#server/features/notifications/notifications.service'
 import { chatTitle, hashLinkCode, secretMatches, startCode } from '#server/features/notifications/notifications.rules'
 import type { TelegramSettings } from '#server/features/notifications/notifications.settings'
 import { telegramSettingsFrom } from '#server/features/notifications/notifications.settings'
@@ -23,13 +25,13 @@ type Answer = { ok: true, result: unknown } | { ok: false, error_code: number, d
 
 class FakeTelegram {
   calls: Call[] = []
-  answers: Record<string, (payload: Record<string, unknown> | null) => Answer> = {}
+  answers: Record<string, (payload: Record<string, unknown> | null) => Answer | Promise<Answer>> = {}
   readonly api = new Api(SETTINGS.botToken, {
     fetch: (async (url: string | URL, init?: { body?: unknown }) => {
       const method = String(url).split('/').pop()!
       const payload = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : null
       this.calls.push({ method, payload })
-      const answer = this.answers[method]?.(payload) ?? { ok: true, result: method === 'getChatMemberCount' ? 8 : true }
+      const answer = await this.answers[method]?.(payload) ?? { ok: true, result: method === 'getChatMemberCount' ? 8 : true }
       return new Response(JSON.stringify(answer), { headers: { 'content-type': 'application/json' } })
     }) as unknown as typeof fetch,
   })
@@ -245,13 +247,97 @@ describe('sending a report', () => {
     const request = { destinationId: destination.id, report: { kind: 'summary' }, attachCsv: false }
     const key = crypto.randomUUID()
     const before = telegram.sent().length
-    telegram.answers.sendMessage = () => ({ ok: false, error_code: 500, description: 'Internal Server Error' })
+    telegram.answers.sendMessage = () => ({ ok: false, error_code: 400, description: 'Bad Request' })
     await expectApiError(() => sendReport(db, telegram.api, admin, key, request, build(), later(3)), 424, 'TELEGRAM_UNAVAILABLE')
     delete telegram.answers.sendMessage
     await sendReport(db, telegram.api, admin, key, request, build(), later(4))
     expect(telegram.sent()).toHaveLength(before + 2)
     const [row] = await db.select().from(telegramDestinations).where(eq(telegramDestinations.id, destination.id))
     expect(row!.lastSentAt).toEqual(later(4))
+  })
+
+  it('reserves one job and claims it once when two requests with the same key race', async () => {
+    const destination = await connectedGroup()
+    const request = { destinationId: destination.id, report: { kind: 'summary' }, attachCsv: false }
+    const key = crypto.randomUUID()
+    const before = telegram.sent().length
+    const bothBuilt = Promise.withResolvers<undefined>()
+    const started = Promise.withResolvers<undefined>()
+    const finish = Promise.withResolvers<undefined>()
+    let builds = 0
+    const prepare = async () => {
+      if (++builds === 2) bothBuilt.resolve(undefined)
+      await bothBuilt.promise
+      return build()()
+    }
+    telegram.answers.sendMessage = async () => {
+      started.resolve(undefined)
+      await finish.promise
+      return { ok: true, result: true }
+    }
+    const writes = [0, 1].map(() => sendReport(db, telegram.api, admin, key, request, prepare, later(3)))
+    const first = Promise.race(writes)
+    try {
+      await started.promise
+      await expectApiError(() => first, 409, 'REPORT_DELIVERY_IN_PROGRESS')
+      expect(await db.select().from(notificationDeliveries)).toHaveLength(1)
+      expect(telegram.sent()).toHaveLength(before + 1)
+    }
+    finally {
+      finish.resolve(undefined)
+      await Promise.allSettled(writes)
+    }
+    expect(await sendReport(db, telegram.api, admin, key, request, build(), later(4))).toMatchObject({ sentAt: later(3).toISOString() })
+    expect(telegram.sent()).toHaveLength(before + 1)
+    await expectApiError(() => sendReport(db, telegram.api, admin, key, { ...request, attachCsv: true }, build(true), later(4)), 422, 'IDEMPOTENCY_MISMATCH')
+  })
+
+  it('keeps a claim when Telegram accepts the text but the final write fails', async () => {
+    const destination = await connectedGroup()
+    const request = { destinationId: destination.id, report: { kind: 'summary' }, attachCsv: false }
+    const key = crypto.randomUUID()
+    const before = telegram.sent().length
+    const interrupted = interleaved(db, async () => {
+      throw new Error('Delivery commit unavailable')
+    }, 1)
+    await expectApiError(() => sendReport(interrupted, telegram.api, admin, key, request, build(), later(3)), 409, 'REPORT_DELIVERY_UNCERTAIN')
+    await expectApiError(() => sendReport(db, telegram.api, admin, key, request, build(), later(6)), 409, 'REPORT_DELIVERY_UNCERTAIN')
+    const [history] = await listDeliveries(db, TEST_TENANT)
+    expect(history).toMatchObject({ status: 'uncertain', kind: 'report', nextAttemptAt: null })
+    await expectApiError(() => retryDelivery(db, telegram.api, admin, history!.id, later(6), async () => undefined), 409, 'REPORT_DELIVERY_UNCERTAIN')
+    expect(await deliverDue(db, telegram.api, new Date('9999-01-02'))).toEqual({ sent: 0, retried: 0, failed: 0 })
+    expect(telegram.sent()).toHaveLength(before + 1)
+  })
+
+  it('marks a transport failure unconfirmed and keeps it out of retries', async () => {
+    const destination = await connectedGroup()
+    const request = { destinationId: destination.id, report: { kind: 'summary' }, attachCsv: false }
+    const key = crypto.randomUUID()
+    const before = telegram.sent().length
+    telegram.answers.sendMessage = () => {
+      throw new TypeError('Connection closed after send')
+    }
+    await expectApiError(() => sendReport(db, telegram.api, admin, key, request, build(), later(3)), 409, 'REPORT_DELIVERY_UNCERTAIN')
+    delete telegram.answers.sendMessage
+    await expectApiError(() => sendReport(db, telegram.api, admin, key, request, build(), later(3)), 409, 'REPORT_DELIVERY_UNCERTAIN')
+    expect(telegram.sent()).toHaveLength(before + 1)
+  })
+
+  it('retries only the CSV after a definite file rejection and honors the retry time', async () => {
+    const destination = await connectedGroup()
+    const request = { destinationId: destination.id, report: { kind: 'summary' }, attachCsv: true }
+    const key = crypto.randomUUID()
+    const before = telegram.sent().length
+    telegram.answers.sendDocument = () => ({ ok: false, error_code: 429, description: 'Too Many Requests', parameters: { retry_after: 90 } })
+    await expectApiError(() => sendReport(db, telegram.api, admin, key, request, build(true), later(3)), 429, 'TELEGRAM_RATE_LIMITED')
+    await expectApiError(() => sendReport(db, telegram.api, admin, key, request, build(true), later(4)), 429, 'TELEGRAM_RATE_LIMITED')
+    const [history] = await listDeliveries(db, TEST_TENANT)
+    expect(history).toMatchObject({ status: 'failed', lastError: expect.stringContaining('The report text was sent.') })
+    await expectApiError(() => retryDelivery(db, telegram.api, admin, history!.id, later(5)), 403, 'FORBIDDEN')
+    delete telegram.answers.sendDocument
+    await sendReport(db, telegram.api, admin, key, request, build(true), later(5))
+    expect(telegram.sent()).toHaveLength(before + 1)
+    expect(telegram.sent('sendDocument')).toHaveLength(2)
   })
 
   it('an unknown or disconnected chat is 404', async () => {

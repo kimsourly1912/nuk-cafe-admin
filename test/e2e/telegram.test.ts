@@ -209,6 +209,33 @@ describe('Send to Telegram', () => {
     await page.getByRole('button', { name: 'Print' }).waitFor()
     expect(await page.getByRole('button', { name: 'Send to Telegram' }).count()).toBe(0)
   })
+
+  it('checks the original request while sending and offers no resend after an uncertain result', async () => {
+    const keys: (string | undefined)[] = []
+    const page = await createPage()
+    await mockApi(page, {
+      'GET /admin/reports/branches': () => [BRANCH],
+      'GET /admin/reports/summary': () => summary,
+      'GET /admin/reports/destinations': () => ({ enabled: true, destinations: [GROUP] }),
+      'POST /admin/reports/telegram-preview': () => ({ text: 'Summary · Riverside' }),
+      'POST /admin/reports/send': ({ headers }) => {
+        keys.push(headers['idempotency-key'])
+        if (keys.length === 1) throw new MockFailure(409, 'REPORT_DELIVERY_IN_PROGRESS', 'This report is still being sent.')
+        throw new MockFailure(409, 'REPORT_DELIVERY_UNCERTAIN', 'Telegram may have received all or part of this report. Check the chat before sending another copy.')
+      },
+    })
+    await page.goto(url('/c/nuk/admin/reports/summary'), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: 'Send to Telegram' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', { name: 'Send', exact: true }).click()
+    const check = dialog.getByRole('button', { name: 'Check delivery' })
+    await check.waitFor()
+    expect(await dialog.getByRole('checkbox', { name: 'Attach CSV' }).isDisabled()).toBe(true)
+    await check.click()
+    await dialog.getByText('Telegram may have received', { exact: false }).waitFor()
+    expect(await dialog.getByRole('button', { name: /^(Send|Try again|Check delivery)$/ }).count()).toBe(0)
+    expect(keys).toEqual([expect.stringMatching(/^[0-9a-f-]{36}$/), keys[0]])
+  })
 })
 
 describe('Notifications and delivery history (8.1d)', () => {

@@ -1,3 +1,4 @@
+import { REPORT_DELIVERY_IN_PROGRESS, REPORT_DELIVERY_UNCERTAIN } from '#shared/contracts/notifications'
 import { apiError, ErrorCodes, notFound } from '#server/utils/errors'
 
 /** Error codes of Telegram (step 8.1c, D112). */
@@ -39,6 +40,12 @@ export const telegramRateLimited = (seconds: number) =>
 /** 424 Failed Dependency: Telegram, which the request depends on, refused or didn't answer. */
 export const telegramUnavailable = () =>
   apiError(424, NotificationErrorCodes.TELEGRAM_UNAVAILABLE, 'Telegram didn\'t accept the message. Try again in a moment.')
+
+export const reportDeliveryInProgress = () =>
+  apiError(409, REPORT_DELIVERY_IN_PROGRESS, 'This report is still being sent. Check its delivery status in a moment.')
+
+export const reportDeliveryUncertain = () =>
+  apiError(409, REPORT_DELIVERY_UNCERTAIN, 'Telegram may have received all or part of this report. Check the chat before sending another copy.')
 
 /** "Message me when it's ready" on an order that is ready, finished or cancelled already (D157). */
 export const orderReadyAlertTooLate = () =>

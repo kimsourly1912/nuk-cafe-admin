@@ -1,5 +1,5 @@
 import type { Api } from 'grammy'
-import { GrammyError, InputFile } from 'grammy'
+import { GrammyError } from 'grammy'
 import type { DeliverySnapshot, NotificationDelivery, NotificationKind, NotificationRule, SetNotificationRuleInput } from '#shared/contracts/notifications'
 import { DELIVERY_MAX_ATTEMPTS, SERVER_ERROR_ALERT_WINDOW_MINUTES } from '#shared/contracts/notifications'
 import { getBranchSettings } from '#server/features/branches'
@@ -15,12 +15,13 @@ import { maintenanceLimit } from '#server/utils/maintenance'
 import { toIso } from '#server/utils/time'
 import { addDays } from '#server/utils/weekly-windows'
 import * as deliveryRepo from './notifications.deliveries.repository'
-import { destinationBlocked, destinationNotFound } from './notifications.errors'
+import { destinationBlocked, destinationNotFound, reportDeliveryUncertain } from './notifications.errors'
 import { alertSubject, bakongReminderStage, bakongTokenMessage, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, newOrderMessage, paymentMessage, routeOf, serverErrorMessage, supportOpenedMessage } from './notifications.messages'
 import type { ServerErrorInfo, SupportOpenedInfo } from './notifications.messages'
 import * as repo from './notifications.repository'
 import { isBlockedError, plainText } from './notifications.rules'
-import type { StoredMessage } from './notifications.schema'
+import { reportClaimStatus, sendReservedReport } from './notifications.reports'
+import { sendStored } from './notifications.send'
 
 /**
  * Notifications (step 8.1d, D113): new-order and payment alerts, the closing summary, and their
@@ -34,20 +35,6 @@ const MINUTE = 60_000
 const CLAIM_MS = 2 * MINUTE
 
 // --- Sending ---
-
-/** Sends a saved message: the text (with its link button), then its file. */
-export async function sendStored(api: Api, chatId: string, message: StoredMessage): Promise<void> {
-  if (message.html) {
-    await api.sendMessage(chatId, message.html, {
-      parse_mode: 'HTML',
-      link_preview_options: { is_disabled: true },
-      reply_markup: message.button ? { inline_keyboard: [[{ text: message.button.text, url: message.button.url }]] } : undefined,
-    })
-  }
-  if (message.document) {
-    await api.sendDocument(chatId, new InputFile(new TextEncoder().encode(message.document.content), message.document.filename))
-  }
-}
 
 export interface DeliveryReport {
   sent: number
@@ -296,15 +283,17 @@ export async function setNotificationRule(db: Db, actor: Actor, input: SetNotifi
 const HISTORY_LIMIT = 50
 
 function deliveryOf(row: deliveryRepo.DeliveryRow, title: string): NotificationDelivery {
+  const manual = row.kind === 'report' && row.status === 'pending'
+  const status = manual ? reportClaimStatus(row, new Date()) : row.status
   return {
     id: row.id,
     kind: row.kind,
     subject: row.subject,
     destination: { id: row.destinationId, title },
-    status: row.status,
+    status,
     attempts: row.attempts,
-    nextAttemptAt: row.status === 'pending' ? toIso(row.nextAttemptAt) : null,
-    lastError: row.lastError,
+    nextAttemptAt: !manual && status === 'pending' ? toIso(row.nextAttemptAt) : null,
+    lastError: status === 'uncertain' ? reportDeliveryUncertain().message : row.lastError,
     createdAt: toIso(row.createdAt),
     sentAt: row.sentAt ? toIso(row.sentAt) : null,
   }
@@ -324,9 +313,18 @@ export async function deliverySnapshot(db: Db, tenantId: string, id: string): Pr
 }
 
 /** Retry: a failed delivery is sent again (its saved message, not a new one). */
-export async function retryDelivery(db: Db, api: Api, actor: Actor, id: string, now = new Date()): Promise<NotificationDelivery> {
+export async function retryDelivery(db: Db, api: Api, actor: Actor, id: string, now = new Date(), authorizeReport?: () => Promise<unknown>): Promise<NotificationDelivery> {
   const row = await deliveryRepo.findDelivery(db, actor.tenantId, id)
   if (!row) throw apiError(404, ErrorCodes.NOT_FOUND, 'This message was not found.')
+  if (row.delivery.kind === 'report') {
+    if (!authorizeReport) throw apiError(403, ErrorCodes.FORBIDDEN, 'You don\'t have permission to send reports.')
+    await authorizeReport()
+    if (row.delivery.status === 'sent') throw apiError(409, ErrorCodes.INVALID_STATE, 'This report was already sent.')
+    await sendReservedReport(db, api, actor, id)
+    const after = await deliveryRepo.findDelivery(db, actor.tenantId, id)
+    if (!after) throw apiError(404, ErrorCodes.NOT_FOUND, 'This message was not found.')
+    return deliveryOf(after.delivery, after.title)
+  }
   if (row.destinationStatus !== 'connected') throw destinationBlocked(row.title)
   await runBatch(db, [deliveryRepo.requeueFailedStatement(db, actor.tenantId, id, now), requireOneChange(db), auditStatement(db, actor, { action: 'notifications.delivery.retry', targetType: 'notification_delivery', targetId: id })], () => apiError(409, ErrorCodes.INVALID_STATE, 'This message isn\'t waiting for a retry: it was sent or is being tried already.'))
   await deliverDue(db, api, now, { ids: [id] })

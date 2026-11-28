@@ -4,5 +4,5 @@ import { retryDelivery } from '#server/features/notifications'
 export default defineEventHandler(async (event) => {
   const { api } = requireTelegram(event)
   const actor = await requirePermission(event, { settings: ['manage'] })
-  return retryDelivery(useDb(), api, actor, readIdParam(event, 'id', 'This message'))
+  return retryDelivery(useDb(), api, actor, readIdParam(event, 'id', 'This message'), undefined, () => requirePermission(event, { report: ['export'] }))
 })

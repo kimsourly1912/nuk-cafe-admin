@@ -69,3 +69,7 @@ Money is summed as integer cents (and whole riel) in SQL; never floats.
 - Filters are validated (dates, 93 days, page size ≤ 100) and bounded.
 - A group destination shows its name and "everyone in the group sees what's sent" before it's enabled.
 - Telegram messages never contain emails or member codes (R3).
+
+## Manual report delivery (D287)
+
+**Send to Telegram** reserves the report in delivery history before sending. A repeated request checks the same delivery. If Telegram has definitely refused the text or CSV, **Try again** sends the outstanding part. When the result of an attempt is unknown, **Delivery unconfirmed** asks the owner to check the chat. An unconfirmed report has no Retry action. The report text and CSV are separate Telegram messages. The server records a confirmed text send before it starts the CSV, then removes the CSV contents from the saved snapshot once both reach Telegram.

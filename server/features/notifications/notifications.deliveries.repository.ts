@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, lt, min, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, min, ne, or, sql } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
 import { deleteOldest, readInChunks } from '#server/utils/batch'
 import { byId, firstRow, inTenant } from '#server/utils/query'
@@ -35,6 +35,7 @@ export interface DeliverySnapshotRow extends DeliveryHistoryRow { destinationSta
 const deliveryColumns = getTableColumns(notificationDeliveries)
 
 const ownsDelivery = (tenantId: string, id: string, token: string) => ownsWork(notificationDeliveries, token, byId(notificationDeliveries, tenantId, id), eq(notificationDeliveries.status, 'pending'))
+const scheduled = ne(notificationDeliveries.kind, 'report')
 
 // --- Reads ---
 
@@ -60,6 +61,7 @@ export async function deliveredTo(db: Db, tenantId: string, dedupeKey: string, d
 export async function dueDeliveries(db: Db, now: Date, limit: number, ids?: string[]): Promise<DeliveryRow[]> {
   const query = (piece?: string[]) => db.select(deliveryColumns).from(notificationDeliveries)
     .where(and(
+      scheduled,
       pendingWork(notificationDeliveries, now),
       piece ? inArray(notificationDeliveries.id, piece) : undefined,
     ))
@@ -95,7 +97,7 @@ export function listRecentDeliveries(db: Db, tenantId: string, limit: number): P
 /** Across cafes: health checks the oldest overdue send, using notification_deliveries_due_idx. */
 export async function oldestDueNotification(db: Db, now: Date): Promise<Date | null> {
   const [row] = await db.select({ at: min(notificationDeliveries.nextAttemptAt) }).from(notificationDeliveries)
-    .where(pendingWork(notificationDeliveries, now))
+    .where(and(scheduled, pendingWork(notificationDeliveries, now)))
   return row?.at ?? null
 }
 
@@ -138,6 +140,7 @@ export function requeueFailedStatement(db: Db, tenantId: string, id: string, now
       notificationDeliveries,
       tenantId,
       eq(notificationDeliveries.id, id),
+      scheduled,
       eq(notificationDeliveries.status, 'failed'),
     ))
 }
@@ -156,10 +159,33 @@ export async function claimDelivery(db: Db, tenantId: string, id: string, until:
       notificationDeliveries,
       tenantId,
       eq(notificationDeliveries.id, id),
+      scheduled,
       pendingWork(notificationDeliveries, now),
     ))
     .returning(deliveryColumns)
   return claimed ? { ...claimed, claimToken: claim.claimToken } : undefined
+}
+
+/** An interrupted manual claim is never taken over. Match the attempt read before claiming. */
+export async function claimManualReport(db: Db, row: DeliveryRow, message: StoredMessage): Promise<string | undefined> {
+  const claim = claimAttempt(notificationDeliveries)
+  const [updated] = await db.update(notificationDeliveries).set({ ...claim, message, lastError: null })
+    .where(and(
+      byId(notificationDeliveries, row.tenantId, row.id),
+      eq(notificationDeliveries.kind, 'report'),
+      eq(notificationDeliveries.status, 'pending'),
+      isNull(notificationDeliveries.claimToken),
+      eq(notificationDeliveries.attempts, row.attempts),
+    ))
+    .returning({ id: notificationDeliveries.id })
+  return updated ? claim.claimToken : undefined
+}
+
+type ManualReportChange = Partial<Pick<DeliveryRow, 'message' | 'claimToken' | 'lastError' | 'status' | 'sentAt'>>
+
+export function changeManualReportStatement(db: Db, row: DeliveryRow, token: string, changes: ManualReportChange): Statement {
+  return db.update(notificationDeliveries).set(changes)
+    .where(and(eq(notificationDeliveries.kind, 'report'), ownsDelivery(row.tenantId, row.id, token)))
 }
 
 export async function markRetry(db: Db, tenantId: string, id: string, token: string, next: Date, reason: string): Promise<boolean> {

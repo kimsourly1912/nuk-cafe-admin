@@ -33,7 +33,7 @@ beforeEach(async () => {
     await insertBranch(db, { id: tenantId, tenantId, name: tenantId, timezone: 'Asia/Phnom_Penh' })
     await db.insert(telegramDestinations).values({ id: tenantId, tenantId, kind: 'private', chatId: tenantId, title: tenantId, connectedBy: admin.userId, connectedAt: NOW })
     await db.insert(notificationRules).values({ tenantId, kind: 'closing_summary', destinationId: tenantId, attachCsv: false })
-    await db.insert(notificationDeliveries).values({ id: tenantId, tenantId, kind: 'report', destinationId: tenantId, dedupeKey: 'same-key', subject: tenantId, message: { html: tenantId }, nextAttemptAt: NOW, createdAt: NOW })
+    await db.insert(notificationDeliveries).values({ id: tenantId, tenantId, kind: 'closing_summary', destinationId: tenantId, dedupeKey: 'same-key', subject: tenantId, message: { html: tenantId }, nextAttemptAt: NOW, createdAt: NOW })
     await db.insert(telegramLinks).values({ id: tenantId, tenantId, kind: 'private', codeHash: tenantId, createdBy: admin.userId, expiresAt: UNTIL })
     await db.insert(marketingChannelLinks).values({ id: tenantId, tenantId, codeHash: tenantId, createdBy: admin.userId, expiresAt: UNTIL })
     await db.insert(marketingChannels).values({ id: tenantId, tenantId, kind: 'telegram_channel', externalId: tenantId, title: tenantId, connectedAt: NOW })
@@ -164,7 +164,7 @@ describe('messages repository tenant boundaries (D194)', () => {
 
   it('reads large id sets in D1-sized pieces and merges due work in a stable order', async () => {
     const ids = Array.from({ length: 201 }, (_, i) => `delivery-${String(i).padStart(3, '0')}`)
-    const rows = ids.map(id => ({ id, tenantId: OTHER, destinationId: OTHER, kind: 'report' as const, dedupeKey: id, subject: id, message: { html: id }, nextAttemptAt: NOW }))
+    const rows = ids.map(id => ({ id, tenantId: OTHER, destinationId: OTHER, kind: 'closing_summary' as const, dedupeKey: id, subject: id, message: { html: id }, nextAttemptAt: NOW }))
     const statements = insertAll(db, notificationDeliveries, rows)
     await db.batch([statements[0]!, ...statements.slice(1)])
     expect(await deliveries.findDeliveryIds(db, OTHER, [...ids, 'missing'])).toEqual(new Set(ids))
