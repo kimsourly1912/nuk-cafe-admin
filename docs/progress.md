@@ -8,6 +8,7 @@
 - **Behavior:** one claim per report request, with an explicit outcome for an interrupted delivery. A definite CSV failure can retry without sending the text again. Manual reports use the existing Telegram history and remain outside scheduled retries.
 - **Local evidence:** lint, typecheck and the high/critical dependency gate passed. Unit and server suites passed 3,105 tests with one skip. Disabling the manual claim fences made the interrupted-send regression fail.
 - **How to verify:** run the notifications server tests, the Telegram browser suite, and the counter HTTP shift test. On staging, follow the [shift check](plans/release-check.md#shift-check-before-production-promotion) with real test accounts and record the revision and device for each step.
+- **Browser and HTTP evidence:** 119 tests passed across the five checked suites. The shift test used a table QR token at order submission, two real counter sessions against the built app, and the completed order’s branch report. The Google and Telegram browser suites use provider fixtures.
 - **Staging evidence:** current staging returned HTTP 200 for health, public branches and the sign-in pages, advertised Google sign-in, and refused a signed-out admin session with HTTP 401. The authenticated shift is pending access to the staging test accounts.
 
 ### Session lengths: customers 90 days, Keep me signed in for owners (D286, 2026-11-25)

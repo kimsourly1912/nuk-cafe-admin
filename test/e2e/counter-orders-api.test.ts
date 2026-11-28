@@ -2,6 +2,7 @@ import { url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { CheckoutQuote, CounterOrder, CounterQueue, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
+import type { OrderHistoryDetail } from '#shared/contracts/reports'
 import { setupE2e } from './support/mock-api'
 import { clientHeaders } from './support/client-address'
 
@@ -26,21 +27,26 @@ const send = (path: string, cookie: string, body: unknown, key: string | null = 
   fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', origin, cookie, ...(key ? { 'idempotency-key': key } : {}) }, body: JSON.stringify(body) })
 
 /** An order placed by the seeded counter customer (Banana Bread at Riverside). */
-async function placeOrder(cookie: string) {
+async function placeOrder(cookie: string, tableToken: string | null = null) {
   const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
   const bread = menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)]).find(i => i.name === 'Banana Bread')!
   const lines = [{ itemId: bread.id, variationId: bread.variations[0]!.id, quantity: 1, note: null }]
-  const quote = await (await fetch(url('/api/c/nuk/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
-  const response = await send(url('/api/c/nuk/shop/orders'), cookie, { branchId: seed.openBranchId, lines, expectedTotalMinor: quote.totalMinor })
+  const input = { branchId: seed.openBranchId, lines }
+  const price = await fetch(url('/api/c/nuk/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(input) })
+  expect(price.status).toBe(200)
+  const quote = await price.json() as CheckoutQuote
+  const response = await send(url('/api/c/nuk/shop/orders'), cookie, { ...input, tableToken, expectedTotalMinor: quote.totalMinor })
   expect(response.status).toBe(201)
   return await response.json() as Order
 }
 
 describe('the counter over HTTP', () => {
-  it('a cashier sees the order, takes payment, marks it ready and completes it; a retry answers the same', async () => {
+  it('a shift runs from the table QR to two cashiers and one payment in the branch report', async () => {
     const customer = await signIn(seed.customers.counterCustomer)
-    const placed = await placeOrder(customer)
-    const cashier = await signIn(seed.customers.cashier)
+    const placed = await placeOrder(customer, seed.openTableToken)
+    expect(placed).toMatchObject({ orderType: 'dine_in', table: { label: 'T01' } })
+    const cashiers = await Promise.all([signIn(seed.customers.cashier), signIn(seed.customers.manager)])
+    const cashier = cashiers[0]!
 
     const queue = await (await fetch(counter(), { headers: { cookie: cashier } })).json() as CounterQueue
     const inQueue = queue.orders.find(order => order.id === placed.id)!
@@ -49,13 +55,19 @@ describe('the counter over HTTP', () => {
     // A command without an Idempotency-Key is refused.
     expect((await send(counter(`/${placed.id}/pay`), cashier, { version: 1, method: 'cash_usd' }, null)).status).toBe(400)
 
-    const key = crypto.randomUUID()
-    const paid = await send(counter(`/${placed.id}/pay`), cashier, { version: 1, method: 'cash_usd' }, key)
-    expect(paid.status).toBe(200)
-    const paidOrder = await paid.json() as CounterOrder
-    expect(paidOrder).toMatchObject({ status: 'preparing', version: 2, payment: { method: 'cash_usd', collectedBy: { name: 'Sophea Keo' } } })
+    const attempts = await Promise.all(cashiers.map(async (cookie) => {
+      const key = crypto.randomUUID()
+      const response = await send(counter(`/${placed.id}/pay`), cookie, { version: 1, method: 'cash_usd' }, key)
+      return { key, cookie, response }
+    }))
+    expect(attempts.map(attempt => attempt.response.status).sort()).toEqual([200, 409])
+    const paid = attempts.find(attempt => attempt.response.ok)!
+    const lost = attempts.find(attempt => !attempt.response.ok)!
+    expect((await lost.response.json()).data.code).toBe('ORDER_CHANGED')
+    const paidOrder = await paid.response.json() as CounterOrder
+    expect(paidOrder).toMatchObject({ status: 'preparing', version: 2, payment: { method: 'cash_usd' } })
     // The same key again: the same answer, still one payment.
-    expect(await (await send(counter(`/${placed.id}/pay`), cashier, { version: 1, method: 'cash_usd' }, key)).json()).toEqual(paidOrder)
+    expect(await (await send(counter(`/${placed.id}/pay`), paid.cookie, { version: 1, method: 'cash_usd' }, paid.key)).json()).toEqual(paidOrder)
     // Another key: the order moved on.
     const again = await send(counter(`/${placed.id}/pay`), cashier, { version: 1, method: 'cash_usd' })
     expect([again.status, (await again.json()).data.code]).toEqual([409, 'ORDER_CHANGED'])
@@ -70,6 +82,12 @@ describe('the counter over HTTP', () => {
     expect(mine.status).toBe('completed')
     const single = await (await fetch(counter(`/${placed.id}`), { headers: { cookie: cashier } })).json() as CounterOrder
     expect(single.status).toBe('completed')
+
+    const report = await fetch(url(`/api/c/nuk/counter/${seed.openBranchId}/reports/orders/${placed.id}`), { headers: { cookie: cashiers[1]! } })
+    expect(report.status).toBe(200)
+    const detail = await report.json() as OrderHistoryDetail
+    expect(detail).toMatchObject({ status: 'completed', orderType: 'dine_in', tableLabel: 'T01', payment: { state: 'paid', method: 'cash_usd', amountMinor: placed.totalMinor } })
+    expect(detail.timeline.filter(event => event.toStatus === 'preparing')).toHaveLength(1)
   })
 
   it('a customer, or staff of another branch, doesn\'t reach the counter: 404, like an unknown branch; signed out: 401', async () => {
